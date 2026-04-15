@@ -20,6 +20,7 @@ import (
 	"github.com/goodvin/d2ip/internal/metrics"
 	"github.com/goodvin/d2ip/internal/orchestrator"
 	"github.com/goodvin/d2ip/internal/resolver"
+	"github.com/goodvin/d2ip/internal/routing"
 	"github.com/goodvin/d2ip/internal/scheduler"
 	"github.com/goodvin/d2ip/internal/source"
 	"github.com/rs/zerolog/log"
@@ -181,6 +182,16 @@ func serveCmd() {
 		return *cfg
 	}
 
+	// Create router
+	routerAgent, err := routing.New(cfg.Routing)
+	if err != nil {
+		log.Fatal().Err(err).Msg("Failed to create router")
+	}
+	log.Info().
+		Bool("enabled", cfg.Routing.Enabled).
+		Str("backend", string(cfg.Routing.Backend)).
+		Msg("Router initialized")
+
 	// Create orchestrator with all agents
 	orch := orchestrator.New(
 		sourceStore,
@@ -189,6 +200,7 @@ func serveCmd() {
 		cacheDB,
 		aggAgent,
 		exportAgent,
+		routerAgent,
 		configSnapshot,
 	)
 	log.Info().Msg("Orchestrator initialized with all agents")
@@ -210,7 +222,7 @@ func serveCmd() {
 	}
 
 	// Create API server
-	apiServer := api.New(orch)
+	apiServer := api.New(orch, routerAgent)
 	httpServer := &http.Server{
 		Addr:         cfg.Listen,
 		Handler:      apiServer.Handler(),

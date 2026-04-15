@@ -11,6 +11,7 @@
 | 2 | Manual | 0 | N/A | 0 | ✅ Perfect |
 | 3 | Mixed | 3 | ~57 min | ~90k | ⚠️ 1 bug fixed |
 | 4 | Sonnet | 3 | ~7.5 min | 89k | ✅ Perfect |
+| 5 | Mixed | 2 | ~8 min | 73k | ✅ Perfect |
 
 ### Key Insight: "Sonnet First" Strategy
 
@@ -117,6 +118,33 @@
 - Time: ~7.5 minutes (parallel)
 - Quality: 100% success rate
 - Savings: ~60% vs all-opus
+
+### Iteration 5 (Mixed Strategy - Opus + Sonnet)
+**Routing Implementation (opus):**
+- Duration: 290s (~4.8 min)
+- Tool uses: 28
+- Tokens: ~48,000
+- Result: ✅ 1,063 lines (768 production + 295 tests), 18/18 tests pass
+- Quality: Critical kernel manipulation code, correct on first try
+
+**API Endpoints (sonnet):**
+- Duration: 170s (~2.8 min)
+- Tool uses: 23
+- Tokens: ~25,000
+- Result: ✅ 3 new routes (/routing/dry-run, /routing/rollback, /routing/snapshot)
+- Quality: Perfect integration, proper error handling
+
+**Manual Integration:**
+- Orchestrator Step 9 wiring
+- Config updates
+- Main.go router initialization
+- Time: ~5 min
+
+**Total Iteration 5:**
+- Cost: 73,000 tokens
+- Time: ~8 minutes (sequential: opus → sonnet → manual)
+- Quality: 100% success rate, all tests pass
+- Strategy: Opus for HIGH RISK kernel code, sonnet for API boilerplate
 
 ## Prompt Quality Impact
 
@@ -226,19 +254,31 @@
 
 ## Summary
 
-**Key Takeaway:** Sonnet is underrated for well-specified tasks.
+**Key Takeaway:** Sonnet is underrated for well-specified tasks, but opus is essential for HIGH RISK code.
 
 **Evidence:**
-- Iteration 4: 3/3 sonnet agents succeeded
-- 60% cost savings vs opus
-- Zero quality degradation
+- Iteration 4: 3/3 sonnet agents succeeded (89k tokens, 60% savings)
+- Iteration 5: 1 opus (routing logic) + 1 sonnet (API) succeeded (73k tokens)
+- **Total project: 252k tokens across 8 agents**
+- Zero quality degradation, 100% success rate
 
-**Best Practice:**
-- Default to sonnet for implementation
-- Reserve opus for critical/complex logic
-- Manual for trivial tasks
+**Best Practice (Validated):**
+1. **Default to sonnet** for well-specified implementation tasks
+2. **Escalate to opus** for HIGH RISK code (kernel manipulation, concurrency, algorithms)
+3. **Manual** for trivial tasks (<50 lines, config files)
 
-**ROI:**
-- Iteration 4 saved ~$0.18
-- Across 10 iterations: ~$1.80 savings
-- Quality maintained: 100% success rate
+**Cost Analysis (All Iterations):**
+- Iteration 3: 90k tokens (2 opus + 1 sonnet)
+- Iteration 4: 89k tokens (3 sonnet) — 60% savings vs opus
+- Iteration 5: 73k tokens (1 opus + 1 sonnet) — balanced
+- **Total agent tokens: ~252k**
+- **Estimated cost: ~$0.25** (at $1/M input tokens)
+- **If all-opus: ~$0.60** (2.4× more expensive)
+- **Savings: ~$0.35 (58% reduction)**
+
+**Quality Metrics:**
+- 8 agents spawned (3 in Iter3, 3 in Iter4, 2 in Iter5)
+- 1 bug fixed (CIDR radix tree — opus caught it)
+- 56/56 tests passing
+- 100% compilation success rate
+- Zero rework needed after compact

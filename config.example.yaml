@@ -42,7 +42,13 @@ export:
 
 routing:
   enabled: false
-  backend: "none"
+  backend: "none"  # Options: "none", "nftables", "iproute2"
+  table_id: 100     # For iproute2 backend
+  nft_table: "inet d2ip"
+  nft_set_v4: "d2ip_v4"
+  nft_set_v6: "d2ip_v6"
+  state_path: "/var/lib/d2ip/state.json"
+  dry_run: false
 
 scheduler:
   dlc_refresh: 24h

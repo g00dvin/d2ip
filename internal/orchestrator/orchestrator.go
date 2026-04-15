@@ -21,6 +21,7 @@ import (
 	"github.com/goodvin/d2ip/internal/domainlist"
 	"github.com/goodvin/d2ip/internal/exporter"
 	"github.com/goodvin/d2ip/internal/resolver"
+	"github.com/goodvin/d2ip/internal/routing"
 	"github.com/goodvin/d2ip/internal/source"
 	"github.com/rs/zerolog/log"
 )
@@ -66,8 +67,8 @@ type Orchestrator struct {
 	cache      cache.Cache
 	aggregator *aggregator.Aggregator
 	exporter   *exporter.FileExporter
+	router     routing.Router
 	config     func() config.Config // returns current config snapshot
-	// router     routing.Router  // TODO: Iteration 5
 
 	// Single-flight enforcement.
 	mu      sync.Mutex
@@ -83,6 +84,7 @@ func New(
 	cch cache.Cache,
 	agg *aggregator.Aggregator,
 	exp *exporter.FileExporter,
+	rtr routing.Router,
 	cfgGetter func() config.Config,
 ) *Orchestrator {
 	return &Orchestrator{
@@ -92,6 +94,7 @@ func New(
 		cache:      cch,
 		aggregator: agg,
 		exporter:   exp,
+		router:     rtr,
 		config:     cfgGetter,
 	}
 }
@@ -333,6 +336,65 @@ func (o *Orchestrator) Run(ctx context.Context, req PipelineRequest) (PipelineRe
 			Msg("orchestrator: export completed")
 	} else {
 		log.Info().Msg("orchestrator: dry run, skipping export")
+	}
+
+	// Check context
+	select {
+	case <-ctx.Done():
+		log.Warn().Int64("run_id", runID).Msg("orchestrator: pipeline canceled")
+		return report, ctx.Err()
+	default:
+	}
+
+	// Step 9: Routing - apply to kernel (if enabled and not skipped)
+	if !req.SkipRouting && cfg.Routing.Enabled {
+		log.Info().Msg("orchestrator: applying routing rules")
+
+		// Check capabilities first
+		if err := o.router.Caps(); err != nil {
+			log.Error().Err(err).Msg("orchestrator: routing capability check failed")
+			return report, fmt.Errorf("routing caps: %w", err)
+		}
+
+		// Plan IPv4
+		planV4, err := o.router.Plan(ctx, ipv4Prefixes, routing.FamilyV4)
+		if err != nil {
+			log.Error().Err(err).Msg("orchestrator: routing plan v4 failed")
+			return report, fmt.Errorf("routing plan v4: %w", err)
+		}
+
+		// Plan IPv6
+		planV6, err := o.router.Plan(ctx, ipv6Prefixes, routing.FamilyV6)
+		if err != nil {
+			log.Error().Err(err).Msg("orchestrator: routing plan v6 failed")
+			return report, fmt.Errorf("routing plan v6: %w", err)
+		}
+
+		log.Info().
+			Int("v4_add", len(planV4.Add)).
+			Int("v4_remove", len(planV4.Remove)).
+			Int("v6_add", len(planV6.Add)).
+			Int("v6_remove", len(planV6.Remove)).
+			Msg("orchestrator: routing plan computed")
+
+		// Apply plans (skip if dry-run or config dry_run)
+		if !req.DryRun && !cfg.Routing.DryRun {
+			if err := o.router.Apply(ctx, planV4); err != nil {
+				log.Error().Err(err).Msg("orchestrator: routing apply v4 failed")
+				return report, fmt.Errorf("routing apply v4: %w", err)
+			}
+
+			if err := o.router.Apply(ctx, planV6); err != nil {
+				log.Error().Err(err).Msg("orchestrator: routing apply v6 failed")
+				return report, fmt.Errorf("routing apply v6: %w", err)
+			}
+
+			log.Info().Msg("orchestrator: routing applied successfully")
+		} else {
+			log.Info().Msg("orchestrator: dry run, skipping routing apply")
+		}
+	} else {
+		log.Info().Msg("orchestrator: routing skipped (disabled or SkipRouting=true)")
 	}
 
 	report.Duration = time.Since(started)
