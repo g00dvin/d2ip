@@ -1,0 +1,40 @@
+syntax = "proto3";
+
+package d2ip.dlc;
+option go_package = "github.com/goodvin/d2ip/internal/domainlist/dlcpb";
+
+// Mirrors v2fly/v2ray-core/app/router/routercommon/common.proto
+// Wire-compatible with dlc.dat produced by v2fly/domain-list-community.
+
+message GeoSiteList {
+  repeated GeoSite entry = 1;
+}
+
+message GeoSite {
+  string country_code = 1;
+  repeated Domain domain = 2;
+  bytes resource_hash = 3;
+  string code = 4;
+}
+
+message Domain {
+  enum Type {
+    Plain = 0;       // keyword
+    Regex = 1;       // regexp
+    RootDomain = 2;  // domain (suffix match)
+    Full = 3;        // full
+  }
+
+  Type type = 1;
+  string value = 2;
+
+  message Attribute {
+    string key = 1;
+    oneof typed_value {
+      bool bool_value = 2;
+      int64 int_value = 3;
+    }
+  }
+
+  repeated Attribute attribute = 3;
+}

@@ -1,0 +1,57 @@
+# d2ip example configuration
+
+listen: "127.0.0.1:8080"
+
+source:
+  url: "https://github.com/v2fly/domain-list-community/releases/latest/download/dlc.dat"
+  cache_path: "/tmp/d2ip-dlc.dat"
+  http_timeout: 30s
+
+categories:
+  - code: "cn"
+    attrs: []
+  - code: "google"
+    attrs: []
+
+resolver:
+  upstream: "8.8.8.8:53"
+  network: "udp"
+  concurrency: 64
+  qps: 1000
+  timeout: 5s
+  retries: 2
+  backoff_base: 100ms
+  backoff_max: 5s
+  follow_cname: true
+
+cache:
+  db_path: "./d2ip.db"
+  ttl: 24h
+  failed_ttl: 1h
+
+aggregation:
+  enabled: true
+  level: "conservative"
+  v4_max_prefix: 16
+  v6_max_prefix: 32
+
+export:
+  dir: "./out"
+  ipv4_file: "ipv4.txt"
+  ipv6_file: "ipv6.txt"
+
+routing:
+  enabled: false
+  backend: "none"
+
+scheduler:
+  dlc_refresh: 24h
+  resolve_cycle: 0  # Disabled by default
+
+logging:
+  level: "info"
+  format: "json"
+
+metrics:
+  enabled: true
+  path: "/metrics"

@@ -1,0 +1,362 @@
+// Package orchestrator wires the d2ip pipeline together and enforces
+// single-flight execution semantics: only one pipeline run can be active at
+// a time. Concurrent triggers receive a Busy error with the in-flight run ID.
+//
+// The pipeline owns context cancellation, fan-out/fan-in between resolver
+// and cache writer, and run history accounting in the runs table.
+package orchestrator
+
+import (
+	"context"
+	"errors"
+	"fmt"
+	"net/netip"
+	"sync"
+	"sync/atomic"
+	"time"
+
+	"github.com/goodvin/d2ip/internal/aggregator"
+	"github.com/goodvin/d2ip/internal/cache"
+	"github.com/goodvin/d2ip/internal/config"
+	"github.com/goodvin/d2ip/internal/domainlist"
+	"github.com/goodvin/d2ip/internal/exporter"
+	"github.com/goodvin/d2ip/internal/resolver"
+	"github.com/goodvin/d2ip/internal/source"
+	"github.com/rs/zerolog/log"
+)
+
+// PipelineRequest configures a single pipeline execution.
+type PipelineRequest struct {
+	DryRun       bool // stop before route apply
+	ForceResolve bool // ignore cache TTL, re-resolve everything
+	SkipRouting  bool // stop after export
+}
+
+// PipelineReport is the outcome of a completed (or failed) pipeline run.
+type PipelineReport struct {
+	RunID    int64
+	Domains  int
+	Stale    int
+	Resolved int
+	Failed   int
+	IPv4Out  int
+	IPv6Out  int
+	// Export   exporter.ExportReport  // TODO: Iteration 3
+	// RoutingPlan *routing.Plan        // TODO: Iteration 5
+	Duration time.Duration
+}
+
+// RunStatus describes the current or last-completed pipeline run.
+type RunStatus struct {
+	Running bool
+	RunID   int64
+	Started time.Time
+	Report  *PipelineReport // nil if still running
+}
+
+// ErrBusy is returned when a second Run() is attempted while one is in flight.
+var ErrBusy = errors.New("orchestrator: pipeline already running")
+
+// Orchestrator composes the agents and executes the pipeline.
+type Orchestrator struct {
+	// Agent dependencies (injected by cmd/d2ip).
+	source     source.DLCStore
+	domainlist domainlist.ListProvider
+	resolver   resolver.Resolver
+	cache      cache.Cache
+	aggregator *aggregator.Aggregator
+	exporter   *exporter.FileExporter
+	config     func() config.Config // returns current config snapshot
+	// router     routing.Router  // TODO: Iteration 5
+
+	// Single-flight enforcement.
+	mu      sync.Mutex
+	running atomic.Bool
+	current RunStatus
+}
+
+// New creates an Orchestrator with injected agent dependencies.
+func New(
+	src source.DLCStore,
+	dl domainlist.ListProvider,
+	res resolver.Resolver,
+	cch cache.Cache,
+	agg *aggregator.Aggregator,
+	exp *exporter.FileExporter,
+	cfgGetter func() config.Config,
+) *Orchestrator {
+	return &Orchestrator{
+		source:     src,
+		domainlist: dl,
+		resolver:   res,
+		cache:      cch,
+		aggregator: agg,
+		exporter:   exp,
+		config:     cfgGetter,
+	}
+}
+
+// Run executes the full pipeline: fetch → parse → resolve → cache → aggregate → export → route.
+// Returns ErrBusy if another run is already in progress.
+func (o *Orchestrator) Run(ctx context.Context, req PipelineRequest) (PipelineReport, error) {
+	// Single-flight: acquire the run slot.
+	if !o.running.CompareAndSwap(false, true) {
+		o.mu.Lock()
+		runID := o.current.RunID
+		o.mu.Unlock()
+		return PipelineReport{}, fmt.Errorf("%w: run_id=%d", ErrBusy, runID)
+	}
+	defer o.running.Store(false)
+
+	runID := time.Now().UnixNano() // temporary; in Iteration 4 we'll use DB-assigned id
+	started := time.Now()
+
+	o.mu.Lock()
+	o.current = RunStatus{
+		Running: true,
+		RunID:   runID,
+		Started: started,
+		Report:  nil,
+	}
+	o.mu.Unlock()
+
+	log.Info().Int64("run_id", runID).Msg("orchestrator: pipeline started")
+
+	report := PipelineReport{
+		RunID: runID,
+	}
+
+	// Step 1: Get config snapshot
+	cfg := o.config()
+
+	// Step 2: Source - fetch dlc.dat
+	log.Info().Msg("orchestrator: fetching dlc.dat")
+	dlcPath, _, err := o.source.Get(ctx, cfg.Source.RefreshInterval)
+	if err != nil {
+		log.Error().Err(err).Msg("orchestrator: source fetch failed")
+		return report, fmt.Errorf("source fetch: %w", err)
+	}
+
+	// Check context after I/O
+	select {
+	case <-ctx.Done():
+		log.Warn().Int64("run_id", runID).Msg("orchestrator: pipeline canceled")
+		return report, ctx.Err()
+	default:
+	}
+
+	// Step 3: Domain - parse and select categories
+	log.Info().Msg("orchestrator: loading domain list")
+	if err := o.domainlist.Load(dlcPath); err != nil {
+		log.Error().Err(err).Msg("orchestrator: domain list load failed")
+		return report, fmt.Errorf("domainlist load: %w", err)
+	}
+
+	selectors := make([]domainlist.CategorySelector, len(cfg.Categories))
+	for i, cat := range cfg.Categories {
+		selectors[i] = domainlist.CategorySelector{
+			Code:  cat.Code,
+			Attrs: cat.Attrs,
+		}
+	}
+
+	log.Info().Msg("orchestrator: selecting categories")
+	rules, err := o.domainlist.Select(selectors)
+	if err != nil {
+		log.Error().Err(err).Msg("orchestrator: category selection failed")
+		return report, fmt.Errorf("domainlist select: %w", err)
+	}
+	report.Domains = len(rules)
+
+	// Filter to only resolvable rules (Full and RootDomain)
+	resolvable := make([]string, 0, len(rules))
+	for _, rule := range rules {
+		if rule.Type.IsResolvable() {
+			resolvable = append(resolvable, rule.Value)
+		}
+	}
+
+	log.Info().
+		Int("total", len(rules)).
+		Int("resolvable", len(resolvable)).
+		Msg("orchestrator: filtered resolvable domains")
+
+	// Check context
+	select {
+	case <-ctx.Done():
+		log.Warn().Int64("run_id", runID).Msg("orchestrator: pipeline canceled")
+		return report, ctx.Err()
+	default:
+	}
+
+	// Step 4: Cache - check what needs refresh
+	log.Info().Msg("orchestrator: checking cache freshness")
+	stale, err := o.cache.NeedsRefresh(ctx, resolvable, cfg.Cache.TTL, cfg.Cache.FailedTTL)
+	if err != nil {
+		log.Error().Err(err).Msg("orchestrator: cache check failed")
+		return report, fmt.Errorf("cache check: %w", err)
+	}
+	report.Stale = len(stale)
+
+	// Step 5: Resolver - resolve stale domains
+	if len(stale) > 0 || req.ForceResolve {
+		toResolve := resolvable
+		if !req.ForceResolve {
+			toResolve = stale
+		}
+
+		log.Info().
+			Int("count", len(toResolve)).
+			Bool("force", req.ForceResolve).
+			Msg("orchestrator: resolving domains")
+
+		resultsCh := o.resolver.ResolveBatch(ctx, toResolve)
+		results := make([]cache.ResolveResult, 0, len(toResolve))
+
+		for res := range resultsCh {
+			// Convert resolver.ResolveResult to cache.ResolveResult
+			cacheStatus := cache.StatusValid
+			if res.Status == resolver.StatusFailed {
+				cacheStatus = cache.StatusFailed
+			} else if res.Status == resolver.StatusNXDomain {
+				cacheStatus = cache.StatusNXDomain
+			}
+
+			results = append(results, cache.ResolveResult{
+				Domain:     res.Domain,
+				IPv4:       res.IPv4,
+				IPv6:       res.IPv6,
+				Status:     cacheStatus,
+				ResolvedAt: res.ResolvedAt,
+				Err:        res.Err,
+			})
+
+			if res.Status == resolver.StatusValid {
+				report.Resolved++
+			} else {
+				report.Failed++
+			}
+		}
+
+		// Check context after resolution
+		select {
+		case <-ctx.Done():
+			log.Warn().Int64("run_id", runID).Msg("orchestrator: pipeline canceled")
+			return report, ctx.Err()
+		default:
+		}
+
+		// Step 6: Cache - upsert batch results
+		log.Info().Int("count", len(results)).Msg("orchestrator: upserting results to cache")
+		if err := o.cache.UpsertBatch(ctx, results); err != nil {
+			log.Error().Err(err).Msg("orchestrator: cache upsert failed")
+			return report, fmt.Errorf("cache upsert: %w", err)
+		}
+	} else {
+		log.Info().Msg("orchestrator: all domains cached, skipping resolution")
+	}
+
+	// Check context
+	select {
+	case <-ctx.Done():
+		log.Warn().Int64("run_id", runID).Msg("orchestrator: pipeline canceled")
+		return report, ctx.Err()
+	default:
+	}
+
+	// Step 7: Aggregator - get snapshot and aggregate
+	log.Info().Msg("orchestrator: fetching cache snapshot")
+	ipv4Addrs, ipv6Addrs, err := o.cache.Snapshot(ctx)
+	if err != nil {
+		log.Error().Err(err).Msg("orchestrator: cache snapshot failed")
+		return report, fmt.Errorf("cache snapshot: %w", err)
+	}
+
+	log.Info().
+		Int("ipv4", len(ipv4Addrs)).
+		Int("ipv6", len(ipv6Addrs)).
+		Msg("orchestrator: aggregating addresses")
+
+	// Convert aggregation level
+	aggLevel := aggregator.AggConservative
+	switch cfg.Aggregation.Level {
+	case config.AggOff:
+		aggLevel = aggregator.AggOff
+	case config.AggConservative:
+		aggLevel = aggregator.AggConservative
+	case config.AggBalanced:
+		aggLevel = aggregator.AggBalanced
+	case config.AggAggressive:
+		aggLevel = aggregator.AggAggressive
+	}
+
+	var ipv4Prefixes, ipv6Prefixes []netip.Prefix
+	if cfg.Aggregation.Enabled {
+		ipv4Prefixes = o.aggregator.AggregateV4(ipv4Addrs, aggLevel, cfg.Aggregation.V4MaxPrefix)
+		ipv6Prefixes = o.aggregator.AggregateV6(ipv6Addrs, aggLevel, cfg.Aggregation.V6MaxPrefix)
+	} else {
+		// No aggregation: convert each address to /32 or /128
+		ipv4Prefixes = make([]netip.Prefix, len(ipv4Addrs))
+		for i, addr := range ipv4Addrs {
+			ipv4Prefixes[i] = netip.PrefixFrom(addr, 32)
+		}
+		ipv6Prefixes = make([]netip.Prefix, len(ipv6Addrs))
+		for i, addr := range ipv6Addrs {
+			ipv6Prefixes[i] = netip.PrefixFrom(addr, 128)
+		}
+	}
+
+	report.IPv4Out = len(ipv4Prefixes)
+	report.IPv6Out = len(ipv6Prefixes)
+
+	// Check context
+	select {
+	case <-ctx.Done():
+		log.Warn().Int64("run_id", runID).Msg("orchestrator: pipeline canceled")
+		return report, ctx.Err()
+	default:
+	}
+
+	// Step 8: Exporter - write files
+	if !req.DryRun {
+		log.Info().Msg("orchestrator: exporting prefix files")
+		exportReport, err := o.exporter.Write(ctx, ipv4Prefixes, ipv6Prefixes)
+		if err != nil {
+			log.Error().Err(err).Msg("orchestrator: export failed")
+			return report, fmt.Errorf("export: %w", err)
+		}
+
+		log.Info().
+			Str("ipv4_path", exportReport.IPv4Path).
+			Str("ipv6_path", exportReport.IPv6Path).
+			Bool("unchanged", exportReport.Unchanged).
+			Msg("orchestrator: export completed")
+	} else {
+		log.Info().Msg("orchestrator: dry run, skipping export")
+	}
+
+	report.Duration = time.Since(started)
+	log.Info().Int64("run_id", runID).Dur("duration", report.Duration).Msg("orchestrator: pipeline completed")
+
+	o.mu.Lock()
+	o.current.Running = false
+	o.current.Report = &report
+	o.mu.Unlock()
+
+	return report, nil
+}
+
+// Status returns the current or last-completed run status.
+func (o *Orchestrator) Status() RunStatus {
+	o.mu.Lock()
+	defer o.mu.Unlock()
+	return o.current
+}
+
+// Cancel aborts the current run (if any) by canceling its context.
+// The caller must have retained the ctx from Run() to trigger cancellation.
+// This is a placeholder; in Iteration 4 we'll track ctx internally.
+func (o *Orchestrator) Cancel() {
+	// TODO: store and cancel the current run's context.
+	log.Warn().Msg("orchestrator: Cancel not yet implemented")
+}

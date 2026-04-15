@@ -1,0 +1,37 @@
+# Binaries
+/bin/
+/d2ip
+*.exe
+*.dll
+*.so
+*.dylib
+
+# Test
+*.test
+*.out
+coverage.txt
+coverage.html
+
+# Build artifacts
+/dist/
+/tmp/
+
+# Runtime state
+/var/
+*.db
+*.db-shm
+*.db-wal
+*.dat
+state.json
+*.txt
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# OS
+.DS_Store
+Thumbs.db
