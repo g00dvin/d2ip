@@ -45,6 +45,21 @@ curl -X POST http://localhost:8080/pipeline/run
 curl -X POST http://localhost:8080/pipeline/dry-run | jq
 ```
 
+## Web UI
+
+d2ip includes a minimal, mobile-friendly web interface built with HTMX:
+
+- **Access:** http://localhost:8080/
+- **Features:**
+  - Real-time health status indicator
+  - Trigger pipeline runs with one click
+  - Auto-refreshing status display (5s interval)
+  - Routing dry-run and rollback controls
+  - Current routing snapshot (IPv4/IPv6 prefix counts)
+  - Direct link to Prometheus metrics
+
+**No external dependencies** — UI is embedded in the binary using Go's `embed` package. Total size: 24KB.
+
 ## Documentation
 
 | Doc                                              | What's in it                                                |

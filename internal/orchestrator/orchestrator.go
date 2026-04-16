@@ -20,6 +20,7 @@ import (
 	"github.com/goodvin/d2ip/internal/config"
 	"github.com/goodvin/d2ip/internal/domainlist"
 	"github.com/goodvin/d2ip/internal/exporter"
+	"github.com/goodvin/d2ip/internal/metrics"
 	"github.com/goodvin/d2ip/internal/resolver"
 	"github.com/goodvin/d2ip/internal/routing"
 	"github.com/goodvin/d2ip/internal/source"
@@ -114,6 +115,14 @@ func (o *Orchestrator) Run(ctx context.Context, req PipelineRequest) (PipelineRe
 	runID := time.Now().UnixNano() // temporary; in Iteration 4 we'll use DB-assigned id
 	started := time.Now()
 
+	// Track pipeline failure via defer if we don't reach the success path
+	pipelineSucceeded := false
+	defer func() {
+		if !pipelineSucceeded {
+			metrics.PipelineRunsTotal.WithLabelValues("failed").Inc()
+		}
+	}()
+
 	o.mu.Lock()
 	o.current = RunStatus{
 		Running: true,
@@ -134,7 +143,9 @@ func (o *Orchestrator) Run(ctx context.Context, req PipelineRequest) (PipelineRe
 
 	// Step 2: Source - fetch dlc.dat
 	log.Info().Msg("orchestrator: fetching dlc.dat")
+	stepStart := time.Now()
 	dlcPath, _, err := o.source.Get(ctx, cfg.Source.RefreshInterval)
+	metrics.PipelineStepDuration.WithLabelValues("source").Observe(time.Since(stepStart).Seconds())
 	if err != nil {
 		log.Error().Err(err).Msg("orchestrator: source fetch failed")
 		return report, fmt.Errorf("source fetch: %w", err)
@@ -150,6 +161,7 @@ func (o *Orchestrator) Run(ctx context.Context, req PipelineRequest) (PipelineRe
 
 	// Step 3: Domain - parse and select categories
 	log.Info().Msg("orchestrator: loading domain list")
+	stepStart = time.Now()
 	if err := o.domainlist.Load(dlcPath); err != nil {
 		log.Error().Err(err).Msg("orchestrator: domain list load failed")
 		return report, fmt.Errorf("domainlist load: %w", err)
@@ -165,6 +177,7 @@ func (o *Orchestrator) Run(ctx context.Context, req PipelineRequest) (PipelineRe
 
 	log.Info().Msg("orchestrator: selecting categories")
 	rules, err := o.domainlist.Select(selectors)
+	metrics.PipelineStepDuration.WithLabelValues("domainlist").Observe(time.Since(stepStart).Seconds())
 	if err != nil {
 		log.Error().Err(err).Msg("orchestrator: category selection failed")
 		return report, fmt.Errorf("domainlist select: %w", err)
@@ -194,7 +207,9 @@ func (o *Orchestrator) Run(ctx context.Context, req PipelineRequest) (PipelineRe
 
 	// Step 4: Cache - check what needs refresh
 	log.Info().Msg("orchestrator: checking cache freshness")
+	stepStart = time.Now()
 	stale, err := o.cache.NeedsRefresh(ctx, resolvable, cfg.Cache.TTL, cfg.Cache.FailedTTL)
+	metrics.PipelineStepDuration.WithLabelValues("cache").Observe(time.Since(stepStart).Seconds())
 	if err != nil {
 		log.Error().Err(err).Msg("orchestrator: cache check failed")
 		return report, fmt.Errorf("cache check: %w", err)
@@ -213,6 +228,7 @@ func (o *Orchestrator) Run(ctx context.Context, req PipelineRequest) (PipelineRe
 			Bool("force", req.ForceResolve).
 			Msg("orchestrator: resolving domains")
 
+		stepStart = time.Now()
 		resultsCh := o.resolver.ResolveBatch(ctx, toResolve)
 		results := make([]cache.ResolveResult, 0, len(toResolve))
 
@@ -240,6 +256,7 @@ func (o *Orchestrator) Run(ctx context.Context, req PipelineRequest) (PipelineRe
 				report.Failed++
 			}
 		}
+		metrics.PipelineStepDuration.WithLabelValues("resolver").Observe(time.Since(stepStart).Seconds())
 
 		// Check context after resolution
 		select {
@@ -269,6 +286,7 @@ func (o *Orchestrator) Run(ctx context.Context, req PipelineRequest) (PipelineRe
 
 	// Step 7: Aggregator - get snapshot and aggregate
 	log.Info().Msg("orchestrator: fetching cache snapshot")
+	stepStart = time.Now()
 	ipv4Addrs, ipv6Addrs, err := o.cache.Snapshot(ctx)
 	if err != nil {
 		log.Error().Err(err).Msg("orchestrator: cache snapshot failed")
@@ -308,6 +326,7 @@ func (o *Orchestrator) Run(ctx context.Context, req PipelineRequest) (PipelineRe
 			ipv6Prefixes[i] = netip.PrefixFrom(addr, 128)
 		}
 	}
+	metrics.PipelineStepDuration.WithLabelValues("aggregator").Observe(time.Since(stepStart).Seconds())
 
 	report.IPv4Out = len(ipv4Prefixes)
 	report.IPv6Out = len(ipv6Prefixes)
@@ -323,7 +342,9 @@ func (o *Orchestrator) Run(ctx context.Context, req PipelineRequest) (PipelineRe
 	// Step 8: Exporter - write files
 	if !req.DryRun {
 		log.Info().Msg("orchestrator: exporting prefix files")
+		stepStart = time.Now()
 		exportReport, err := o.exporter.Write(ctx, ipv4Prefixes, ipv6Prefixes)
+		metrics.PipelineStepDuration.WithLabelValues("exporter").Observe(time.Since(stepStart).Seconds())
 		if err != nil {
 			log.Error().Err(err).Msg("orchestrator: export failed")
 			return report, fmt.Errorf("export: %w", err)
@@ -349,6 +370,7 @@ func (o *Orchestrator) Run(ctx context.Context, req PipelineRequest) (PipelineRe
 	// Step 9: Routing - apply to kernel (if enabled and not skipped)
 	if !req.SkipRouting && cfg.Routing.Enabled {
 		log.Info().Msg("orchestrator: applying routing rules")
+		stepStart = time.Now()
 
 		// Check capabilities first
 		if err := o.router.Caps(); err != nil {
@@ -393,12 +415,18 @@ func (o *Orchestrator) Run(ctx context.Context, req PipelineRequest) (PipelineRe
 		} else {
 			log.Info().Msg("orchestrator: dry run, skipping routing apply")
 		}
+		metrics.PipelineStepDuration.WithLabelValues("routing").Observe(time.Since(stepStart).Seconds())
 	} else {
 		log.Info().Msg("orchestrator: routing skipped (disabled or SkipRouting=true)")
 	}
 
 	report.Duration = time.Since(started)
 	log.Info().Int64("run_id", runID).Dur("duration", report.Duration).Msg("orchestrator: pipeline completed")
+
+	// Update metrics for successful pipeline run
+	pipelineSucceeded = true
+	metrics.PipelineRunsTotal.WithLabelValues("success").Inc()
+	metrics.PipelineLastSuccess.Set(float64(time.Now().Unix()))
 
 	o.mu.Lock()
 	o.current.Running = false

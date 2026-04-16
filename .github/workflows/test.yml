@@ -1,0 +1,144 @@
+name: Test
+
+on:
+  push:
+    branches: [ main, develop ]
+  pull_request:
+    branches: [ main ]
+
+jobs:
+  test:
+    name: Test (Go ${{ matrix.go-version }})
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        go-version: ['1.22', '1.23']
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: ${{ matrix.go-version }}
+          cache: true
+
+      - name: Download dependencies
+        run: go mod download
+
+      - name: Run tests
+        run: go test -v -coverprofile=coverage.out ./...
+
+      - name: Run tests with short mode
+        run: go test -short -v ./...
+
+      - name: Check coverage
+        run: go tool cover -func=coverage.out
+
+      - name: Upload coverage to artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: coverage-${{ matrix.go-version }}
+          path: coverage.out
+
+  goleak:
+    name: Goroutine Leak Detection
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: '1.22'
+          cache: true
+
+      - name: Run goleak tests (orchestrator)
+        run: go test -v ./internal/orchestrator
+
+      - name: Run goleak tests (resolver)
+        run: go test -v ./internal/resolver
+
+  # Note: Race detector requires CGO_ENABLED=1, but this project uses
+  # modernc.org/sqlite (pure Go) and builds with CGO_ENABLED=0 for static binaries.
+  # Race detection is incompatible with this approach.
+  # Future: Consider adding race tests for packages that don't use SQLite.
+
+  lint:
+    name: Lint
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: '1.22'
+          cache: true
+
+      - name: Run golangci-lint
+        uses: golangci/golangci-lint-action@v6
+        with:
+          version: latest
+          args: --timeout=5m
+
+  build:
+    name: Build
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: '1.22'
+          cache: true
+
+      - name: Build binary
+        run: go build -v -o bin/d2ip ./cmd/d2ip
+
+      - name: Verify binary
+        run: ./bin/d2ip version || true
+
+      - name: Upload binary artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: d2ip-linux-amd64
+          path: bin/d2ip
+
+  integration:
+    name: Integration Tests (Routing)
+    runs-on: ubuntu-latest
+    # Only run on main branch to avoid excessive sudo usage
+    if: github.ref == 'refs/heads/main'
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: '1.22'
+          cache: true
+
+      - name: Install nftables and iproute2
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y nftables iproute2
+
+      - name: Run integration tests
+        run: sudo -E go test -v -tags=routing_integration ./internal/routing
+
+      - name: Cleanup network namespaces
+        if: always()
+        run: |
+          sudo ip netns del d2ip-test-nft 2>/dev/null || true
+          sudo ip netns del d2ip-test-ip 2>/dev/null || true

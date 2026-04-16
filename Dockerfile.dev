@@ -1,0 +1,23 @@
+# Development Dockerfile for d2ip
+# Pre-installs Go modules to avoid repeated downloads
+# Build once: docker build -f Dockerfile.dev -t d2ip-dev .
+# Use for builds/tests with volume mounts
+
+FROM golang:1.22-alpine
+
+# Install common build dependencies
+RUN apk add --no-cache git ca-certificates protobuf-dev make
+
+WORKDIR /work
+
+# Copy go.mod and go.sum to cache dependencies
+COPY go.mod go.sum ./
+
+# Pre-download all Go modules
+RUN go mod download
+
+# Install protoc-gen-go for protobuf generation
+RUN go install google.golang.org/protobuf/cmd/protoc-gen-go@v1.33.0
+
+# Default command shows help
+CMD ["echo", "d2ip-dev image ready. Use with: docker run --rm -v \$(PWD):/work d2ip-dev go build ./..."]

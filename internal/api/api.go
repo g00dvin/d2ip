@@ -2,8 +2,10 @@
 package api
 
 import (
+	"embed"
 	"encoding/json"
 	"errors"
+	"io/fs"
 	"net/http"
 	"net/netip"
 
@@ -17,6 +19,9 @@ import (
 	"github.com/goodvin/d2ip/internal/orchestrator"
 	"github.com/goodvin/d2ip/internal/routing"
 )
+
+//go:embed web
+var webFS embed.FS
 
 // Server wraps the HTTP API with dependencies.
 type Server struct {
@@ -40,7 +45,7 @@ func (s *Server) Handler() http.Handler {
 	r.Use(middleware.Recoverer)
 	r.Use(middleware.Compress(5))
 
-	// Routes.
+	// API Routes (registered first to take precedence).
 	r.Get("/healthz", s.handleHealth)
 	r.Get("/readyz", s.handleReady)
 	r.Post("/pipeline/run", s.handlePipelineRun)
@@ -49,6 +54,23 @@ func (s *Server) Handler() http.Handler {
 	r.Post("/routing/rollback", s.handleRoutingRollback)
 	r.Get("/routing/snapshot", s.handleRoutingSnapshot)
 	r.Get("/metrics", s.handleMetrics)
+
+	// Static web UI (serve at root and /web/*).
+	webRoot, err := fs.Sub(webFS, "web")
+	if err != nil {
+		log.Warn().Err(err).Msg("api: failed to embed web files")
+	} else {
+		fileServer := http.FileServer(http.FS(webRoot))
+		r.Get("/", func(w http.ResponseWriter, r *http.Request) {
+			if r.URL.Path == "/" {
+				r.URL.Path = "/index.html"
+			}
+			fileServer.ServeHTTP(w, r)
+		})
+		r.Get("/web/*", func(w http.ResponseWriter, r *http.Request) {
+			fileServer.ServeHTTP(w, r)
+		})
+	}
 
 	return r
 }

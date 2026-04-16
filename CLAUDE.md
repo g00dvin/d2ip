@@ -16,24 +16,32 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 **Build commands:**
 ```bash
-# Compile binary (use Docker if local Go < 1.22)
+# First-time setup: build development image (caches Go modules)
+make docker-dev                         # → d2ip-dev:latest (run once, or when go.mod changes)
+
+# Compile binary (auto-detects local Go 1.22+ or uses docker-dev)
 make build                              # → bin/d2ip
-docker run --rm -v $(PWD):/work -w /work golang:1.22-alpine go build -o bin/d2ip ./cmd/d2ip
 
 # Generate protobuf code (if proto/dlc.proto changes)
-make proto
+make proto                              # Uses docker-dev
 
-# Run tests
+# Run tests (auto-detects local Go 1.22+ or uses docker-dev)
 make test                               # All tests with race detector
-go test ./internal/routing -v          # Single package
-go test ./pkg/cidr -run TestConservative  # Single test
+go test ./internal/routing -v          # Single package (if local Go available)
+go test ./pkg/cidr -run TestConservative  # Single test (if local Go available)
 
-# Build Docker image
+# Build production Docker image
 make docker                             # → d2ip:latest
 
 # Lint (requires golangci-lint)
 make lint
 ```
+
+**Docker workflow:**
+- `Dockerfile.dev` pre-installs Go modules and protoc-gen-go for fast rebuilds
+- `make docker-dev` builds the dev image once (or when dependencies change)
+- `make build` and `make test` automatically use docker-dev if local Go < 1.22
+- No more repeated downloads with `docker run --rm` — dependencies are cached in the image
 
 ## Architecture
 
@@ -167,13 +175,20 @@ default:
 }
 ```
 
-### 5. Docker Go Version Workaround
+### 5. Docker Development Workflow
 
-Local go commands fail (Go 1.19 < required 1.22). Use Docker:
+Local go commands fail (Go 1.19 < required 1.22). Use development image:
 
 ```bash
-docker run --rm -v $(PWD):/work -w /work golang:1.22-alpine go build ./...
-docker run --rm -v $(PWD):/work -w /work golang:1.22-alpine go test ./...
+# Build dev image with cached dependencies (run once)
+make docker-dev
+
+# Now builds are fast (no repeated downloads)
+make build  # Uses docker-dev automatically if local Go < 1.22
+make test   # Uses docker-dev automatically if local Go < 1.22
+
+# Rebuild dev image only when go.mod/go.sum changes
+make docker-dev
 ```
 
 ## CLI Commands

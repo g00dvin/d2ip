@@ -6,13 +6,20 @@ import (
 	"math/rand"
 	"net/netip"
 	"strings"
+	"time"
 
+	"github.com/goodvin/d2ip/internal/metrics"
 	"github.com/miekg/dns"
 	"github.com/rs/zerolog/log"
 )
 
 // queryType performs a DNS query for the specified record type (A or AAAA).
 func (r *DNSResolver) queryType(ctx context.Context, domain string, qtype uint16) ([]netip.Addr, error) {
+	start := time.Now()
+	defer func() {
+		metrics.DNSResolveDuration.Observe(time.Since(start).Seconds())
+	}()
+
 	// Ensure domain ends with dot for absolute queries
 	if !strings.HasSuffix(domain, ".") {
 		domain = domain + "."
@@ -40,20 +47,25 @@ func (r *DNSResolver) queryType(ctx context.Context, domain string, qtype uint16
 	var resp *dns.Msg
 	select {
 	case <-ctx.Done():
+		metrics.DNSResolveTotal.WithLabelValues("failed").Inc()
 		return nil, ctx.Err()
 	case err := <-errCh:
+		metrics.DNSResolveTotal.WithLabelValues("failed").Inc()
 		return nil, err
 	case resp = <-respCh:
 	}
 
 	// Check response code
 	if resp.Rcode == dns.RcodeNameError {
+		metrics.DNSResolveTotal.WithLabelValues("nxdomain").Inc()
 		return nil, &DNSError{Rcode: resp.Rcode, Message: "NXDOMAIN"}
 	}
 	if resp.Rcode == dns.RcodeServerFailure {
+		metrics.DNSResolveTotal.WithLabelValues("failed").Inc()
 		return nil, &DNSError{Rcode: resp.Rcode, Message: "SERVFAIL"}
 	}
 	if resp.Rcode != dns.RcodeSuccess {
+		metrics.DNSResolveTotal.WithLabelValues("failed").Inc()
 		return nil, &DNSError{Rcode: resp.Rcode, Message: dns.RcodeToString[resp.Rcode]}
 	}
 
@@ -77,9 +89,12 @@ func (r *DNSResolver) queryType(ctx context.Context, domain string, qtype uint16
 	}
 
 	if len(addrs) == 0 {
-		return nil, nil // No records found (but not NXDOMAIN)
+		// No records found (but not NXDOMAIN) - still count as success
+		metrics.DNSResolveTotal.WithLabelValues("success").Inc()
+		return nil, nil
 	}
 
+	metrics.DNSResolveTotal.WithLabelValues("success").Inc()
 	return addrs, nil
 }
 
