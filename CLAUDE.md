@@ -116,6 +116,66 @@ The orchestrator ([internal/orchestrator/orchestrator.go](internal/orchestrator/
 
 **Migrations:** Embedded in `migrations/embed.go` using `//go:embed`. Applied on `cache.Open()`.
 
+## Critical Gotchas
+
+### 1. IPv4 in netip.Addr.As16()
+
+**Problem:** IPv4 addresses stored in last 4 bytes, not first 4
+
+```go
+// ❌ WRONG
+addr.As16()[0:4]  // IPv4 not here!
+
+// ✅ CORRECT
+byteOffset := 0
+if addr.Is4() {
+    byteOffset = 12  // IPv4 in bytes 12-15
+}
+addr.As16()[byteOffset:byteOffset+4]
+```
+
+### 2. Orchestrator New() Signature Changes
+
+Every new agent requires updating `New()` parameters. Pattern: all agents injected, config getter last.
+
+```go
+func New(
+    src source.DLCStore,
+    dl domainlist.ListProvider,
+    res resolver.Resolver,
+    cch cache.Cache,
+    agg *aggregator.Aggregator,
+    exp *exporter.FileExporter,
+    rtr routing.Router,      // ← new agent added
+    cfgGetter func() config.Config,  // ← always last
+) *Orchestrator
+```
+
+### 3. Routing Idempotence Check
+
+Second Apply with same input must be no-op. Verify: both `Plan.Add` and `Plan.Remove` are empty.
+
+### 4. Context Cancellation Between Pipeline Steps
+
+Always check `ctx.Done()` between orchestrator steps:
+
+```go
+select {
+case <-ctx.Done():
+    return ctx.Err()
+default:
+}
+```
+
+### 5. Docker Go Version Workaround
+
+Local go commands fail (Go 1.19 < required 1.22). Use Docker:
+
+```bash
+docker run --rm -v $(PWD):/work -w /work golang:1.22-alpine go build ./...
+docker run --rm -v $(PWD):/work -w /work golang:1.22-alpine go test ./...
+```
+
 ## CLI Commands
 
 **Binary:** `bin/d2ip` or `./bin/d2ip`
@@ -224,6 +284,7 @@ export D2IP_ROUTING_BACKEND=nftables
 | [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) | Component diagram, interfaces, contracts |
 | [docs/PROGRESS.md](docs/PROGRESS.md) | Implementation status, iterations 0-5 |
 | [docs/AGENT_LESSONS.md](docs/AGENT_LESSONS.md) | Agent performance metrics, cost analysis |
+| [docs/RETROSPECTIVE.md](docs/RETROSPECTIVE.md) | What went well, gotchas, recommendations |
 | [docs/agents/](docs/agents/) | Per-agent specifications (01-09) |
 | [docs/SCHEMA.md](docs/SCHEMA.md) | SQLite schema, indexes |
 | [docs/CONFIG.md](docs/CONFIG.md) | Full config reference |
@@ -238,15 +299,6 @@ export D2IP_ROUTING_BACKEND=nftables
 - No goleak tests for orchestrator/resolver
 - DNS TTL is ignored (internal cache TTL only)
 
-## Development Environment Note
-
-**Local Go version mismatch:** System has Go 1.19.8, but project requires 1.22+. Use Docker for all build/test commands:
-
-```bash
-docker run --rm -v $(PWD):/work -w /work golang:1.22-alpine go build ./...
-docker run --rm -v $(PWD):/work -w /work golang:1.22-alpine go test ./...
-```
-
 ## Agent Usage History (for Cost Optimization Context)
 
 **Total project:** 8 agents spawned across iterations 3-5, 252k tokens, ~$0.25 cost (58% savings vs all-opus)
@@ -257,3 +309,15 @@ docker run --rm -v $(PWD):/work -w /work golang:1.22-alpine go test ./...
 - Use **manual** for trivial tasks (<50 lines, config files)
 
 **Example:** Iteration 5 used 1 opus (routing logic) + 1 sonnet (API endpoints) = perfect results, 73k tokens.
+
+**When sonnet struggles:**
+- Complex state tracking across recursion
+- Bit manipulation (byte offsets, masks)
+- Concurrency edge cases
+- Algorithm design (not implementation)
+
+**When to use opus:**
+- Kernel/system integration (nftables, iproute2, netns)
+- Critical concurrency logic (worker pools, rate limiters)
+- Complex algorithms (radix tree, CIDR aggregation)
+- After 1-2 sonnet attempts with bugs
