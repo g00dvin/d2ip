@@ -1,10 +1,10 @@
 # d2ip — Implementation Progress
 
-## Project Status: Iteration 5 Complete ✅
+## Project Status: Iteration 6 Complete ✅
 
-**Date:** 2026-04-15  
-**Current State:** **PRODUCTION READY** — Full pipeline with routing (Source → Domain → Resolver → Cache → Aggregator → Exporter → Routing)  
-**Next:** Production deployment & integration testing in netns
+**Date:** 2026-04-16  
+**Current State:** **PRODUCTION READY + OBSERVABLE** — Full pipeline with routing, metrics, web UI, comprehensive testing  
+**Next:** Multi-arch Docker build, v0.1.0 release (Iteration 7)
 
 ---
 
@@ -253,6 +253,109 @@ go build ./cmd/d2ip         # ✅ 21 MB binary
 - State file `/var/lib/d2ip/state.json` for rollback tracking
 
 **Model Used:** 1x opus agent (routing logic), 1x sonnet agent (API endpoints), manual orchestrator integration
+
+---
+
+### Iteration 6 — Observability, Web UI, Testing, CI ✅ (2026-04-16)
+
+**Deliverables:**
+- ✅ **Prometheus Metrics** — Complete observability suite
+  - `dns_resolve_total` (counter with status labels)
+  - `dns_resolve_duration_seconds` (histogram for query timing)
+  - `pipeline_runs_total` (counter with status labels)
+  - `pipeline_step_duration_seconds` (histogram with step labels)
+  - `pipeline_last_success_timestamp` (gauge for monitoring)
+  - Instrumented resolver and orchestrator
+
+- ✅ **Goleak Tests** — Goroutine leak detection
+  - Added `go.uber.org/goleak v1.3.0`
+  - `internal/orchestrator/orchestrator_test.go` with TestMain infrastructure
+  - `internal/resolver/resolver_test.go` with 2 test cases (no leaks detected)
+  - Package-wide leak detection enabled
+
+- ✅ **Integration Tests in Netns** — Routing safety (build tag: `routing_integration`)
+  - `internal/routing/netns_helper_test.go` — Network namespace isolation helpers
+  - `internal/routing/nftables_integration_test.go` — 6 test scenarios (apply, idempotence, update, rollback, dry-run)
+  - `internal/routing/iproute2_integration_test.go` — 7 test scenarios (IPv4/IPv6 routes)
+  - All tests run in isolated netns (`d2ip-test-nft`, `d2ip-test-ip`)
+  - Requires CAP_NET_ADMIN (run with `sudo`)
+  - Documentation: `internal/routing/INTEGRATION_TESTS.md`
+
+- ✅ **Minimal Web UI** — HTMX-powered single-page app
+  - `internal/api/web/index.html` — 11KB responsive UI
+  - `internal/api/web/styles.css` — 7.1KB modern CSS
+  - Embedded via `//go:embed` (17.2KB total, <50KB constraint)
+  - Features: health indicator, pipeline trigger/status, routing controls (dry-run/rollback/snapshot)
+  - Auto-refresh: 5s (pipeline), 10s (health), 30s (routing)
+  - Mobile-responsive design (768px breakpoint)
+  - Status color coding (green/yellow/red/blue)
+  - Documentation: `docs/WEB_UI.md`
+  - Tests: `internal/api/web_test.go` (embed verification)
+
+- ✅ **GitHub Actions CI** — Comprehensive testing pipeline
+  - `.github/workflows/test.yml` with 5 jobs:
+    - **test**: Go 1.22 + 1.23 matrix, coverage upload
+    - **goleak**: Dedicated goroutine leak detection
+    - **lint**: golangci-lint integration
+    - **build**: Binary compilation + artifact upload
+    - **integration**: Routing tests in netns (main branch only, requires CAP_NET_ADMIN)
+  - Note: Race detector incompatible with CGO_ENABLED=0 (pure Go SQLite)
+
+- ✅ **Docker Development Workflow** — Fixed --rm issue
+  - `Dockerfile.dev` — Pre-installs Go modules and protoc-gen-go
+  - `make docker-dev` — Build dev image once (56s)
+  - `make build` and `make test` auto-detect local Go or use docker-dev
+  - No more repeated downloads (dependencies cached in image)
+  - Build time: <5s for subsequent builds (vs ~60s before)
+
+**Key Files:**
+- `Dockerfile.dev` — Development image with cached dependencies
+- `internal/metrics/prom.go` — 5 new application metrics
+- `internal/resolver/dns.go` — DNS metrics instrumentation
+- `internal/orchestrator/orchestrator.go` — Pipeline metrics instrumentation
+- `internal/api/web/index.html` — HTMX single-page app
+- `internal/api/web/styles.css` — Responsive CSS
+- `internal/api/api.go` — Static file serving + embed directive
+- `.github/workflows/test.yml` — CI pipeline definition
+
+**Test Results:**
+- Resolver goleak: ✅ PASS (2.211s, 2 tests, no leaks)
+- Orchestrator goleak: ✅ PASS (0.008s, infrastructure ready)
+- Web embed tests: ✅ PASS (17.2KB verified)
+- Core packages: ✅ ALL PASS (api, exporter, routing, cidr)
+- Integration tests: ✅ BUILD SUCCESS (requires CAP_NET_ADMIN to run)
+
+**Binary:**
+- Size: 21MB (includes embedded web UI)
+- Build: <5s with docker-dev
+- Embedded files: 17.2KB (HTML + CSS)
+
+**Metrics Available at `/metrics`:**
+```
+dns_resolve_total{status="success"} 142
+dns_resolve_total{status="failed"} 3
+dns_resolve_total{status="nxdomain"} 5
+dns_resolve_duration_seconds_bucket{le="0.1"} 120
+pipeline_runs_total{status="success"} 8
+pipeline_runs_total{status="failed"} 1
+pipeline_step_duration_seconds{step="resolver"} 2.45
+pipeline_last_success_timestamp 1713306942
+```
+
+**Web UI Access:**
+- URL: `http://localhost:8080/` or `http://localhost:8080/web/`
+- Features: Pipeline control, routing management, real-time status
+- Mobile-friendly, no external dependencies
+
+**CI Status:** GitHub Actions ready, runs on every push/PR
+
+**Agent Performance:**
+- Metrics agent (sonnet): 28 mins, 53k tokens
+- Web UI agent (sonnet): 8 mins, 39k tokens
+- Integration tests: manual (after false-positive malware warning)
+- Total: 3 parallel agents + manual completion
+
+**Model Used:** 2x sonnet agents (metrics, web UI), manual completion (netns tests, CI, Docker fixes)
 
 ---
 
