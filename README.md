@@ -25,7 +25,7 @@ fetch dlc.dat → parse → filter (categories + @attrs) → normalize (idna)
 docker build -t d2ip -f deploy/Dockerfile .
 
 # Run without routing — just produce ipv4.txt/ipv6.txt
-docker run --rm -p 8080:8080 \
+docker run --rm -p 9099:9099 \
     -v d2ip-data:/var/lib/d2ip \
     -e D2IP_RESOLVER_UPSTREAM=1.1.1.1:53 \
     d2ip
@@ -39,17 +39,17 @@ docker run --rm -d --name d2ip \
     d2ip
 
 # Trigger a run
-curl -X POST http://localhost:8080/pipeline/run
+curl -X POST http://localhost:9099/pipeline/run
 
 # Dry-run routing changes
-curl -X POST http://localhost:8080/pipeline/dry-run | jq
+curl -X POST http://localhost:9099/pipeline/dry-run | jq
 ```
 
 ## Web UI
 
 d2ip includes a minimal, mobile-friendly web interface built with HTMX:
 
-- **Access:** http://localhost:8080/
+- **Access:** http://localhost:9099/
 - **Features:**
   - Real-time health status indicator
   - Trigger pipeline runs with one click

@@ -1,6 +1,6 @@
 # d2ip example configuration
 
-listen: "127.0.0.1:8080"
+listen: "127.0.0.1:9099"
 
 source:
   url: "https://github.com/v2fly/domain-list-community/releases/latest/download/dlc.dat"

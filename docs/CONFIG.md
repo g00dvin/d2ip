@@ -6,7 +6,7 @@ Resolution order (highest wins): **ENV** > **Web UI overrides (`kv_settings`)** 
 
 ```yaml
 # config.yaml (defaults; every key is overridable)
-listen: ":8080"
+listen: ":9099"
 
 source:
   url: https://github.com/v2fly/domain-list-community/releases/latest/download/dlc.dat

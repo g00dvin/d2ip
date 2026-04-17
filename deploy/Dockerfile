@@ -40,9 +40,9 @@ VOLUME ["/var/lib/d2ip"]
 # We DO NOT switch to USER d2ip by default: the routing agent needs CAP_NET_ADMIN.
 # Operators who disable routing should run with `--user d2ip`.
 
-EXPOSE 8080
+EXPOSE 9099
 
-ENV D2IP_LISTEN=":8080" \
+ENV D2IP_LISTEN=":9099" \
     D2IP_CACHE_DB_PATH="/var/lib/d2ip/cache.db" \
     D2IP_SOURCE_CACHE_PATH="/var/lib/d2ip/dlc.dat" \
     D2IP_EXPORT_DIR="/var/lib/d2ip/out" \

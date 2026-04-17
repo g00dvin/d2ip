@@ -343,7 +343,7 @@ pipeline_last_success_timestamp 1713306942
 ```
 
 **Web UI Access:**
-- URL: `http://localhost:8080/` or `http://localhost:8080/web/`
+- URL: `http://localhost:9099/` or `http://localhost:9099/web/`
 - Features: Pipeline control, routing management, real-time status
 - Mobile-friendly, no external dependencies
 
@@ -414,38 +414,38 @@ pipeline_last_success_timestamp 1713306942
 ### Trigger Pipeline:
 ```bash
 # Full pipeline run (including routing if enabled)
-curl -X POST http://localhost:8080/pipeline/run
+curl -X POST http://localhost:9099/pipeline/run
 
 # With options
-curl -X POST http://localhost:8080/pipeline/run \
+curl -X POST http://localhost:9099/pipeline/run \
   -H "Content-Type: application/json" \
   -d '{"dry_run": false, "force_resolve": true, "skip_routing": false}'
 
 # Dry-run (stop before routing apply)
-curl -X POST http://localhost:8080/pipeline/run \
+curl -X POST http://localhost:9099/pipeline/run \
   -H "Content-Type: application/json" \
   -d '{"dry_run": true}'
 ```
 
 ### Check Status:
 ```bash
-curl http://localhost:8080/pipeline/status
-curl http://localhost:8080/metrics
-curl http://localhost:8080/healthz
+curl http://localhost:9099/pipeline/status
+curl http://localhost:9099/metrics
+curl http://localhost:9099/healthz
 ```
 
 ### Routing Control:
 ```bash
 # Preview routing changes (dry-run)
-curl -X POST http://localhost:8080/routing/dry-run \
+curl -X POST http://localhost:9099/routing/dry-run \
   -H "Content-Type: application/json" \
   -d '{"ipv4_prefixes": ["1.2.3.0/24"], "ipv6_prefixes": ["2001:db8::/32"]}'
 
 # Show current routing state
-curl http://localhost:8080/routing/snapshot
+curl http://localhost:9099/routing/snapshot
 
 # Rollback to previous state
-curl -X POST http://localhost:8080/routing/rollback
+curl -X POST http://localhost:9099/routing/rollback
 ```
 
 ### CLI Commands:
@@ -472,7 +472,7 @@ curl -X POST http://localhost:8080/routing/rollback
 ./bin/d2ip serve --config config.example.yaml
 
 # Trigger full pipeline
-curl -X POST http://localhost:8080/pipeline/run
+curl -X POST http://localhost:9099/pipeline/run
 
 # Verify output files
 ls -lh ./out/
@@ -498,10 +498,10 @@ sudo ip netns exec d2ip-test bash
 nft list table inet d2ip
 
 # Test idempotency (second run should be no-op)
-curl -X POST http://localhost:8080/pipeline/run
+curl -X POST http://localhost:9099/pipeline/run
 
 # Test rollback
-curl -X POST http://localhost:8080/routing/rollback
+curl -X POST http://localhost:9099/routing/rollback
 nft list table inet d2ip  # Should be empty
 
 # Exit netns

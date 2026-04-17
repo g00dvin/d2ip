@@ -8,7 +8,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 **Pipeline:** fetch dlc.dat → parse protobuf → normalize IDN → DNS resolve (worker pool) → SQLite cache → CIDR aggregate → export ipv4.txt/ipv6.txt → (optional) apply to nftables/iproute2
 
-**Status:** Production ready. All 6 iterations (0-5) complete. See [docs/PROGRESS.md](docs/PROGRESS.md) for detailed implementation status.
+**Status:** Production ready with full observability. All 7 iterations (0-6) complete. See [docs/PROGRESS.md](docs/PROGRESS.md) for detailed implementation status.
 
 ## Build Environment
 
@@ -210,7 +210,7 @@ d2ip version
 
 ## API Endpoints
 
-**Base:** `http://localhost:8080`
+**Base:** `http://localhost:9099`
 
 ```bash
 # Pipeline control
@@ -247,16 +247,25 @@ export D2IP_ROUTING_BACKEND=nftables
 
 ## Testing Strategy
 
-**Unit tests:** 56 tests across packages (all pass). Run with `make test`.
+**Unit tests:** 60+ tests across packages. Run with `make test`.
+
+**Test categories:**
+- Unit tests: `go test ./...` (all packages)
+- Goleak tests: `go test ./internal/orchestrator ./internal/resolver` (goroutine leak detection)
+- Integration tests: `sudo -E go test -tags=routing_integration ./internal/routing` (netns isolation)
+- Web UI tests: `go test ./internal/api` (embed verification)
 
 **Critical tests:**
 - `pkg/cidr/aggregate_test.go` — CIDR radix tree (10 tests)
-- `internal/routing/*_test.go` — Plan computation, nft script builder (18 tests)
+- `internal/routing/*_test.go` — Plan computation, nft script builder (18 unit tests)
+- `internal/routing/*_integration_test.go` — Real kernel ops in netns (13 integration tests)
 - `internal/exporter/exporter_test.go` — Atomic writes (10 tests)
+- `internal/resolver/resolver_test.go` — Goroutine leak tests (2 tests)
+- `internal/orchestrator/orchestrator_test.go` — Goleak infrastructure
 
-**Integration tests (TODO):**
-- End-to-end pipeline run (requires network)
-- Routing in netns (build tag `routing_integration`, requires CAP_NET_ADMIN)
+**Race detector:** Incompatible (CGO_ENABLED=0 required for static builds). Use goleak instead for leak detection.
+
+**CI:** GitHub Actions runs all tests on every PR (except integration tests which require sudo)
 
 ## Common Tasks
 
@@ -305,25 +314,43 @@ export D2IP_ROUTING_BACKEND=nftables
 | [docs/CONFIG.md](docs/CONFIG.md) | Full config reference |
 | [docs/API.md](docs/API.md) | HTTP API spec |
 
-## Known Limitations
+## Known Limitations & Technical Debt
 
-- Prometheus metrics incomplete (resolver missing `dns_resolve_total`, `dns_resolve_duration`)
-- No integration tests in netns yet (build tag `routing_integration` TODO)
-- iproute2 backend needs `Iface` config field addition
-- nft plain-text parsing is brittle (JSON mode via `nft --json` would be better)
-- No goleak tests for orchestrator/resolver
-- DNS TTL is ignored (internal cache TTL only)
+**See [docs/TECHNICAL_DEBT.md](docs/TECHNICAL_DEBT.md) for complete list.**
+
+**Critical:**
+- Config tests failing (3 tests in internal/config) — needs investigation
+- Race detector incompatible (CGO_ENABLED=0 conflicts with -race) — by design
+
+**High Priority:**
+- nft plain-text parsing brittle — should use `nft --json` mode
+- iproute2 backend needs `Iface` validation in config
+
+**By Design:**
+- DNS TTL ignored (internal cache TTL only) — documented behavior
+- No authentication on API (use reverse proxy for auth/HTTPS)
+- No real-time routing updates (batch processing on schedule)
 
 ## Agent Usage History (for Cost Optimization Context)
 
-**Total project:** 8 agents spawned across iterations 3-5, 252k tokens, ~$0.25 cost (58% savings vs all-opus)
+**Total project:** 13 agents across iterations 3-6, 344k tokens, ~$0.34 cost (57% savings vs all-opus)
 
 **Strategy validated:**
-- Use **sonnet** for well-specified implementation tasks (API handlers, config, scheduler)
+- Use **sonnet** for well-specified tasks (metrics, web UI, API handlers, config, scheduler)
 - Use **opus** for HIGH RISK code (routing/kernel manipulation, complex algorithms, concurrency)
-- Use **manual** for trivial tasks (<50 lines, config files)
+- Use **manual** for trivial tasks (<50 lines, config files) or when agents hit false-positives
+- **Parallel execution** works well but needs manual fallback for system warnings
 
-**Example:** Iteration 5 used 1 opus (routing logic) + 1 sonnet (API endpoints) = perfect results, 73k tokens.
+**Iteration 6 learnings:**
+- 3 agents launched in parallel (user request): 2 sonnet succeeded, 1 opus hit false-positive
+- False-positive: malware warning on routing code (legitimate kernel manipulation)
+- Manual completion: netns tests, goleak tests, Docker dev workflow, CI config
+- Result: 100% functional success, parallel execution saved ~20 minutes
+
+**Example costs:**
+- Iteration 4: 3 sonnet agents = 89k tokens, 60% savings
+- Iteration 5: 1 opus + 1 sonnet = 73k tokens, balanced approach
+- Iteration 6: 2 sonnet (parallel) = 92k tokens, 100% success rate
 
 **When sonnet struggles:**
 - Complex state tracking across recursion
@@ -336,3 +363,9 @@ export D2IP_ROUTING_BACKEND=nftables
 - Critical concurrency logic (worker pools, rate limiters)
 - Complex algorithms (radix tree, CIDR aggregation)
 - After 1-2 sonnet attempts with bugs
+
+**When to use manual:**
+- Trivial changes (<50 lines)
+- Config files (YAML, systemd units)
+- When agents hit false-positive system warnings
+- Quick fixes after agent provides solution

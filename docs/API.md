@@ -1,6 +1,6 @@
 # d2ip — HTTP API
 
-Base: `http://<host>:8080`. JSON in/out. Errors: `{"error":"...","code":"..."}`.
+Base: `http://<host>:9099`. JSON in/out. Errors: `{"error":"...","code":"..."}`.
 
 ## Pipeline
 

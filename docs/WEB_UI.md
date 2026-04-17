@@ -4,7 +4,7 @@
 
 The d2ip web UI is a minimal, mobile-friendly interface built with HTMX for controlling and monitoring the pipeline.
 
-**Access:** http://localhost:8080/
+**Access:** http://localhost:9099/
 
 **Technology Stack:**
 - HTMX 1.9.10 (from CDN)

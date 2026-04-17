@@ -136,7 +136,7 @@ type MetricsConfig struct {
 // are overrides only.
 func Defaults() Config {
 	return Config{
-		Listen: ":8080",
+		Listen: ":9099",
 		Source: SourceConfig{
 			URL:             "https://github.com/v2fly/domain-list-community/releases/latest/download/dlc.dat",
 			CachePath:       "/var/lib/d2ip/dlc.dat",
