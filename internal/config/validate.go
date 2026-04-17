@@ -187,6 +187,9 @@ func validateRouting(r RoutingConfig) []error {
 			// 253,254,255 are reserved (default, main, local).
 			errs = append(errs, fmt.Errorf("routing.table_id: must be in [1,252] for iproute2, got %d", r.TableID))
 		}
+		if strings.TrimSpace(r.Iface) == "" {
+			errs = append(errs, errors.New("routing.iface: must not be empty when backend=iproute2"))
+		}
 	}
 	if r.Backend == BackendNFTables {
 		if strings.TrimSpace(r.NFTTable) == "" {

@@ -71,7 +71,54 @@ rollback restores pre-apply state.
 
 ---
 
-## Iteration 7 — Release Preparation (1 day)
+## Iteration 7a — Technical Debt Resolution (Critical Path) (1 day)
+
+**Goal:** Fix critical technical debt blocking v0.1.0 release.
+
+**Agent specs:** [docs/agents/10-config-tests-fix.md](docs/agents/10-config-tests-fix.md), [docs/agents/11-nftables-json.md](docs/agents/11-nftables-json.md)
+
+### Deliverables
+
+1. **Fix config tests** ❗ **CRITICAL**
+   - **Agent 10** (sonnet, 2-4 hours)
+   - Debug 3 failing tests in `internal/config/load_test.go`:
+     - `TestLoad_CategoriesFromEnvJSON`
+     - `TestLoad_EnvBeatsYAMLBeatsKVBeatsDefaults`
+     - `TestWatcher_MultipleSubscribersConcurrent`
+   - Fix precedence logic or test expectations
+   - All config tests must pass before v0.1.0
+
+2. **iproute2 Iface validation** (manual, 1 hour)
+   - Add validation in `internal/config/validate.go`
+   - If `routing.backend == "iproute2"` and `routing.iface == ""` → error
+   - Clear error message for missing Iface config
+
+3. **Verify Parallel DNS Resolution** (manual, 1 hour)
+   - Review `internal/resolver/dns.go` worker pool implementation
+   - Check for race conditions, verify rate limiting
+   - Document current implementation + any issues found
+
+4. **nftables JSON parsing** (optional for v0.1.0, recommended)
+   - **Agent 11** (sonnet, 4-6 hours)
+   - Replace plain-text parsing with `nft --json` mode
+   - Fallback to plain text for older nftables
+   - More robust and maintainable
+
+5. **Race detector analysis** (manual, 1-2 hours)
+   - Document CGO_ENABLED=0 vs race detector tradeoff
+   - Validate goleak coverage is sufficient
+   - Consider CI job variant with CGO_ENABLED=1 (race only, not production)
+
+**Done when:**
+- ✅ All 3 config tests pass
+- ✅ iproute2 Iface validation added
+- ✅ Parallel DNS implementation verified/documented
+- ✅ (Optional) nftables JSON parsing implemented
+- ✅ Race detector limitation documented
+
+---
+
+## Iteration 7b — Release Preparation (1 day)
 
 **Goal:** Prepare for v0.1.0 release with multi-arch support and production deployment guides.
 
@@ -95,46 +142,43 @@ rollback restores pre-apply state.
    - `deploy/nginx/d2ip.conf` — reverse proxy config (HTTPS + BasicAuth)
    - `docs/DEPLOYMENT.md` — production deployment guide
 
-4. **Fix config tests** ❗
-   - Debug 3 failing tests in `internal/config/load_test.go`
-   - Fix precedence logic or test expectations
-   - **CRITICAL** before v0.1.0
-
-5. **Troubleshooting guide**
+4. **Troubleshooting guide**
    - `docs/TROUBLESHOOTING.md` with common issues
    - DNS resolution failures
    - Routing not working
    - Pipeline stuck
    - Performance tuning
 
-6. **Example configs**
+5. **Example configs**
    - `deploy/nftables.example.nft` — sample nftables rules
    - `deploy/config/production.yaml` — production config template
    - `deploy/config/development.yaml` — dev config template
 
-7. **Release automation**
+6. **Release automation**
    - GitHub Actions workflow for releases
    - Build binaries for linux/amd64, linux/arm64, darwin/amd64, darwin/arm64
    - Create GitHub Release with binaries and checksums
 
-8. **Security documentation**
+7. **Security documentation**
    - Document API auth requirements (reverse proxy)
    - HTTPS setup guide
    - Rate limiting recommendations
    - Network isolation best practices
 
 **Done when:** 
-- `make docker` produces multi-arch images
-- v0.1.0 tagged and pushed
-- GitHub Release with binaries published
-- All config tests pass
-- Production deployment guide complete
+- ✅ `make docker` produces multi-arch images
+- ✅ v0.1.0 tagged and pushed
+- ✅ GitHub Release with binaries published
+- ✅ All config tests pass (from Iteration 7a)
+- ✅ Production deployment guide complete
 
 ---
 
-## Iteration 8 — Observability Dashboards + Hardening (1 day)
+## Iteration 8 — Observability Dashboards + Hardening (1.5 days)
 
-**Goal:** Complete observability stack and improve production readiness.
+**Goal:** Complete observability stack and improve production readiness with config editing.
+
+**Agent specs:** [docs/agents/12-web-ui-config-editing.md](docs/agents/12-web-ui-config-editing.md)
 
 ### Deliverables
 
@@ -160,11 +204,13 @@ rollback restores pre-apply state.
    - Restore: unpack and apply
    - Test migration between hosts
 
-5. **Web UI config editing**
-   - Form for editing kv_settings (resolver.upstream, scheduler intervals, etc.)
+5. **Web UI config editing** ⭐ **NEW**
+   - **Agent 12** (opus, 12 hours, security-sensitive)
+   - Form for editing kv_settings (resolver.upstream, scheduler intervals, routing settings)
    - Validation + live preview
    - Save to kv_settings table (no restart required)
-   - Simple auth (password in ENV var)
+   - Simple password auth (`D2IP_WEB_PASSWORD` ENV var)
+   - Session management with secure cookies
 
 6. **Logging improvements**
    - Structured JSON logging option
@@ -172,52 +218,56 @@ rollback restores pre-apply state.
    - Log rotation guidance (systemd journal or logrotate)
 
 **Done when:**
-- Grafana dashboard shows all key metrics
-- Soak test runs 24h with no leaks
-- Config editing works via web UI
-- Backup/restore tested successfully
+- ✅ Grafana dashboard shows all key metrics
+- ✅ Soak test runs 24h with no leaks
+- ✅ Web UI config editing works with auth
+- ✅ Backup/restore tested successfully
 
 ---
 
-## Iteration 9 — Performance + Polish (Optional)
+## Iteration 9 — Performance + Polish (2 days)
 
-**Goal:** Performance optimizations and quality-of-life improvements.
+**Goal:** Performance optimizations and quality-of-life improvements with advanced testing.
+
+**Agent specs:** [docs/agents/13-incremental-resolver.md](docs/agents/13-incremental-resolver.md), [docs/agents/14-property-based-testing.md](docs/agents/14-property-based-testing.md)
 
 ### Deliverables
 
-1. **nft JSON mode** (replaces plain-text parsing)
-   - Rewrite `parseNftSet()` to use `nft --json`
-   - Fallback to plain text if JSON unavailable
-   - More robust and maintainable
+1. **Incremental resolver updates** ⭐ **NEW**
+   - **Agent 13** (opus, 16 hours, complex concurrency)
+   - Only re-resolve domains that changed or are stale (cache expired)
+   - Skip unchanged domains with valid TTL
+   - Domain fingerprinting (SHA256 hash)
+   - Cache TTL checking
+   - 50%+ faster pipeline runs for incremental changes
 
-2. **Incremental resolver updates**
-   - Only re-resolve domains that changed or are stale
-   - Skip unchanged domains
-   - Faster pipeline runs (especially for large domain lists)
-
-3. **Property-based testing** (CIDR aggregator)
-   - Use `pgregory.net/rapid` for randomized tests
+2. **Property-based testing** (CIDR aggregator) ⭐ **NEW**
+   - **Agent 14** (opus, 8 hours, algorithm testing)
+   - Use `pgregory.net/rapid` for randomized CIDR tests
+   - Test properties: lossless, no-overlap, idempotent, order-independent
    - Find edge cases in aggregation logic
+   - 1000+ random inputs per property
 
-4. **Fuzzing** (parser + aggregator)
+3. **Fuzzing** (parser + aggregator)
    - `go test -fuzz` on dlc.proto parser
    - Fuzz CIDR aggregator with malformed inputs
    - Run in CI (nightly)
 
-5. **iproute2 Iface validation**
-   - Add config validation for `routing.iface` when backend is iproute2
-   - Clear error message if missing
-
-6. **API examples**
+4. **API examples**
    - Curl examples for all endpoints
    - Go client library example
    - Python client example (requests)
    - `docs/API_EXAMPLES.md`
 
 **Done when:**
-- nft JSON parsing implemented and tested
-- Incremental updates reduce pipeline time by 50%+
-- Fuzz tests run in CI without crashes
+- ✅ Incremental updates reduce pipeline time by 50%+ (verified with benchmarks)
+- ✅ Property-based tests pass with 1000+ random inputs
+- ✅ Fuzz tests run in CI without crashes
+- ✅ API examples documented
+
+**Notes:**
+- nft JSON parsing moved to Iteration 7a (optional for v0.1.0)
+- iproute2 Iface validation moved to Iteration 7a (manual task)
 
 ---
 

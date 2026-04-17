@@ -72,10 +72,13 @@ d2ip includes a minimal, mobile-friendly web interface built with HTMX:
 | [docs/PACKAGES.md](docs/PACKAGES.md)             | Go package layout                                           |
 | [docs/PLAN.md](docs/PLAN.md)                     | Iteration-by-iteration build plan                           |
 | [docs/RISKS.md](docs/RISKS.md)                   | Risks, bottlenecks, operational guardrails                  |
-| [docs/agents/](docs/agents/)                     | One task spec per agent (01–09)                             |
+| [docs/TECHNICAL_DEBT.md](docs/TECHNICAL_DEBT.md) | Known issues, missing features, future improvements         |
+| [docs/TECHNICAL_DEBT_EXECUTION_PLAN.md](docs/TECHNICAL_DEBT_EXECUTION_PLAN.md) | Agent execution plan for debt resolution |
+| [docs/agents/](docs/agents/)                     | One task spec per agent (01–14)                             |
 
 ## Per-agent specs
 
+**Pipeline Agents (Iterations 0-6):**
 1. [Source Agent](docs/agents/01-source.md) — dlc.dat fetch + integrity
 2. [Domain Agent](docs/agents/02-domainlist.md) — protobuf parse, filter, IDN
 3. [Resolver Agent](docs/agents/03-resolver.md) — DNS worker pool
@@ -86,6 +89,15 @@ d2ip includes a minimal, mobile-friendly web interface built with HTMX:
 8. [Config Agent](docs/agents/08-config.md) — ENV > Web > defaults
 9. [Orchestrator](docs/agents/09-orchestrator.md) — pipeline & single-flight
 
+**Technical Debt Resolution Agents (Iterations 7-9):**
+10. [Config Tests Fix](docs/agents/10-config-tests-fix.md) — Fix failing config tests
+11. [nftables JSON Parsing](docs/agents/11-nftables-json.md) — Replace plain-text with JSON
+12. [Web UI Config Editing](docs/agents/12-web-ui-config-editing.md) — Runtime config editing + auth
+13. [Incremental Resolver](docs/agents/13-incremental-resolver.md) — Partial re-resolution
+14. [Property-Based Testing](docs/agents/14-property-based-testing.md) — CIDR aggregator PBT
+
 ## Status
 
 Design complete; implementation tracked in [docs/PLAN.md](docs/PLAN.md).
+
+**Note on Race Detector:** This project builds with `CGO_ENABLED=0` for static binaries (using `modernc.org/sqlite`). The Go race detector requires CGO, so `go test -race` is incompatible. We use [goleak](https://github.com/uber-go/goleak) tests instead to detect goroutine leaks in concurrent code. See [docs/TECHNICAL_DEBT.md](docs/TECHNICAL_DEBT.md#2-race-detector-incompatible) for details.

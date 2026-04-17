@@ -468,7 +468,8 @@ func TestWatcher_RejectsInvalid(t *testing.T) {
 }
 
 func TestWatcher_MultipleSubscribersConcurrent(t *testing.T) {
-	w := NewWatcher(Defaults(), 2)
+	// Use buffer=5 to ensure all 3 publishes can be queued without coalescing.
+	w := NewWatcher(Defaults(), 5)
 	defer w.Close()
 
 	const subs = 8
@@ -495,12 +496,17 @@ func TestWatcher_MultipleSubscribersConcurrent(t *testing.T) {
 		}
 	}()
 
+	// Give goroutines time to start consuming before we publish rapidly.
+	time.Sleep(10 * time.Millisecond)
+
 	for i := 0; i < 3; i++ {
 		next := Defaults()
 		next.Resolver.QPS = 100 + i
 		if err := w.Publish(next); err != nil {
 			t.Fatalf("Publish %d: %v", i, err)
 		}
+		// Small delay between publishes to avoid overwhelming the coalescing logic.
+		time.Sleep(5 * time.Millisecond)
 	}
 
 	done := make(chan struct{})

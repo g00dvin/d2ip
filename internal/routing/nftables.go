@@ -3,6 +3,7 @@ package routing
 import (
 	"bytes"
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"net/netip"
@@ -209,11 +210,30 @@ func joinPrefixes(ps []netip.Prefix) string {
 	return strings.Join(parts, ", ")
 }
 
-// listSet returns the elements currently in the set for family f by parsing
-// `nft --json list set ...` — we use plain text to keep deps to stdlib.
+// listSet returns the elements currently in the set for family f.
+// It tries JSON parsing first (`nft --json list set`), falls back to plain-text
+// parsing if JSON mode is unavailable or parsing fails.
 func (r *nftRouter) listSet(ctx context.Context, f Family) ([]netip.Prefix, error) {
 	fam, name := r.tableArgs()
-	cmd := exec.CommandContext(ctx, "nft", "list", "set", fam, name, r.setName(f))
+	setName := r.setName(f)
+
+	// Try JSON first
+	cmdJSON := exec.CommandContext(ctx, "nft", "--json", "list", "set", fam, name, setName)
+	var outJSON, errbJSON bytes.Buffer
+	cmdJSON.Stdout = &outJSON
+	cmdJSON.Stderr = &errbJSON
+
+	if err := cmdJSON.Run(); err == nil && outJSON.Len() > 0 {
+		// JSON mode succeeded, try to parse
+		prefixes, parseErr := parseNftSetJSON(outJSON.Bytes())
+		if parseErr == nil {
+			return prefixes, nil
+		}
+		// JSON parse failed, fall through to plain-text fallback
+	}
+
+	// Fallback to plain text parsing
+	cmd := exec.CommandContext(ctx, "nft", "list", "set", fam, name, setName)
 	var out, errb bytes.Buffer
 	cmd.Stdout = &out
 	cmd.Stderr = &errb
@@ -228,7 +248,82 @@ func (r *nftRouter) listSet(ctx context.Context, f Family) ([]netip.Prefix, erro
 	return parseNftSet(out.String())
 }
 
+// --- JSON parsing structs and functions (primary) ---
+
+// NftJSONOutput represents the top-level structure of `nft --json` output.
+// Format: {"nftables": [{"metainfo": {...}}, {"set": {...}}]}
+type NftJSONOutput struct {
+	Nftables []NftObject `json:"nftables"`
+}
+
+// NftObject wraps different nftables objects (set, table, chain, rule, etc.).
+// We only care about sets for now.
+type NftObject struct {
+	Set *NftSet `json:"set,omitempty"`
+}
+
+// NftSet represents a single nftables set definition with its elements.
+type NftSet struct {
+	Family string    `json:"family"`
+	Table  string    `json:"table"`
+	Name   string    `json:"name"`
+	Type   string    `json:"type,omitempty"`
+	Flags  []string  `json:"flags,omitempty"`
+	Elem   []NftElem `json:"elem,omitempty"`
+}
+
+// NftElem represents a single element in a set. Can be a prefix (CIDR) or
+// single value (IP address).
+type NftElem struct {
+	Prefix *NftPrefix `json:"prefix,omitempty"` // For CIDR (e.g., 192.0.2.0/24)
+	Val    string     `json:"val,omitempty"`    // For single IP (rare)
+}
+
+// NftPrefix represents a CIDR prefix in JSON format.
+type NftPrefix struct {
+	Addr string `json:"addr"` // IP address
+	Len  int    `json:"len"`  // Prefix length
+}
+
+// parseNftSetJSON parses `nft --json list set` output and extracts prefixes.
+// Returns empty slice (not error) if JSON is valid but set has no elements.
+func parseNftSetJSON(jsonData []byte) ([]netip.Prefix, error) {
+	var output NftJSONOutput
+	if err := json.Unmarshal(jsonData, &output); err != nil {
+		return nil, fmt.Errorf("unmarshal nft JSON: %w", err)
+	}
+
+	var prefixes []netip.Prefix
+	for _, obj := range output.Nftables {
+		if obj.Set == nil || obj.Set.Elem == nil {
+			continue
+		}
+		for _, elem := range obj.Set.Elem {
+			if elem.Prefix != nil {
+				// CIDR prefix: format as "addr/len"
+				prefix, err := netip.ParsePrefix(fmt.Sprintf("%s/%d", elem.Prefix.Addr, elem.Prefix.Len))
+				if err != nil {
+					return nil, fmt.Errorf("parse prefix %s/%d: %w", elem.Prefix.Addr, elem.Prefix.Len, err)
+				}
+				prefixes = append(prefixes, prefix)
+			} else if elem.Val != "" {
+				// Single IP address: convert to host prefix (/32 or /128)
+				prefix, err := parsePrefixLoose(elem.Val)
+				if err != nil {
+					return nil, fmt.Errorf("parse val %s: %w", elem.Val, err)
+				}
+				prefixes = append(prefixes, prefix)
+			}
+		}
+	}
+
+	return prefixes, nil
+}
+
+// --- Plain-text parsing (fallback for older nftables) ---
+
 // parseNftSet extracts "elements = { 1.2.3.0/24, 4.5.6.7, ... }" from nft output.
+// This is the fallback parser for older nftables versions without --json support.
 func parseNftSet(text string) ([]netip.Prefix, error) {
 	i := strings.Index(text, "elements")
 	if i < 0 {

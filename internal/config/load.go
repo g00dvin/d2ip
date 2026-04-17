@@ -59,17 +59,30 @@ func Load(opts LoadOptions) (*Config, error) {
 		}
 	}
 
+	// ENV: prefix D2IP_, dot→underscore mapping on keys.
+	// Bind ENV BEFORE applying KV overrides so ENV wins over KV.
+	v.SetEnvPrefix(EnvPrefix)
+	v.SetEnvKeyReplacer(strings.NewReplacer(".", "_"))
+	v.AutomaticEnv()
+	// Explicitly bind all config keys so ENV vars override KV Set() calls.
+	bindAllEnvKeys(v)
+
 	// kv_settings overrides (between YAML and ENV).
+	// Note: ENV will still win because BindEnv takes precedence over Set.
 	if len(opts.KVOverrides) > 0 {
 		if err := applyKVToViper(v, opts.KVOverrides); err != nil {
 			return nil, fmt.Errorf("config: apply kv overrides: %w", err)
 		}
 	}
 
-	// ENV: prefix D2IP_, dot→underscore mapping on keys.
-	v.SetEnvPrefix(EnvPrefix)
-	v.SetEnvKeyReplacer(strings.NewReplacer(".", "_"))
-	v.AutomaticEnv()
+	// Categories require special handling: ENV var contains JSON that Viper
+	// can’t unmarshal into []CategoryConfig. Temporarily clear the categories
+	// key so Unmarshal doesn’t fail, then parse manually.
+	categoriesEnv := os.Getenv(EnvPrefix + "_CATEGORIES")
+	if categoriesEnv != "" {
+		// Prevent Viper from trying to parse the JSON array as a string slice.
+		v.Set("categories", []map[string]any{})
+	}
 
 	cfg := Defaults()
 	// viper enables StringToTimeDuration and StringToSlice by default in
@@ -78,11 +91,10 @@ func Load(opts LoadOptions) (*Config, error) {
 		return nil, fmt.Errorf("config: unmarshal: %w", err)
 	}
 
-	// Categories can arrive from ENV as JSON (D2IP_CATEGORIES='[{"code":"geosite:ru"}]').
-	// Viper’s AutomaticEnv does not populate slice-of-struct fields, so check
-	// the raw env var and decode it explicitly as a fallback.
-	if raw := os.Getenv(EnvPrefix + "_CATEGORIES"); raw != "" {
-		cats, err := parseCategoriesEnv(raw)
+	// Categories can arrive from ENV as JSON (D2IP_CATEGORIES=’[{"code":"geosite:ru"}]’).
+	// Parse it manually after Unmarshal completes.
+	if categoriesEnv != "" {
+		cats, err := parseCategoriesEnv(categoriesEnv)
 		if err != nil {
 			return nil, fmt.Errorf("config: parse %s_CATEGORIES: %w", EnvPrefix, err)
 		}
@@ -94,6 +106,76 @@ func Load(opts LoadOptions) (*Config, error) {
 	}
 
 	return &cfg, nil
+}
+
+// bindAllEnvKeys explicitly binds all config keys to their ENV var equivalents
+// so that ENV vars take precedence over v.Set() calls (used by KV overrides).
+// Without explicit binding, v.Set() would win over AutomaticEnv().
+func bindAllEnvKeys(v *viper.Viper) {
+	// Top-level
+	_ = v.BindEnv("listen")
+
+	// Source
+	_ = v.BindEnv("source.url")
+	_ = v.BindEnv("source.cache_path")
+	_ = v.BindEnv("source.refresh_interval")
+	_ = v.BindEnv("source.http_timeout")
+
+	// Categories: NOT bound to ENV because it requires JSON parsing.
+	// The D2IP_CATEGORIES env var is handled manually after Unmarshal.
+
+	// Resolver
+	_ = v.BindEnv("resolver.upstream")
+	_ = v.BindEnv("resolver.network")
+	_ = v.BindEnv("resolver.concurrency")
+	_ = v.BindEnv("resolver.qps")
+	_ = v.BindEnv("resolver.timeout")
+	_ = v.BindEnv("resolver.retries")
+	_ = v.BindEnv("resolver.backoff_base")
+	_ = v.BindEnv("resolver.backoff_max")
+	_ = v.BindEnv("resolver.follow_cname")
+	_ = v.BindEnv("resolver.enable_v4")
+	_ = v.BindEnv("resolver.enable_v6")
+
+	// Cache
+	_ = v.BindEnv("cache.db_path")
+	_ = v.BindEnv("cache.ttl")
+	_ = v.BindEnv("cache.failed_ttl")
+	_ = v.BindEnv("cache.vacuum_after")
+
+	// Aggregation
+	_ = v.BindEnv("aggregation.enabled")
+	_ = v.BindEnv("aggregation.level")
+	_ = v.BindEnv("aggregation.v4_max_prefix")
+	_ = v.BindEnv("aggregation.v6_max_prefix")
+
+	// Export
+	_ = v.BindEnv("export.dir")
+	_ = v.BindEnv("export.ipv4_file")
+	_ = v.BindEnv("export.ipv6_file")
+
+	// Routing
+	_ = v.BindEnv("routing.enabled")
+	_ = v.BindEnv("routing.backend")
+	_ = v.BindEnv("routing.table_id")
+	_ = v.BindEnv("routing.iface")
+	_ = v.BindEnv("routing.nft_table")
+	_ = v.BindEnv("routing.nft_set_v4")
+	_ = v.BindEnv("routing.nft_set_v6")
+	_ = v.BindEnv("routing.state_path")
+	_ = v.BindEnv("routing.dry_run")
+
+	// Scheduler
+	_ = v.BindEnv("scheduler.dlc_refresh")
+	_ = v.BindEnv("scheduler.resolve_cycle")
+
+	// Logging
+	_ = v.BindEnv("logging.level")
+	_ = v.BindEnv("logging.format")
+
+	// Metrics
+	_ = v.BindEnv("metrics.enabled")
+	_ = v.BindEnv("metrics.path")
 }
 
 // applyDefaultsToViper seeds viper with the default values so that Unmarshal

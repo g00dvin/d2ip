@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"os"
 	"strconv"
 	"strings"
 
@@ -85,6 +86,9 @@ func ApplyOverrides(cfg *Config, kv map[string]string) error {
 // Durations are parsed into time.Duration so that downstream Unmarshal sees
 // the already-typed value (viper’s decode hooks would handle the string form
 // equally well, but pre-parsing gives us early error reporting).
+//
+// ENV vars take precedence over KV: if an env var is set for a key, the KV
+// value is skipped to respect the precedence order ENV > kv > YAML > defaults.
 func applyKVToViper(v *viper.Viper, kv map[string]string) error {
 	for key, raw := range kv {
 		key = strings.ToLower(strings.TrimSpace(key))
@@ -93,6 +97,11 @@ func applyKVToViper(v *viper.Viper, kv map[string]string) error {
 		}
 		// "categories" is handled by the caller as JSON; skip here.
 		if key == "categories" {
+			continue
+		}
+		// Skip if ENV var is set (ENV beats KV).
+		envKey := strings.ToUpper(strings.ReplaceAll(key, ".", "_"))
+		if os.Getenv("D2IP_"+envKey) != "" {
 			continue
 		}
 		val, err := coerceKVValue(key, raw)

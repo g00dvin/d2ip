@@ -106,6 +106,7 @@ type RoutingConfig struct {
 	Enabled   bool           `mapstructure:"enabled" json:"enabled" yaml:"enabled"`
 	Backend   RoutingBackend `mapstructure:"backend" json:"backend" yaml:"backend"`
 	TableID   int            `mapstructure:"table_id" json:"table_id" yaml:"table_id"`
+	Iface     string         `mapstructure:"iface" json:"iface" yaml:"iface"` // Required for iproute2 backend
 	NFTTable  string         `mapstructure:"nft_table" json:"nft_table" yaml:"nft_table"`
 	NFTSetV4  string         `mapstructure:"nft_set_v4" json:"nft_set_v4" yaml:"nft_set_v4"`
 	NFTSetV6  string         `mapstructure:"nft_set_v6" json:"nft_set_v6" yaml:"nft_set_v6"`
@@ -178,6 +179,7 @@ func Defaults() Config {
 			Enabled:   false,
 			Backend:   BackendNFTables,
 			TableID:   100,
+			Iface:     "", // Required for iproute2, optional for nftables
 			NFTTable:  "inet d2ip",
 			NFTSetV4:  "d2ip_v4",
 			NFTSetV6:  "d2ip_v6",

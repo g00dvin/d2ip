@@ -333,7 +333,7 @@ export D2IP_ROUTING_BACKEND=nftables
 
 ## Agent Usage History (for Cost Optimization Context)
 
-**Total project:** 13 agents across iterations 3-6, 344k tokens, ~$0.34 cost (57% savings vs all-opus)
+**Total project:** 15 agents across iterations 3-7a/7b, 434k tokens, ~$0.37 cost (57% savings vs all-opus)
 
 **Strategy validated:**
 - Use **sonnet** for well-specified tasks (metrics, web UI, API handlers, config, scheduler)
@@ -347,10 +347,20 @@ export D2IP_ROUTING_BACKEND=nftables
 - Manual completion: netns tests, goleak tests, Docker dev workflow, CI config
 - Result: 100% functional success, parallel execution saved ~20 minutes
 
+**Iteration 7a/7b learnings (Phases 1-2, Technical Debt):**
+- 2 agents launched in parallel: Agent 10 (config tests) + Agent 11 (nftables JSON)
+- Agent 10: 1 retry needed (API overload on first attempt), succeeded on retry
+- Agent 11: Succeeded first attempt (nftables JSON parsing)
+- Both sonnet agents, no opus needed (well-specified tasks)
+- 3 manual tasks completed in parallel with agents (iproute2 validation, DNS verification, race detector docs)
+- Result: 100% functional success, 5/5 tasks complete, all tests passing
+- Cost: ~90k tokens, $0.03 (57% savings validated)
+
 **Example costs:**
 - Iteration 4: 3 sonnet agents = 89k tokens, 60% savings
 - Iteration 5: 1 opus + 1 sonnet = 73k tokens, balanced approach
 - Iteration 6: 2 sonnet (parallel) = 92k tokens, 100% success rate
+- Iteration 7a/7b: 2 sonnet (parallel) = 90k tokens, 100% success rate, 1 retry
 
 **When sonnet struggles:**
 - Complex state tracking across recursion
