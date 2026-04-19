@@ -16,8 +16,7 @@ import (
 )
 
 // iproute2Router is the fallback backend using `ip route` on a custom table.
-// It refuses to operate without an interface (cfg.Iface reused via NFTTable's
-// RoutingConfig shape — here we read it from an extended field path).
+// It refuses to operate without an interface (cfg.Iface).
 type iproute2Router struct {
 	cfg   config.RoutingConfig
 	iface string
@@ -26,10 +25,7 @@ type iproute2Router struct {
 }
 
 func newIProute2Router(cfg config.RoutingConfig) *iproute2Router {
-	r := &iproute2Router{cfg: cfg}
-	// iface is expected via NFTTable reuse? The config struct defined in the
-	// spec uses a separate Iface; here we don't have it. Fall back to empty
-	// and refuse Apply if not set by future config additions.
+	r := &iproute2Router{cfg: cfg, iface: cfg.Iface}
 	if s, err := loadState(cfg.StatePath); err == nil {
 		r.state = s
 	}
