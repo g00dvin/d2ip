@@ -1,6 +1,11 @@
 package routing
 
-import "testing"
+import (
+	"context"
+	"testing"
+
+	"github.com/goodvin/d2ip/internal/config"
+)
 
 func TestParseIPRouteShow_V4(t *testing.T) {
 	raw := `default via 192.168.1.1 dev eth0
@@ -39,5 +44,21 @@ func TestIPFam(t *testing.T) {
 	}
 	if ipFam(FamilyV6) != "-6" {
 		t.Error("v6")
+	}
+}
+
+func TestListRoutes_NonexistentTable(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping: requires ip command")
+	}
+	r := &iproute2Router{
+		cfg: config.RoutingConfig{TableID: 9999},
+	}
+	prefixes, err := r.listRoutes(context.Background(), FamilyV4)
+	if err != nil {
+		t.Fatalf("expected nil error for nonexistent table, got: %v", err)
+	}
+	if prefixes != nil {
+		t.Fatalf("expected nil slice for nonexistent table, got: %v", prefixes)
 	}
 }

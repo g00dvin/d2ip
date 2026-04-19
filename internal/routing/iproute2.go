@@ -176,7 +176,11 @@ func (r *iproute2Router) listRoutes(ctx context.Context, f Family) ([]netip.Pref
 	cmd.Stdout = &out
 	cmd.Stderr = &errb
 	if err := cmd.Run(); err != nil {
-		return nil, fmt.Errorf("routing/iproute2: list: %w: %s", err, errb.String())
+		stderr := errb.String()
+		if strings.Contains(stderr, "does not exist") || strings.Contains(stderr, "invalid argument") {
+			return nil, nil
+		}
+		return nil, fmt.Errorf("routing/iproute2: list: %w: %s", err, stderr)
 	}
 	return parseIPRouteShow(out.String(), f)
 }
