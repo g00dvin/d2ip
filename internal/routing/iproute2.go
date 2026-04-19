@@ -15,11 +15,10 @@ import (
 	"github.com/goodvin/d2ip/internal/config"
 )
 
-// iproute2Router is the fallback backend using `ip route` on a custom table.
-// It refuses to operate without an interface (cfg.Iface).
 type iproute2Router struct {
 	cfg   config.RoutingConfig
 	iface string
+	netns string
 	mu    sync.Mutex
 	state RouterState
 }
@@ -30,6 +29,15 @@ func newIProute2Router(cfg config.RoutingConfig) *iproute2Router {
 		r.state = s
 	}
 	return r
+}
+
+func (r *iproute2Router) ipCommand(ctx context.Context, extraArgs ...string) *exec.Cmd {
+	args := extraArgs
+	if r.netns != "" {
+		args = append([]string{"netns", "exec", r.netns, "ip"}, args...)
+		return exec.CommandContext(ctx, "ip", args...)
+	}
+	return exec.CommandContext(ctx, "ip", args...)
 }
 
 // SetIface allows orchestration code to inject the egress interface name.
@@ -43,6 +51,11 @@ func (r *iproute2Router) SetIface(name string) {
 func (r *iproute2Router) Caps() error {
 	if _, err := exec.LookPath("ip"); err != nil {
 		return fmt.Errorf("%w: ip not found: %v", ErrNoCapability, err)
+	}
+	if r.netns != "" {
+		if err := exec.Command("ip", "netns", "pids", r.netns).Run(); err != nil {
+			return fmt.Errorf("%w: netns %q not found: %v", ErrNoCapability, r.netns, err)
+		}
 	}
 	return nil
 }
@@ -167,7 +180,7 @@ func (r *iproute2Router) refreshState(p Plan) error {
 }
 
 func (r *iproute2Router) listRoutes(ctx context.Context, f Family) ([]netip.Prefix, error) {
-	cmd := exec.CommandContext(ctx, "ip", ipFam(f), "route", "show", "table", fmt.Sprint(r.cfg.TableID))
+	cmd := r.ipCommand(ctx, ipFam(f), "route", "show", "table", fmt.Sprint(r.cfg.TableID))
 	var out, errb bytes.Buffer
 	cmd.Stdout = &out
 	cmd.Stderr = &errb
@@ -218,7 +231,7 @@ func (r *iproute2Router) runBatch(ctx context.Context, batch string) error {
 	if strings.TrimSpace(batch) == "" {
 		return nil
 	}
-	cmd := exec.CommandContext(ctx, "ip", "-batch", "-")
+	cmd := r.ipCommand(ctx, "-batch", "-")
 	cmd.Stdin = strings.NewReader(batch)
 	var errb bytes.Buffer
 	cmd.Stderr = &errb

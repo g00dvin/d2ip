@@ -40,6 +40,12 @@ func TestIproute2Backend_Integration_RealKernel(t *testing.T) {
 		t.Fatalf("Failed to create iproute2 backend: %v", err)
 	}
 
+	ipr, ok := backend.(*iproute2Router)
+	if !ok {
+		t.Fatalf("Expected *iproute2Router, got %T", backend)
+	}
+	ipr.netns = nsName
+
 	// Check capabilities
 	if err := backend.Caps(); err != nil {
 		t.Skipf("Capabilities check failed: %v", err)
