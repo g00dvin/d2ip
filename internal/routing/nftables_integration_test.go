@@ -30,9 +30,9 @@ func TestNftablesBackend_Integration_RealKernel(t *testing.T) {
 	cfg := config.RoutingConfig{
 		Enabled:   true,
 		Backend:   "nftables",
-		NftTable:  "inet d2ip",
-		NftSetV4:  "d2ip_v4",
-		NftSetV6:  "d2ip_v6",
+		NFTTable:  "inet d2ip",
+		NFTSetV4:  "d2ip_v4",
+		NFTSetV6:  "d2ip_v6",
 		StatePath: "/tmp/d2ip-test-nft-state.json",
 		DryRun:    false,
 	}
@@ -106,8 +106,8 @@ func TestNftablesBackend_Integration_RealKernel(t *testing.T) {
 	// Test 4: Update with new prefixes
 	t.Run("Update_Prefixes", func(t *testing.T) {
 		v4Prefixes := []netip.Prefix{
-			netip.MustParsePrefix("192.0.2.0/24"),    // Keep
-			netip.MustParsePrefix("203.0.113.0/24"),  // Add (new)
+			netip.MustParsePrefix("192.0.2.0/24"),   // Keep
+			netip.MustParsePrefix("203.0.113.0/24"), // Add (new)
 			// Remove: 198.51.100.0/24
 		}
 

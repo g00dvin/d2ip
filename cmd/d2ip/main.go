@@ -83,7 +83,10 @@ func serveCmd() {
 	logLevel := fs.String("log-level", "info", "Log level (debug, info, warn, error)")
 	logJSON := fs.Bool("log-json", true, "Output logs in JSON format")
 	configFile := fs.String("config", "", "Optional YAML config file path")
-	fs.Parse(os.Args[2:])
+	if err := fs.Parse(os.Args[2:]); err != nil {
+		fmt.Fprintf(os.Stderr, "Error parsing flags: %v\n", err)
+		os.Exit(1)
+	}
 
 	// Load configuration
 	cfg, err := config.Load(config.LoadOptions{
@@ -276,7 +279,10 @@ func dumpCmd() {
 	logLevel := fs.String("log-level", "info", "Log level")
 	listCategories := fs.Bool("list-categories", false, "List all available categories and exit")
 
-	fs.Parse(os.Args[2:])
+	if err := fs.Parse(os.Args[2:]); err != nil {
+		fmt.Fprintf(os.Stderr, "Error parsing flags: %v\n", err)
+		os.Exit(1)
+	}
 
 	// Setup logging
 	if err := logging.Setup(*logLevel, false); err != nil {
@@ -374,18 +380,14 @@ func resolveCmd() {
 	concurrency := fs.Int("concurrency", 64, "Number of concurrent resolver workers")
 	qps := fs.Int("qps", 1000, "Queries per second limit")
 
-	fs.Parse(os.Args[2:])
+	if err := fs.Parse(os.Args[2:]); err != nil {
+		fmt.Fprintf(os.Stderr, "Error parsing flags: %v\n", err)
+		os.Exit(1)
+	}
 
 	// Setup logging
 	if err := logging.Setup(*logLevel, false); err != nil {
 		fmt.Fprintf(os.Stderr, "Failed to setup logging: %v\n", err)
-		os.Exit(1)
-	}
-
-	// Validate at least one category
-	if len(categories) == 0 {
-		fmt.Fprintf(os.Stderr, "Error: at least one --category required\n\n")
-		fs.Usage()
 		os.Exit(1)
 	}
 
@@ -541,7 +543,10 @@ func exportCmd() {
 	logLevel := fs.String("log-level", "info", "Log level")
 	aggLevel := fs.String("agg", "off", "Aggregation level: off, conservative, balanced, aggressive")
 
-	fs.Parse(os.Args[2:])
+	if err := fs.Parse(os.Args[2:]); err != nil {
+		fmt.Fprintf(os.Stderr, "Error parsing flags: %v\n", err)
+		os.Exit(1)
+	}
 
 	// Setup logging
 	if err := logging.Setup(*logLevel, false); err != nil {

@@ -192,14 +192,3 @@ func countLeavesRecursive(node *radixNode) int {
 	}
 	return countLeavesRecursive(node.left) + countLeavesRecursive(node.right)
 }
-
-// countLeaves returns the number of leaf nodes in the subtree.
-func countLeaves(node *radixNode) int {
-	if node == nil {
-		return 0
-	}
-	if node.isLeaf {
-		return 1
-	}
-	return countLeaves(node.left) + countLeaves(node.right)
-}

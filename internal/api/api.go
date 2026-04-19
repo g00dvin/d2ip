@@ -61,13 +61,12 @@ func (s *Server) Handler() http.Handler {
 		log.Warn().Err(err).Msg("api: failed to embed web files")
 	} else {
 		fileServer := http.FileServer(http.FS(webRoot))
-		r.Get("/", func(w http.ResponseWriter, r *http.Request) {
+		r.Get("/*", func(w http.ResponseWriter, r *http.Request) {
+			// Serve index.html for root path
 			if r.URL.Path == "/" {
-				r.URL.Path = "/index.html"
+				http.ServeFileFS(w, r, webRoot, "index.html")
+				return
 			}
-			fileServer.ServeHTTP(w, r)
-		})
-		r.Get("/web/*", func(w http.ResponseWriter, r *http.Request) {
 			fileServer.ServeHTTP(w, r)
 		})
 	}
@@ -93,6 +92,7 @@ func (s *Server) handlePipelineRun(w http.ResponseWriter, r *http.Request) {
 	var req orchestrator.PipelineRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		// Empty body is fine; use defaults.
+		_ = err
 	}
 
 	report, err := s.orch.Run(r.Context(), req)
