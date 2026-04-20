@@ -107,7 +107,10 @@ func (s *Server) reloadConfig(ctx context.Context) error {
 		return err
 	}
 
-	cfg := config.Defaults()
+	// Start from current config (preserves YAML/ENV values), then apply KV overrides.
+	snapshot := s.cfgWatcher.Current()
+	cfg := snapshot.Config.Clone()
+
 	if err := config.ApplyOverrides(&cfg, overrides); err != nil {
 		return err
 	}

@@ -16,60 +16,25 @@
                 <span class="brand-text">d2ip</span>
             </div>
             <nav class="sidebar-nav">
-                <a href="#" class="nav-item active"
-                   hx-get="/web/sections/dashboard.html"
-                   hx-target="#content"
-                   hx-swap="innerHTML"
-                   hx-push-url="false"
-                   onclick="setActiveNav(this); return false;">
+                <a href="#" class="nav-item active" data-section="dashboard" onclick="showSection('dashboard', this); return false;">
                     <span class="nav-icon">▸</span> Dashboard
                 </a>
-                <a href="#" class="nav-item"
-                   hx-get="/web/sections/pipeline.html"
-                   hx-target="#content"
-                   hx-swap="innerHTML"
-                   hx-push-url="false"
-                   onclick="setActiveNav(this); return false;">
+                <a href="#" class="nav-item" data-section="pipeline" onclick="showSection('pipeline', this); return false;">
                     <span class="nav-icon">▸</span> Pipeline
                 </a>
-                <a href="#" class="nav-item"
-                   hx-get="/web/sections/config.html"
-                   hx-target="#content"
-                   hx-swap="innerHTML"
-                   hx-push-url="false"
-                   onclick="setActiveNav(this); return false;">
+                <a href="#" class="nav-item" data-section="config" onclick="showSection('config', this); return false;">
                     <span class="nav-icon">▸</span> Config
                 </a>
-                <a href="#" class="nav-item"
-                   hx-get="/web/sections/categories.html"
-                   hx-target="#content"
-                   hx-swap="innerHTML"
-                   hx-push-url="false"
-                   onclick="setActiveNav(this); return false;">
+                <a href="#" class="nav-item" data-section="categories" onclick="showSection('categories', this); return false;">
                     <span class="nav-icon">▸</span> Categories
                 </a>
-                <a href="#" class="nav-item"
-                   hx-get="/web/sections/cache.html"
-                   hx-target="#content"
-                   hx-swap="innerHTML"
-                   hx-push-url="false"
-                   onclick="setActiveNav(this); return false;">
+                <a href="#" class="nav-item" data-section="cache" onclick="showSection('cache', this); return false;">
                     <span class="nav-icon">▸</span> Cache
                 </a>
-                <a href="#" class="nav-item"
-                   hx-get="/web/sections/source.html"
-                   hx-target="#content"
-                   hx-swap="innerHTML"
-                   hx-push-url="false"
-                   onclick="setActiveNav(this); return false;">
+                <a href="#" class="nav-item" data-section="source" onclick="showSection('source', this); return false;">
                     <span class="nav-icon">▸</span> Source
                 </a>
-                <a href="#" class="nav-item"
-                   hx-get="/web/sections/routing.html"
-                   hx-target="#content"
-                   hx-swap="innerHTML"
-                   hx-push-url="false"
-                   onclick="setActiveNav(this); return false;">
+                <a href="#" class="nav-item" data-section="routing" onclick="showSection('routing', this); return false;">
                     <span class="nav-icon">▸</span> Routing
                 </a>
             </nav>
@@ -81,8 +46,8 @@
 
         <!-- Main Content -->
         <main class="content">
-            <div id="content">
-                <!-- Dashboard loads by default -->
+            <!-- Dashboard Section -->
+            <div id="section-dashboard" class="section-page">
                 <div class="panel">
                     <div class="panel-label">system status</div>
                     <div id="health-check"
@@ -91,12 +56,14 @@
                          hx-swap="innerHTML">
                         checking...
                     </div>
-                    <div class="panel-label" style="margin-top:16px;">quick actions</div>
+                </div>
+                <div class="panel">
+                    <div class="panel-label">quick actions</div>
                     <div class="actions">
                         <button class="btn btn-accent"
                                 hx-post="/pipeline/run"
                                 hx-swap="none"
-                                hx-on::after-request="if(event.detail.successful){alert('pipeline started')}">
+                                hx-on::after-request="if(event.detail.successful){showToast('pipeline started')}">
                             ▶ run pipeline
                         </button>
                         <button class="btn btn-warning"
@@ -106,7 +73,9 @@
                             ⚡ force resolve
                         </button>
                     </div>
-                    <div class="panel-label" style="margin-top:16px;">last run</div>
+                </div>
+                <div class="panel">
+                    <div class="panel-label">last run</div>
                     <div id="last-run"
                          hx-get="/pipeline/status"
                          hx-trigger="load, every 10s"
@@ -114,24 +83,203 @@
                         loading...
                     </div>
                 </div>
+                <div class="panel">
+                    <div class="panel-label">routing state</div>
+                    <div id="dash-routing"
+                         hx-get="/routing/snapshot"
+                         hx-trigger="load, every 30s"
+                         hx-swap="innerHTML">
+                        loading...
+                    </div>
+                </div>
+            </div>
+
+            <!-- Pipeline Section -->
+            <div id="section-pipeline" class="section-page" style="display:none;">
+                <div class="panel">
+                    <div class="panel-label">pipeline control</div>
+                    <div class="actions">
+                        <button class="btn btn-accent"
+                                hx-post="/pipeline/run"
+                                hx-swap="none"
+                                hx-on::after-request="if(event.detail.successful){showToast('pipeline started'); refreshPipelineStatus()}">
+                            ▶ run pipeline
+                        </button>
+                        <button class="btn btn-warning"
+                                hx-post="/pipeline/run"
+                                hx-vals='{"force_resolve":true}'
+                                hx-swap="none">
+                            ⚡ force resolve
+                        </button>
+                        <button class="btn btn-danger"
+                                hx-post="/pipeline/cancel"
+                                hx-swap="none"
+                                hx-confirm="cancel running pipeline?">
+                            ■ cancel
+                        </button>
+                    </div>
+                </div>
+                <div class="panel">
+                    <div class="panel-label">current status</div>
+                    <div id="pipeline-status"
+                         hx-get="/pipeline/status"
+                         hx-trigger="load, every 2s"
+                         hx-swap="innerHTML">
+                        loading...
+                    </div>
+                </div>
+                <div class="panel">
+                    <div class="panel-label">run history</div>
+                    <div id="pipeline-history"
+                         hx-get="/api/pipeline/history"
+                         hx-trigger="load"
+                         hx-swap="innerHTML"
+                         hx-on::after-request="formatPipelineHistory(event)">
+                        loading...
+                    </div>
+                </div>
+            </div>
+
+            <!-- Config Section -->
+            <div id="section-config" class="section-page" style="display:none;">
+                <div class="panel">
+                    <div class="panel-label">configuration</div>
+                    <div id="config-editor"
+                         hx-get="/api/settings"
+                         hx-trigger="load"
+                         hx-swap="innerHTML"
+                         hx-on::after-request="renderConfigEditor(event)">
+                        loading...
+                    </div>
+                </div>
+            </div>
+
+            <!-- Categories Section -->
+            <div id="section-categories" class="section-page" style="display:none;">
+                <div class="panel">
+                    <div class="panel-label">categories</div>
+                    <div id="categories-list"
+                         hx-get="/api/categories"
+                         hx-trigger="load"
+                         hx-swap="innerHTML"
+                         hx-on::after-request="renderCategories(event)">
+                        loading...
+                    </div>
+                </div>
+                <div class="panel" id="category-domains-panel" style="display:none;">
+                    <div class="panel-label" id="category-domains-title">domains</div>
+                    <div id="category-domains">
+                        <input type="text" class="form-input" id="domain-search" placeholder="filter domains..." oninput="filterDomains()" style="margin-bottom:12px;">
+                        <div id="domain-list"></div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Cache Section -->
+            <div id="section-cache" class="section-page" style="display:none;">
+                <div class="panel">
+                    <div class="panel-label">cache statistics</div>
+                    <div id="cache-stats"
+                         hx-get="/api/cache/stats"
+                         hx-trigger="load, every 30s"
+                         hx-swap="innerHTML"
+                         hx-on::after-request="renderCacheStats(event)">
+                        loading...
+                    </div>
+                </div>
+                <div class="panel">
+                    <div class="panel-label">actions</div>
+                    <div class="actions">
+                        <button class="btn btn-warning"
+                                hx-post="/api/cache/vacuum"
+                                hx-swap="none"
+                                hx-confirm="run sqlite vacuum?"
+                                hx-on::after-request="if(event.detail.successful){showToast('vacuum complete'); htmx.trigger('#cache-stats', 'load')}">
+                            vacuum
+                        </button>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Source Section -->
+            <div id="section-source" class="section-page" style="display:none;">
+                <div class="panel">
+                    <div class="panel-label">source info</div>
+                    <div id="source-info"
+                         hx-get="/api/source/info"
+                         hx-trigger="load"
+                         hx-swap="innerHTML"
+                         hx-on::after-request="renderSourceInfo(event)">
+                        loading...
+                    </div>
+                </div>
+            </div>
+
+            <!-- Routing Section -->
+            <div id="section-routing" class="section-page" style="display:none;">
+                <div class="panel">
+                    <div class="panel-label">routing state</div>
+                    <div id="routing-state"
+                         hx-get="/routing/snapshot"
+                         hx-trigger="load, every 30s"
+                         hx-swap="innerHTML"
+                         hx-on::after-request="renderRoutingState(event)">
+                        loading...
+                    </div>
+                </div>
+                <div class="panel">
+                    <div class="panel-label">actions</div>
+                    <div class="actions">
+                        <button class="btn btn-accent"
+                                hx-post="/routing/dry-run"
+                                hx-vals='{"ipv4_prefixes":[],"ipv6_prefixes":[]}'
+                                hx-swap="none"
+                                hx-on::after-request="if(event.detail.successful){showToast('dry-run complete')}">
+                            🔍 dry run
+                        </button>
+                        <button class="btn btn-danger"
+                                hx-post="/routing/rollback"
+                                hx-swap="none"
+                                hx-confirm="rollback routing changes?"
+                                hx-on::after-request="if(event.detail.successful){showToast('rollback complete'); htmx.trigger('#routing-state', 'load')}">
+                            ↩ rollback
+                        </button>
+                    </div>
+                </div>
             </div>
         </main>
     </div>
 
+    <!-- Toast notification -->
+    <div id="toast" style="display:none;position:fixed;bottom:20px;right:20px;background:var(--bg-sidebar);border:1px solid var(--accent);color:var(--accent);padding:8px 16px;font-family:var(--font-mono);font-size:12px;z-index:1000;"></div>
+
     <script>
-        function setActiveNav(el) {
-            document.querySelectorAll('.nav-item').forEach(function(item) {
-                item.classList.remove('active');
+        // Section navigation
+        function showSection(name, el) {
+            document.querySelectorAll('.section-page').forEach(function(s) {
+                s.style.display = 'none';
             });
-            el.classList.add('active');
+            document.querySelectorAll('.nav-item').forEach(function(n) {
+                n.classList.remove('active');
+            });
+            var section = document.getElementById('section-' + name);
+            if (section) section.style.display = 'block';
+            if (el) el.classList.add('active');
+        }
+
+        // Toast notifications
+        function showToast(msg) {
+            var t = document.getElementById('toast');
+            t.textContent = msg;
+            t.style.display = 'block';
+            setTimeout(function() { t.style.display = 'none'; }, 3000);
         }
 
         // Format health response
         document.body.addEventListener('htmx:afterSwap', function(event) {
             if (event.detail.target.id === 'health-check') {
                 try {
-                    var text = event.detail.target.textContent.trim();
-                    var data = JSON.parse(text);
+                    var data = JSON.parse(event.detail.target.textContent.trim());
                     if (data.status === 'ok') {
                         event.detail.target.innerHTML = '<span class="status-ok">● healthy</span>';
                     } else {
@@ -142,13 +290,50 @@
                 }
             }
 
-            // Format pipeline status
+            // Format pipeline status (dashboard)
             if (event.detail.target.id === 'last-run') {
                 try {
-                    var text = event.detail.target.textContent.trim();
-                    var data = JSON.parse(text);
+                    var data = JSON.parse(event.detail.target.textContent.trim());
                     if (data.running) {
                         event.detail.target.innerHTML = '<span class="status-warn">● running (id: ' + data.run_id + ')</span>';
+                    } else if (data.report) {
+                        var r = data.report;
+                        var dur = (r.duration / 1000000000).toFixed(1);
+                        event.detail.target.innerHTML =
+                            '<span class="status-ok">● completed</span>' +
+                            '<div class="meta">id:' + r.run_id + ' | ' + dur + 's | ' +
+                            r.domains + ' domains | ' + r.resolved + ' resolved | ' +
+                            r.failed + ' failed | v4:' + r.ipv4_out + ' v6:' + r.ipv6_out + '</div>';
+                    } else {
+                        event.detail.target.innerHTML = '<span class="status-muted">no runs yet</span>';
+                    }
+                } catch(e) {
+                    event.detail.target.innerHTML = '<span class="status-muted">unavailable</span>';
+                }
+            }
+
+            // Format dashboard routing
+            if (event.detail.target.id === 'dash-routing') {
+                try {
+                    var data = JSON.parse(event.detail.target.textContent.trim());
+                    var v4 = data.v4 ? data.v4.length : 0;
+                    var v6 = data.v6 ? data.v6.length : 0;
+                    event.detail.target.innerHTML =
+                        '<div class="meta">backend: ' + (data.backend || 'none') + '</div>' +
+                        '<div class="meta">ipv4: ' + v4 + ' prefixes | ipv6: ' + v6 + ' prefixes</div>' +
+                        '<div class="meta">applied: ' + (data.applied_at ? new Date(data.applied_at).toLocaleString() : 'never') + '</div>';
+                } catch(e) {
+                    event.detail.target.innerHTML = '<span class="status-muted">routing disabled</span>';
+                }
+            }
+
+            // Format pipeline status (pipeline page)
+            if (event.detail.target.id === 'pipeline-status') {
+                try {
+                    var data = JSON.parse(event.detail.target.textContent.trim());
+                    if (data.running) {
+                        event.detail.target.innerHTML = '<span class="status-warn">● running (id: ' + data.run_id + ')</span>' +
+                            '<div class="meta">started: ' + new Date(data.started).toLocaleString() + '</div>';
                     } else if (data.report) {
                         var r = data.report;
                         var dur = (r.duration / 1000000000).toFixed(1);
@@ -170,6 +355,195 @@
         document.body.addEventListener('htmx:responseError', function(event) {
             console.error('HTMX error:', event.detail);
         });
+
+        // Format pipeline history
+        function formatPipelineHistory(event) {
+            try {
+                var data = JSON.parse(event.detail.xhr.responseText);
+                var history = data.history || [];
+                if (history.length === 0) {
+                    event.detail.target.innerHTML = '<span class="status-muted">no runs yet</span>';
+                    return;
+                }
+                var html = '<table class="table"><tr><th>id</th><th>domains</th><th>resolved</th><th>failed</th><th>v4</th><th>v6</th><th>duration</th></tr>';
+                for (var i = history.length - 1; i >= 0; i--) {
+                    var r = history[i];
+                    var dur = (r.duration / 1000000000).toFixed(1);
+                    html += '<tr><td>' + r.run_id + '</td><td>' + r.domains + '</td><td>' + r.resolved + '</td><td>' + r.failed + '</td><td>' + r.ipv4_out + '</td><td>' + r.ipv6_out + '</td><td>' + dur + 's</td></tr>';
+                }
+                html += '</table>';
+                event.detail.target.innerHTML = html;
+            } catch(e) {
+                console.error('failed to parse history:', e);
+            }
+        }
+
+        // Render config editor
+        function renderConfigEditor(event) {
+            try {
+                var data = JSON.parse(event.detail.xhr.responseText);
+                var cfg = data.config || {};
+                var defaults = data.defaults || {};
+                var overrides = data.overrides || {};
+
+                var sections = ['source', 'resolver', 'cache', 'aggregation', 'export', 'routing', 'scheduler', 'logging', 'metrics'];
+                var html = '';
+
+                for (var s = 0; s < sections.length; s++) {
+                    var sec = sections[s];
+                    var secData = cfg[sec] || {};
+                    var defData = defaults[sec] || {};
+                    html += '<div class="panel"><div class="panel-label">' + sec + '</div>';
+                    for (var key in secData) {
+                        if (typeof secData[key] === 'object') continue;
+                        var dottedKey = sec + '.' + key;
+                        var isOverride = overrides.hasOwnProperty(dottedKey);
+                        var val = isOverride ? overrides[dottedKey] : secData[key];
+                        html += '<div class="form-group"><label class="form-label">' + key + (isOverride ? ' *' : '') + '</label>';
+                        html += '<input type="text" class="form-input" data-key="' + dottedKey + '" value="' + val + '">';
+                        html += '</div>';
+                    }
+                    html += '</div>';
+                }
+
+                html += '<div class="actions"><button class="btn btn-accent" onclick="saveConfig()">save</button></div>';
+                event.detail.target.innerHTML = html;
+            } catch(e) {
+                event.detail.target.innerHTML = '<span class="status-error">failed to load config</span>';
+            }
+        }
+
+        // Save config
+        function saveConfig() {
+            var overrides = {};
+            document.querySelectorAll('#config-editor .form-input[data-key]').forEach(function(input) {
+                overrides[input.getAttribute('data-key')] = input.value;
+            });
+            fetch('/api/settings', {
+                method: 'PUT',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify(overrides)
+            }).then(function(r) {
+                if (r.ok) {
+                    showToast('config saved');
+                    htmx.trigger('#config-editor', 'load');
+                } else {
+                    showToast('save failed');
+                }
+            });
+        }
+
+        // Render categories
+        var allDomains = [];
+        function renderCategories(event) {
+            try {
+                var data = JSON.parse(event.detail.xhr.responseText);
+                var cats = data.categories || [];
+                if (cats.length === 0) {
+                    event.detail.target.innerHTML = '<span class="status-muted">no categories configured</span>';
+                    return;
+                }
+                var html = '<table class="table"><tr><th>code</th><th>domains</th><th>action</th></tr>';
+                for (var i = 0; i < cats.length; i++) {
+                    var c = cats[i];
+                    html += '<tr><td>' + c.code + '</td><td>' + (c.domain_count || '?') + '</td>';
+                    html += '<td><button class="btn btn-accent" onclick="loadCategoryDomains(\'' + c.code + '\')">browse</button></td></tr>';
+                }
+                html += '</table>';
+                event.detail.target.innerHTML = html;
+            } catch(e) {
+                event.detail.target.innerHTML = '<span class="status-error">failed to load categories</span>';
+            }
+        }
+
+        // Load category domains
+        function loadCategoryDomains(code) {
+            fetch('/api/categories/' + encodeURIComponent(code) + '/domains?per_page=500')
+                .then(function(r) { return r.json(); })
+                .then(function(data) {
+                    allDomains = data.domains || [];
+                    document.getElementById('category-domains-title').textContent = 'domains: ' + code;
+                    document.getElementById('category-domains-panel').style.display = 'block';
+                    renderDomainList(allDomains);
+                });
+        }
+
+        // Render domain list
+        function renderDomainList(domains) {
+            var html = '';
+            for (var i = 0; i < Math.min(domains.length, 100); i++) {
+                html += '<div>' + domains[i] + '</div>';
+            }
+            if (domains.length > 100) {
+                html += '<div class="meta">... and ' + (domains.length - 100) + ' more (use filter)</div>';
+            }
+            document.getElementById('domain-list').innerHTML = html;
+        }
+
+        // Filter domains
+        function filterDomains() {
+            var q = document.getElementById('domain-search').value.toLowerCase();
+            if (!q) {
+                renderDomainList(allDomains);
+                return;
+            }
+            var filtered = allDomains.filter(function(d) { return d.toLowerCase().indexOf(q) !== -1; });
+            renderDomainList(filtered);
+        }
+
+        // Render cache stats
+        function renderCacheStats(event) {
+            try {
+                var data = JSON.parse(event.detail.xhr.responseText);
+                var html = '<div class="meta">domains: ' + data.domains + '</div>';
+                html += '<div class="meta">records: ' + data.records_total + ' (v4:' + data.records_v4 + ' v6:' + data.records_v6 + ')</div>';
+                html += '<div class="meta">valid: ' + data.records_valid + ' | failed: ' + data.records_failed + '</div>';
+                if (data.oldest_updated) html += '<div class="meta">oldest: ' + new Date(data.oldest_updated).toLocaleString() + '</div>';
+                if (data.newest_updated) html += '<div class="meta">newest: ' + new Date(data.newest_updated).toLocaleString() + '</div>';
+                event.detail.target.innerHTML = html;
+            } catch(e) {
+                event.detail.target.innerHTML = '<span class="status-error">failed to load stats</span>';
+            }
+        }
+
+        // Render source info
+        function renderSourceInfo(event) {
+            try {
+                var data = JSON.parse(event.detail.xhr.responseText);
+                if (!data.available) {
+                    event.detail.target.innerHTML = '<span class="status-muted">source not available</span>';
+                    return;
+                }
+                var html = '<div class="meta">fetched: ' + (data.fetched_at ? new Date(data.fetched_at).toLocaleString() : 'never') + '</div>';
+                html += '<div class="meta">size: ' + (data.size || '?') + ' bytes</div>';
+                html += '<div class="meta">etag: ' + (data.etag || 'none') + '</div>';
+                if (data.sha256) html += '<div class="meta">sha256: ' + data.sha256.substring(0, 16) + '...</div>';
+                event.detail.target.innerHTML = html;
+            } catch(e) {
+                event.detail.target.innerHTML = '<span class="status-error">failed to load source info</span>';
+            }
+        }
+
+        // Render routing state
+        function renderRoutingState(event) {
+            try {
+                var data = JSON.parse(event.detail.xhr.responseText);
+                var v4 = data.v4 ? data.v4.length : 0;
+                var v6 = data.v6 ? data.v6.length : 0;
+                var html = '<div class="meta">backend: ' + (data.backend || 'none') + '</div>';
+                html += '<div class="meta">ipv4: ' + v4 + ' prefixes</div>';
+                html += '<div class="meta">ipv6: ' + v6 + ' prefixes</div>';
+                html += '<div class="meta">applied: ' + (data.applied_at ? new Date(data.applied_at).toLocaleString() : 'never') + '</div>';
+                event.detail.target.innerHTML = html;
+            } catch(e) {
+                event.detail.target.innerHTML = '<span class="status-muted">routing disabled</span>';
+            }
+        }
+
+        // Refresh pipeline status
+        function refreshPipelineStatus() {
+            htmx.trigger('#pipeline-status', 'load');
+        }
     </script>
 </body>
 </html>
