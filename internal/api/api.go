@@ -14,10 +14,14 @@ import (
 	"github.com/prometheus/client_golang/prometheus/promhttp"
 	"github.com/rs/zerolog/log"
 
+	"github.com/goodvin/d2ip/internal/cache"
+	"github.com/goodvin/d2ip/internal/config"
+	"github.com/goodvin/d2ip/internal/domainlist"
 	"github.com/goodvin/d2ip/internal/logging"
 	"github.com/goodvin/d2ip/internal/metrics"
 	"github.com/goodvin/d2ip/internal/orchestrator"
 	"github.com/goodvin/d2ip/internal/routing"
+	"github.com/goodvin/d2ip/internal/source"
 )
 
 //go:embed web
@@ -25,13 +29,34 @@ var webFS embed.FS
 
 // Server wraps the HTTP API with dependencies.
 type Server struct {
-	orch   *orchestrator.Orchestrator
-	router routing.Router
+	orch        *orchestrator.Orchestrator
+	router      routing.Router
+	cfgWatcher  *config.Watcher
+	kvStore     config.KVStore
+	dlProvider  domainlist.ListProvider
+	sourceStore source.DLCStore
+	cacheAgent  cache.Cache
 }
 
 // New creates an API server with dependencies.
-func New(orch *orchestrator.Orchestrator, router routing.Router) *Server {
-	return &Server{orch: orch, router: router}
+func New(
+	orch *orchestrator.Orchestrator,
+	router routing.Router,
+	cfgWatcher *config.Watcher,
+	kvStore config.KVStore,
+	dlProvider domainlist.ListProvider,
+	sourceStore source.DLCStore,
+	cacheAgent cache.Cache,
+) *Server {
+	return &Server{
+		orch:        orch,
+		router:      router,
+		cfgWatcher:  cfgWatcher,
+		kvStore:     kvStore,
+		dlProvider:  dlProvider,
+		sourceStore: sourceStore,
+		cacheAgent:  cacheAgent,
+	}
 }
 
 // Handler returns the configured chi router.
@@ -54,6 +79,7 @@ func (s *Server) Handler() http.Handler {
 	r.Post("/routing/rollback", s.handleRoutingRollback)
 	r.Get("/routing/snapshot", s.handleRoutingSnapshot)
 	r.Get("/metrics", s.handleMetrics)
+	r.Get("/api/settings", s.handleSettingsGet)
 
 	// Static web UI (serve at root and /web/*).
 	webRoot, err := fs.Sub(webFS, "web")
