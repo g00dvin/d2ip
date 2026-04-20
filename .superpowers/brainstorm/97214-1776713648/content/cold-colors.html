@@ -1,0 +1,75 @@
+<h2>Updated Color Palette</h2>
+<p class="subtitle">Cold colors — steel blues, muted cyans, no neon. Click to confirm.</p>
+
+<div class="mockup">
+  <div class="mockup-header">Wireframe: Cold Color Theme</div>
+  <div class="mockup-body">
+    <div style="display:flex;gap:0;font-family:monospace;font-size:13px;border:1px solid #2a3a4a;">
+      <!-- Sidebar -->
+      <div style="width:180px;min-height:400px;background:#1a2332;border-right:1px solid #2a3a4a;padding:12px;">
+        <div style="color:#7eb8da;font-weight:bold;margin-bottom:16px;font-size:14px;">⬡ d2ip</div>
+        <div style="color:#5dade2;border-bottom:1px solid #5dade2;padding:4px 0;margin-bottom:2px;">▸ Dashboard</div>
+        <div style="color:#6a7a8a;padding:4px 0;margin-bottom:2px;">▸ Pipeline</div>
+        <div style="color:#6a7a8a;padding:4px 0;margin-bottom:2px;">▸ Config</div>
+        <div style="color:#6a7a8a;padding:4px 0;margin-bottom:2px;">▸ Categories</div>
+        <div style="color:#6a7a8a;padding:4px 0;margin-bottom:2px;">▸ Cache</div>
+        <div style="color:#6a7a8a;padding:4px 0;margin-bottom:2px;">▸ Source</div>
+        <div style="color:#6a7a8a;padding:4px 0;margin-bottom:2px;">▸ Routing</div>
+        <div style="margin-top:24px;color:#4a5a6a;font-size:11px;">v0.1.0 | :9099</div>
+      </div>
+      <!-- Content -->
+      <div style="flex:1;padding:16px;background:#0f1923;color:#b0bec5;">
+        <div style="color:#5dade2;margin-bottom:12px;">$ dashboard --status</div>
+        <div style="border:1px solid #2a3a4a;padding:12px;margin-bottom:12px;">
+          <div style="color:#6a7a8a;margin-bottom:8px;">SYSTEM STATUS</div>
+          <div>Health: <span style="color:#4caf80;">● healthy</span></div>
+          <div>Last run: <span style="color:#8a9aaa;">2026-04-20 14:32:01</span></div>
+          <div>Duration: <span style="color:#8a9aaa;">12.4s</span></div>
+          <div>Domains: <span style="color:#8a9aaa;">14,203</span></div>
+        </div>
+        <div style="border:1px solid #2a3a4a;padding:12px;margin-bottom:12px;">
+          <div style="color:#6a7a8a;margin-bottom:8px;">QUICK ACTIONS</div>
+          <div style="display:flex;gap:8px;">
+            <button style="background:#1a2332;color:#5dade2;border:1px solid #5dade2;padding:6px 12px;cursor:pointer;font-family:monospace;">▶ Run Pipeline</button>
+            <button style="background:#1a2332;color:#e0a050;border:1px solid #e0a050;padding:6px 12px;cursor:pointer;font-family:monospace;">⚡ Force Resolve</button>
+          </div>
+        </div>
+        <div style="border:1px solid #2a3a4a;padding:12px;">
+          <div style="color:#6a7a8a;margin-bottom:8px;">ROUTING STATE</div>
+          <div>Backend: <span style="color:#8a9aaa;">nftables</span></div>
+          <div>IPv4 sets: <span style="color:#8a9aaa;">1,847 prefixes</span></div>
+          <div>IPv6 sets: <span style="color:#8a9aaa;">3,201 prefixes</span></div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="section" style="margin-top:16px;">
+  <div class="label">Color Tokens</div>
+  <div style="display:flex;gap:12px;margin-top:8px;font-size:12px;">
+    <div style="width:80px;height:40px;background:#0f1923;border:1px solid #2a3a4a;display:flex;align-items:center;justify-content:center;color:#8a9aaa;">bg-primary</div>
+    <div style="width:80px;height:40px;background:#1a2332;border:1px solid #2a3a4a;display:flex;align-items:center;justify-content:center;color:#8a9aaa;">bg-sidebar</div>
+    <div style="width:80px;height:40px;background:#2a3a4a;display:flex;align-items:center;justify-content:center;color:#b0bec5;">border</div>
+    <div style="width:80px;height:40px;background:#5dade2;display:flex;align-items:center;justify-content:center;color:#0f1923;font-weight:bold;">accent</div>
+    <div style="width:80px;height:40px;background:#4caf80;display:flex;align-items:center;justify-content:center;color:#0f1923;font-weight:bold;">success</div>
+    <div style="width:80px;height:40px;background:#e0a050;display:flex;align-items:center;justify-content:center;color:#0f1923;font-weight:bold;">warning</div>
+  </div>
+</div>
+
+<div class="options" style="margin-top:20px;">
+  <div class="option" data-choice="cold-colors-approved" onclick="toggleSelect(this)">
+    <div class="letter">✓</div>
+    <div class="content">
+      <h3>This palette works</h3>
+      <p>Cold blues, steel grays, muted green for status, amber for warnings. No neon.</p>
+    </div>
+  </div>
+  <div class="option" data-choice="want-darker" onclick="toggleSelect(this)">
+    <div class="letter">B</div>
+    <div class="content">
+      <h3>Darker / more muted</h3>
+      <p>Even lower saturation, closer to pure monochrome with subtle blue tint.</p>
+    </div>
+  </div>
+</div>
