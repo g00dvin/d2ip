@@ -224,8 +224,11 @@ func serveCmd() {
 		log.Info().Dur("interval", cfg.Scheduler.ResolveCycle).Msg("Scheduler started")
 	}
 
+	// Create config watcher with initial config
+	cfgWatcher := config.NewWatcher(*cfg, 1)
+
 	// Create API server
-	apiServer := api.New(orch, routerAgent)
+	apiServer := api.New(orch, routerAgent, cfgWatcher, cacheDB, domainProvider, sourceStore, cacheDB)
 	httpServer := &http.Server{
 		Addr:         cfg.Listen,
 		Handler:      apiServer.Handler(),
