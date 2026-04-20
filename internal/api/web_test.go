@@ -16,7 +16,7 @@ func TestWebFilesEmbedded(t *testing.T) {
 		{"web/index.html", "d2ip"},
 		{"web/index.html", "htmx.org"},
 		{"web/styles.css", ":root"},
-		{"web/styles.css", "--color-primary"},
+		{"web/styles.css", "--bg-primary"},
 	}
 
 	for _, tt := range tests {
