@@ -82,6 +82,8 @@ func (s *Server) Handler() http.Handler {
 	r.Get("/api/settings", s.handleSettingsGet)
 	r.Put("/api/settings", s.handleSettingsPut)
 	r.Delete("/api/settings/{key}", s.handleSettingsDelete)
+	r.Get("/api/pipeline/history", s.handlePipelineHistory)
+	r.Post("/pipeline/cancel", s.handlePipelineCancel)
 
 	// Static web UI (serve at root and /web/*).
 	webRoot, err := fs.Sub(webFS, "web")

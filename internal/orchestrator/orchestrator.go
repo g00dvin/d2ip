@@ -75,6 +75,11 @@ type Orchestrator struct {
 	mu      sync.Mutex
 	running atomic.Bool
 	current RunStatus
+	cancelFn context.CancelFunc
+
+	// Run history (last 10).
+	history   []PipelineReport
+	historyMu sync.Mutex
 }
 
 // New creates an Orchestrator with injected agent dependencies.
@@ -115,11 +120,27 @@ func (o *Orchestrator) Run(ctx context.Context, req PipelineRequest) (PipelineRe
 	runID := time.Now().UnixNano() // temporary; in Iteration 4 we'll use DB-assigned id
 	started := time.Now()
 
+	ctx, cancel := context.WithCancel(ctx)
+	o.mu.Lock()
+	o.cancelFn = cancel
+	o.mu.Unlock()
+	defer cancel()
+
+	report := PipelineReport{
+		RunID: runID,
+	}
+
 	// Track pipeline failure via defer if we don't reach the success path
 	pipelineSucceeded := false
 	defer func() {
 		if !pipelineSucceeded {
 			metrics.PipelineRunsTotal.WithLabelValues("failed").Inc()
+			o.historyMu.Lock()
+			if len(o.history) >= 10 {
+				o.history = o.history[1:]
+			}
+			o.history = append(o.history, report)
+			o.historyMu.Unlock()
 		}
 	}()
 
@@ -133,10 +154,6 @@ func (o *Orchestrator) Run(ctx context.Context, req PipelineRequest) (PipelineRe
 	o.mu.Unlock()
 
 	log.Info().Int64("run_id", runID).Msg("orchestrator: pipeline started")
-
-	report := PipelineReport{
-		RunID: runID,
-	}
 
 	// Step 1: Get config snapshot
 	cfg := o.config()
@@ -433,6 +450,13 @@ func (o *Orchestrator) Run(ctx context.Context, req PipelineRequest) (PipelineRe
 	o.current.Report = &report
 	o.mu.Unlock()
 
+	o.historyMu.Lock()
+	if len(o.history) >= 10 {
+		o.history = o.history[1:]
+	}
+	o.history = append(o.history, report)
+	o.historyMu.Unlock()
+
 	return report, nil
 }
 
@@ -444,9 +468,24 @@ func (o *Orchestrator) Status() RunStatus {
 }
 
 // Cancel aborts the current run (if any) by canceling its context.
-// The caller must have retained the ctx from Run() to trigger cancellation.
-// This is a placeholder; in Iteration 4 we'll track ctx internally.
-func (o *Orchestrator) Cancel() {
-	// TODO: store and cancel the current run's context.
-	log.Warn().Msg("orchestrator: Cancel not yet implemented")
+func (o *Orchestrator) Cancel() error {
+	if !o.running.Load() {
+		return errors.New("no pipeline running")
+	}
+	o.mu.Lock()
+	defer o.mu.Unlock()
+	if o.cancelFn != nil {
+		o.cancelFn()
+		return nil
+	}
+	return errors.New("no cancel function available")
+}
+
+// History returns the last 10 pipeline runs.
+func (o *Orchestrator) History() []PipelineReport {
+	o.historyMu.Lock()
+	defer o.historyMu.Unlock()
+	out := make([]PipelineReport, len(o.history))
+	copy(out, o.history)
+	return out
 }

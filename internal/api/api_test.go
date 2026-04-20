@@ -116,3 +116,17 @@ func TestHandleSettingsDelete_RemovesOverride(t *testing.T) {
 		t.Fatalf("expected 500 with nil kvStore, got %d", rec.Code)
 	}
 }
+
+func TestHandlePipelineHistory_ReturnsList(t *testing.T) {
+	s := &Server{orch: nil}
+	r := chi.NewRouter()
+	r.Get("/api/pipeline/history", s.handlePipelineHistory)
+
+	req := httptest.NewRequest(http.MethodGet, "/api/pipeline/history", nil)
+	rec := httptest.NewRecorder()
+	r.ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d", rec.Code)
+	}
+}
