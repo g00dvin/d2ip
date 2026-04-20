@@ -82,17 +82,16 @@ func (r *iproute2Router) Apply(ctx context.Context, p Plan) error {
 
 	// Execute as a batch via `ip -batch -` for atomic-ish application.
 	var sb strings.Builder
-	fam := ipFam(p.Family)
 	for _, pr := range p.Remove {
-		fmt.Fprintf(&sb, "%s route del %s dev %s table %d proto static\n", fam, pr, r.iface, r.cfg.TableID)
+		fmt.Fprintf(&sb, "route del %s dev %s table %d proto static\n", pr, r.iface, r.cfg.TableID)
 	}
 	for _, pr := range p.Add {
-		fmt.Fprintf(&sb, "%s route add %s dev %s table %d proto static\n", fam, pr, r.iface, r.cfg.TableID)
+		fmt.Fprintf(&sb, "route add %s dev %s table %d proto static\n", pr, r.iface, r.cfg.TableID)
 	}
 	if r.cfg.DryRun {
 		return r.refreshState(p)
 	}
-	if err := r.runBatch(ctx, sb.String()); err != nil {
+	if err := r.runBatch(ctx, sb.String(), p.Family); err != nil {
 		return fmt.Errorf("routing/iproute2: apply: %w", err)
 	}
 	return r.refreshState(p)
@@ -110,18 +109,25 @@ func (r *iproute2Router) Rollback(ctx context.Context) error {
 	if r.iface == "" {
 		return errors.New("routing/iproute2: no iface configured; cannot rollback")
 	}
-	var sb strings.Builder
+	var v4Sb, v6Sb strings.Builder
 	for _, p := range r.state.V4 {
-		fmt.Fprintf(&sb, "-4 route del %s dev %s table %d proto static\n", p, r.iface, r.cfg.TableID)
+		fmt.Fprintf(&v4Sb, "route del %s dev %s table %d proto static\n", p, r.iface, r.cfg.TableID)
 	}
 	for _, p := range r.state.V6 {
-		fmt.Fprintf(&sb, "-6 route del %s dev %s table %d proto static\n", p, r.iface, r.cfg.TableID)
+		fmt.Fprintf(&v6Sb, "route del %s dev %s table %d proto static\n", p, r.iface, r.cfg.TableID)
 	}
-	if sb.Len() == 0 {
+	if v4Sb.Len() == 0 && v6Sb.Len() == 0 {
 		return nil
 	}
-	if err := r.runBatch(ctx, sb.String()); err != nil {
-		return fmt.Errorf("routing/iproute2: rollback: %w", err)
+	if v4Sb.Len() > 0 {
+		if err := r.runBatch(ctx, v4Sb.String(), FamilyV4); err != nil {
+			return fmt.Errorf("routing/iproute2: rollback v4: %w", err)
+		}
+	}
+	if v6Sb.Len() > 0 {
+		if err := r.runBatch(ctx, v6Sb.String(), FamilyV6); err != nil {
+			return fmt.Errorf("routing/iproute2: rollback v6: %w", err)
+		}
 	}
 	r.state = RouterState{Backend: string(config.BackendIProute2), AppliedAt: time.Now().UTC()}
 	return saveState(r.cfg.StatePath, r.state)
@@ -227,16 +233,17 @@ func parseIPRouteShow(text string, f Family) ([]netip.Prefix, error) {
 	return out, sc.Err()
 }
 
-func (r *iproute2Router) runBatch(ctx context.Context, batch string) error {
+func (r *iproute2Router) runBatch(ctx context.Context, batch string, fam Family) error {
 	if strings.TrimSpace(batch) == "" {
 		return nil
 	}
-	cmd := r.ipCommand(ctx, "-batch", "-")
+	args := []string{ipFam(fam), "-batch", "-"}
+	cmd := r.ipCommand(ctx, args...)
 	cmd.Stdin = strings.NewReader(batch)
 	var errb bytes.Buffer
 	cmd.Stderr = &errb
 	if err := cmd.Run(); err != nil {
-		return errors.New(strings.TrimSpace(errb.String() + " | " + err.Error()))
+		return errors.New(strings.TrimSpace(errb.String()) + "\nCommand failed " + cmd.String() + "\n | " + err.Error())
 	}
 	return nil
 }
