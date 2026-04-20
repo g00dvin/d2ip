@@ -3,219 +3,172 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>d2ip - Domain to IP Resolver</title>
+    <title>d2ip — Domain to IP Resolver</title>
     <link rel="stylesheet" href="/web/styles.css">
     <script src="https://unpkg.com/htmx.org@1.9.10"></script>
 </head>
 <body>
-    <div class="container">
-        <!-- Header -->
-        <header class="header">
-            <div class="header-content">
-                <h1 class="logo">d2ip</h1>
-                <p class="subtitle">Domain to IP Resolver</p>
+    <div class="app">
+        <!-- Sidebar -->
+        <aside class="sidebar">
+            <div class="sidebar-brand">
+                <span class="brand-icon">⬡</span>
+                <span class="brand-text">d2ip</span>
             </div>
-            <div class="status-indicator"
-                 hx-get="/healthz"
-                 hx-trigger="load, every 10s"
-                 hx-swap="innerHTML"
-                 hx-on::after-request="
-                    if(event.detail.successful) {
-                        this.className = 'status-indicator status-healthy';
-                        this.innerHTML = '● Healthy';
-                    } else {
-                        this.className = 'status-indicator status-unhealthy';
-                        this.innerHTML = '● Unhealthy';
-                    }
-                 ">
-                ● Checking...
+            <nav class="sidebar-nav">
+                <a href="#" class="nav-item active"
+                   hx-get="/web/sections/dashboard.html"
+                   hx-target="#content"
+                   hx-swap="innerHTML"
+                   hx-push-url="false"
+                   onclick="setActiveNav(this); return false;">
+                    <span class="nav-icon">▸</span> Dashboard
+                </a>
+                <a href="#" class="nav-item"
+                   hx-get="/web/sections/pipeline.html"
+                   hx-target="#content"
+                   hx-swap="innerHTML"
+                   hx-push-url="false"
+                   onclick="setActiveNav(this); return false;">
+                    <span class="nav-icon">▸</span> Pipeline
+                </a>
+                <a href="#" class="nav-item"
+                   hx-get="/web/sections/config.html"
+                   hx-target="#content"
+                   hx-swap="innerHTML"
+                   hx-push-url="false"
+                   onclick="setActiveNav(this); return false;">
+                    <span class="nav-icon">▸</span> Config
+                </a>
+                <a href="#" class="nav-item"
+                   hx-get="/web/sections/categories.html"
+                   hx-target="#content"
+                   hx-swap="innerHTML"
+                   hx-push-url="false"
+                   onclick="setActiveNav(this); return false;">
+                    <span class="nav-icon">▸</span> Categories
+                </a>
+                <a href="#" class="nav-item"
+                   hx-get="/web/sections/cache.html"
+                   hx-target="#content"
+                   hx-swap="innerHTML"
+                   hx-push-url="false"
+                   onclick="setActiveNav(this); return false;">
+                    <span class="nav-icon">▸</span> Cache
+                </a>
+                <a href="#" class="nav-item"
+                   hx-get="/web/sections/source.html"
+                   hx-target="#content"
+                   hx-swap="innerHTML"
+                   hx-push-url="false"
+                   onclick="setActiveNav(this); return false;">
+                    <span class="nav-icon">▸</span> Source
+                </a>
+                <a href="#" class="nav-item"
+                   hx-get="/web/sections/routing.html"
+                   hx-target="#content"
+                   hx-swap="innerHTML"
+                   hx-push-url="false"
+                   onclick="setActiveNav(this); return false;">
+                    <span class="nav-icon">▸</span> Routing
+                </a>
+            </nav>
+            <div class="sidebar-footer">
+                <span class="version">v0.1.0</span>
+                <span class="listen-address" id="listen-addr">:9099</span>
             </div>
-        </header>
+        </aside>
 
-        <!-- Pipeline Section -->
-        <section class="card">
-            <div class="card-header">
-                <h2>Pipeline Control</h2>
-                <button class="btn btn-primary"
-                        hx-post="/pipeline/run"
-                        hx-swap="none"
-                        hx-on::after-request="htmx.trigger('#pipeline-status', 'refresh')">
-                    ▶ Trigger Pipeline
-                </button>
-            </div>
-            <div id="pipeline-status"
-                 class="card-body"
-                 hx-get="/pipeline/status"
-                 hx-trigger="load, every 5s, refresh from:body"
-                 hx-swap="innerHTML">
-                <div class="loading">Loading status...</div>
-            </div>
-        </section>
-
-        <!-- Routing Section -->
-        <section class="card">
-            <div class="card-header">
-                <h2>Routing Control</h2>
-                <div class="btn-group">
-                    <button class="btn btn-secondary"
-                            hx-post="/routing/dry-run"
-                            hx-vals='{"ipv4_prefixes":[], "ipv6_prefixes":[]}'
-                            hx-target="#routing-result"
-                            hx-swap="innerHTML">
-                        🔍 Dry Run
-                    </button>
-                    <button class="btn btn-danger"
-                            hx-post="/routing/rollback"
-                            hx-target="#routing-result"
-                            hx-swap="innerHTML"
-                            hx-confirm="Are you sure you want to rollback routing changes?">
-                        ↩ Rollback
-                    </button>
+        <!-- Main Content -->
+        <main class="content">
+            <div id="content">
+                <!-- Dashboard loads by default -->
+                <div class="panel">
+                    <div class="panel-label">system status</div>
+                    <div id="health-check"
+                         hx-get="/healthz"
+                         hx-trigger="load, every 10s"
+                         hx-swap="innerHTML">
+                        checking...
+                    </div>
+                    <div class="panel-label" style="margin-top:16px;">quick actions</div>
+                    <div class="actions">
+                        <button class="btn btn-accent"
+                                hx-post="/pipeline/run"
+                                hx-swap="none"
+                                hx-on::after-request="if(event.detail.successful){alert('pipeline started')}">
+                            ▶ run pipeline
+                        </button>
+                        <button class="btn btn-warning"
+                                hx-post="/pipeline/run"
+                                hx-vals='{"force_resolve":true}'
+                                hx-swap="none">
+                            ⚡ force resolve
+                        </button>
+                    </div>
+                    <div class="panel-label" style="margin-top:16px;">last run</div>
+                    <div id="last-run"
+                         hx-get="/pipeline/status"
+                         hx-trigger="load, every 10s"
+                         hx-swap="innerHTML">
+                        loading...
+                    </div>
                 </div>
             </div>
-            <div class="card-body">
-                <div id="routing-result" class="routing-result">
-                    <p class="text-muted">Click "Dry Run" to preview changes or view current snapshot below.</p>
-                </div>
-                <div id="routing-snapshot"
-                     hx-get="/routing/snapshot"
-                     hx-trigger="load, every 30s"
-                     hx-swap="innerHTML">
-                </div>
-            </div>
-        </section>
-
-        <!-- Config Section (Placeholder) -->
-        <section class="card">
-            <div class="card-header">
-                <h2>Configuration</h2>
-            </div>
-            <div class="card-body">
-                <p class="text-muted">Configuration UI coming soon (kv_settings integration)</p>
-            </div>
-        </section>
-
-        <!-- Footer Links -->
-        <footer class="footer">
-            <a href="/metrics" target="_blank" class="link">📊 Prometheus Metrics</a>
-            <a href="https://github.com/goodvin/d2ip" target="_blank" class="link">📚 Documentation</a>
-        </footer>
+        </main>
     </div>
 
-    <!-- HTMX Response Templates -->
     <script>
-        // Format pipeline status response
-        document.body.addEventListener('htmx:beforeSwap', function(event) {
-            if (event.detail.target.id === 'pipeline-status') {
-                try {
-                    const data = JSON.parse(event.detail.xhr.responseText);
-                    event.detail.shouldSwap = true;
+        function setActiveNav(el) {
+            document.querySelectorAll('.nav-item').forEach(function(item) {
+                item.classList.remove('active');
+            });
+            el.classList.add('active');
+        }
 
-                    if (data.running) {
-                        event.detail.target.innerHTML = `
-                            <div class="status-box status-running">
-                                <h3>⏳ Pipeline Running</h3>
-                                <div class="status-grid">
-                                    <div><strong>Run ID:</strong> ${data.run_id}</div>
-                                    <div><strong>Started:</strong> ${new Date(data.started).toLocaleString()}</div>
-                                </div>
-                            </div>
-                        `;
-                    } else if (data.report) {
-                        const r = data.report;
-                        const statusClass = r.failed > 0 ? 'status-warning' : 'status-success';
-                        const icon = r.failed > 0 ? '⚠' : '✓';
-                        event.detail.target.innerHTML = `
-                            <div class="status-box ${statusClass}">
-                                <h3>${icon} Last Run Completed</h3>
-                                <div class="status-grid">
-                                    <div><strong>Run ID:</strong> ${r.run_id}</div>
-                                    <div><strong>Started:</strong> ${new Date(data.started).toLocaleString()}</div>
-                                    <div><strong>Duration:</strong> ${(r.duration / 1000000000).toFixed(2)}s</div>
-                                    <div><strong>Domains:</strong> ${r.domains}</div>
-                                    <div><strong>Resolved:</strong> ${r.resolved}</div>
-                                    <div><strong>Failed:</strong> ${r.failed}</div>
-                                    <div><strong>IPv4 Out:</strong> ${r.ipv4_out}</div>
-                                    <div><strong>IPv6 Out:</strong> ${r.ipv6_out}</div>
-                                </div>
-                            </div>
-                        `;
+        // Format health response
+        document.body.addEventListener('htmx:afterSwap', function(event) {
+            if (event.detail.target.id === 'health-check') {
+                try {
+                    var text = event.detail.target.textContent.trim();
+                    var data = JSON.parse(text);
+                    if (data.status === 'ok') {
+                        event.detail.target.innerHTML = '<span class="status-ok">● healthy</span>';
                     } else {
-                        event.detail.target.innerHTML = `
-                            <div class="status-box">
-                                <p class="text-muted">No pipeline runs yet. Click "Trigger Pipeline" to start.</p>
-                            </div>
-                        `;
+                        event.detail.target.innerHTML = '<span class="status-error">● unhealthy</span>';
                     }
-                } catch (e) {
-                    console.error('Failed to parse pipeline status:', e);
+                } catch(e) {
+                    event.detail.target.innerHTML = '<span class="status-error">● unhealthy</span>';
                 }
             }
 
-            // Format routing snapshot
-            if (event.detail.target.id === 'routing-snapshot') {
+            // Format pipeline status
+            if (event.detail.target.id === 'last-run') {
                 try {
-                    const data = JSON.parse(event.detail.xhr.responseText);
-                    event.detail.shouldSwap = true;
-
-                    const v4Count = data.v4 ? data.v4.length : 0;
-                    const v6Count = data.v6 ? data.v6.length : 0;
-
-                    event.detail.target.innerHTML = `
-                        <div class="routing-snapshot">
-                            <h3>Current Snapshot</h3>
-                            <div class="snapshot-grid">
-                                <div><strong>Backend:</strong> ${data.backend || 'none'}</div>
-                                <div><strong>Applied:</strong> ${data.applied_at ? new Date(data.applied_at).toLocaleString() : 'Never'}</div>
-                                <div><strong>IPv4 Prefixes:</strong> ${v4Count}</div>
-                                <div><strong>IPv6 Prefixes:</strong> ${v6Count}</div>
-                            </div>
-                        </div>
-                    `;
-                } catch (e) {
-                    event.detail.target.innerHTML = `
-                        <div class="text-muted">Routing disabled or unavailable</div>
-                    `;
-                }
-            }
-
-            // Format routing dry-run/rollback results
-            if (event.detail.target.id === 'routing-result') {
-                try {
-                    const data = JSON.parse(event.detail.xhr.responseText);
-                    event.detail.shouldSwap = true;
-
-                    if (data.error) {
-                        event.detail.target.innerHTML = `
-                            <div class="alert alert-error">${data.error}</div>
-                        `;
-                    } else if (data.status === 'ok') {
-                        event.detail.target.innerHTML = `
-                            <div class="alert alert-success">✓ Rollback successful</div>
-                        `;
-                        htmx.trigger('#routing-snapshot', 'refresh');
-                    } else if (data.v4_plan || data.v6_plan) {
-                        const v4Add = data.v4_plan.add ? data.v4_plan.add.length : 0;
-                        const v4Remove = data.v4_plan.remove ? data.v4_plan.remove.length : 0;
-                        const v6Add = data.v6_plan.add ? data.v6_plan.add.length : 0;
-                        const v6Remove = data.v6_plan.remove ? data.v6_plan.remove.length : 0;
-
-                        event.detail.target.innerHTML = `
-                            <div class="alert alert-info">
-                                <h4>Dry Run Results</h4>
-                                <div class="plan-summary">
-                                    <div><strong>IPv4:</strong> +${v4Add} prefixes, -${v4Remove} prefixes</div>
-                                    <div><strong>IPv6:</strong> +${v6Add} prefixes, -${v6Remove} prefixes</div>
-                                    <div class="text-muted">${data.v4_diff || ''}</div>
-                                    <div class="text-muted">${data.v6_diff || ''}</div>
-                                </div>
-                            </div>
-                        `;
+                    var text = event.detail.target.textContent.trim();
+                    var data = JSON.parse(text);
+                    if (data.running) {
+                        event.detail.target.innerHTML = '<span class="status-warn">● running (id: ' + data.run_id + ')</span>';
+                    } else if (data.report) {
+                        var r = data.report;
+                        var dur = (r.duration / 1000000000).toFixed(1);
+                        event.detail.target.innerHTML =
+                            '<span class="status-ok">● completed</span>' +
+                            '<div class="meta">id:' + r.run_id + ' | ' + dur + 's | ' +
+                            r.domains + ' domains | ' + r.resolved + ' resolved | ' +
+                            r.failed + ' failed | v4:' + r.ipv4_out + ' v6:' + r.ipv6_out + '</div>';
+                    } else {
+                        event.detail.target.innerHTML = '<span class="status-muted">no runs yet</span>';
                     }
-                } catch (e) {
-                    console.error('Failed to parse routing result:', e);
+                } catch(e) {
+                    event.detail.target.innerHTML = '<span class="status-muted">unavailable</span>';
                 }
             }
+        });
+
+        // Handle HTMX errors
+        document.body.addEventListener('htmx:responseError', function(event) {
+            console.error('HTMX error:', event.detail);
         });
     </script>
 </body>
