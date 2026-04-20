@@ -97,6 +97,9 @@ func (s *Server) Handler() http.Handler {
 	r.Post("/api/cache/vacuum", s.handleCacheVacuum)
 	r.Get("/api/cache/entries", s.handleCacheEntries)
 
+	// Source API.
+	r.Get("/api/source/info", s.handleSourceInfo)
+
 	// Static web UI (serve at root and /web/*).
 	webRoot, err := fs.Sub(webFS, "web")
 	if err != nil {

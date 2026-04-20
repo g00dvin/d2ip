@@ -162,3 +162,26 @@ func TestHandleCacheStats_ReturnsStats(t *testing.T) {
 		t.Fatalf("expected 503, got %d", rec.Code)
 	}
 }
+
+func TestHandleSourceInfo_ReturnsInfo(t *testing.T) {
+	s := &Server{sourceStore: nil}
+	r := chi.NewRouter()
+	r.Get("/api/source/info", s.handleSourceInfo)
+
+	req := httptest.NewRequest(http.MethodGet, "/api/source/info", nil)
+	rec := httptest.NewRecorder()
+	r.ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d", rec.Code)
+	}
+
+	var resp map[string]interface{}
+	if err := json.Unmarshal(rec.Body.Bytes(), &resp); err != nil {
+		t.Fatalf("failed to parse JSON: %v", err)
+	}
+
+	if available, ok := resp["available"].(bool); !ok || available {
+		t.Errorf("expected available=false, got %v", resp["available"])
+	}
+}
