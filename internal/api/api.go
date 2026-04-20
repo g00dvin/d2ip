@@ -85,6 +85,12 @@ func (s *Server) Handler() http.Handler {
 	r.Get("/api/pipeline/history", s.handlePipelineHistory)
 	r.Post("/pipeline/cancel", s.handlePipelineCancel)
 
+	// Categories API.
+	r.Get("/api/categories", s.handleCategoriesList)
+	r.Get("/api/categories/{code}/domains", s.handleCategoryDomains)
+	r.Post("/api/categories", s.handleCategoriesAdd)
+	r.Delete("/api/categories/{code}", s.handleCategoriesDelete)
+
 	// Static web UI (serve at root and /web/*).
 	webRoot, err := fs.Sub(webFS, "web")
 	if err != nil {

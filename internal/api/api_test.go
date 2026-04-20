@@ -130,3 +130,20 @@ func TestHandlePipelineHistory_ReturnsList(t *testing.T) {
 		t.Fatalf("expected 200, got %d", rec.Code)
 	}
 }
+
+func TestHandleCategoriesList_ReturnsCategories(t *testing.T) {
+	cfg := config.Defaults()
+	watcher := config.NewWatcher(cfg, 1)
+
+	s := &Server{cfgWatcher: watcher, dlProvider: nil}
+	r := chi.NewRouter()
+	r.Get("/api/categories", s.handleCategoriesList)
+
+	req := httptest.NewRequest(http.MethodGet, "/api/categories", nil)
+	rec := httptest.NewRecorder()
+	r.ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d", rec.Code)
+	}
+}
