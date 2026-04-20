@@ -91,6 +91,12 @@ func (s *Server) Handler() http.Handler {
 	r.Post("/api/categories", s.handleCategoriesAdd)
 	r.Delete("/api/categories/{code}", s.handleCategoriesDelete)
 
+	// Cache API.
+	r.Get("/api/cache/stats", s.handleCacheStats)
+	r.Post("/api/cache/purge", s.handleCachePurge)
+	r.Post("/api/cache/vacuum", s.handleCacheVacuum)
+	r.Get("/api/cache/entries", s.handleCacheEntries)
+
 	// Static web UI (serve at root and /web/*).
 	webRoot, err := fs.Sub(webFS, "web")
 	if err != nil {

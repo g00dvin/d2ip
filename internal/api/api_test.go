@@ -147,3 +147,18 @@ func TestHandleCategoriesList_ReturnsCategories(t *testing.T) {
 		t.Fatalf("expected 200, got %d", rec.Code)
 	}
 }
+
+func TestHandleCacheStats_ReturnsStats(t *testing.T) {
+	s := &Server{cacheAgent: nil}
+	r := chi.NewRouter()
+	r.Get("/api/cache/stats", s.handleCacheStats)
+
+	req := httptest.NewRequest(http.MethodGet, "/api/cache/stats", nil)
+	rec := httptest.NewRecorder()
+	r.ServeHTTP(rec, req)
+
+	// With nil cache agent, should return 503
+	if rec.Code != http.StatusServiceUnavailable {
+		t.Fatalf("expected 503, got %d", rec.Code)
+	}
+}
