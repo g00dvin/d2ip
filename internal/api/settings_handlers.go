@@ -1,9 +1,11 @@
 package api
 
 import (
+	"context"
 	"encoding/json"
 	"net/http"
 
+	"github.com/go-chi/chi/v5"
 	"github.com/goodvin/d2ip/internal/config"
 )
 
@@ -42,4 +44,73 @@ func structToMap(v interface{}) map[string]interface{} {
 	var m map[string]interface{}
 	_ = json.Unmarshal(data, &m)
 	return m
+}
+
+// handleSettingsPut updates a config override via KVStore.
+func (s *Server) handleSettingsPut(w http.ResponseWriter, r *http.Request) {
+	var overrides map[string]string
+	if err := json.NewDecoder(r.Body).Decode(&overrides); err != nil {
+		s.jsonError(w, http.StatusBadRequest, "invalid JSON: "+err.Error())
+		return
+	}
+
+	if s.kvStore == nil {
+		s.jsonError(w, http.StatusInternalServerError, "kvStore not initialized")
+		return
+	}
+
+	for key, value := range overrides {
+		if err := s.kvStore.Set(r.Context(), key, value); err != nil {
+			s.jsonError(w, http.StatusInternalServerError, "failed to set "+key+": "+err.Error())
+			return
+		}
+	}
+
+	if err := s.reloadConfig(r.Context()); err != nil {
+		s.jsonError(w, http.StatusInternalServerError, "config reload failed: "+err.Error())
+		return
+	}
+
+	s.jsonOK(w, map[string]string{"status": "ok"})
+}
+
+// handleSettingsDelete removes a config override.
+func (s *Server) handleSettingsDelete(w http.ResponseWriter, r *http.Request) {
+	key := chi.URLParam(r, "key")
+	if key == "" {
+		s.jsonError(w, http.StatusBadRequest, "key is required")
+		return
+	}
+
+	if s.kvStore == nil {
+		s.jsonError(w, http.StatusInternalServerError, "kvStore not initialized")
+		return
+	}
+
+	if err := s.kvStore.Delete(r.Context(), key); err != nil {
+		s.jsonError(w, http.StatusInternalServerError, "failed to delete "+key+": "+err.Error())
+		return
+	}
+
+	if err := s.reloadConfig(r.Context()); err != nil {
+		s.jsonError(w, http.StatusInternalServerError, "config reload failed: "+err.Error())
+		return
+	}
+
+	s.jsonOK(w, map[string]string{"status": "ok"})
+}
+
+// reloadConfig fetches current config, applies KV overrides, and publishes.
+func (s *Server) reloadConfig(ctx context.Context) error {
+	overrides, err := s.kvStore.GetAll(ctx)
+	if err != nil {
+		return err
+	}
+
+	cfg := config.Defaults()
+	if err := config.ApplyOverrides(&cfg, overrides); err != nil {
+		return err
+	}
+
+	return s.cfgWatcher.Publish(cfg)
 }

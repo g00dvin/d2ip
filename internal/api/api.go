@@ -80,6 +80,8 @@ func (s *Server) Handler() http.Handler {
 	r.Get("/routing/snapshot", s.handleRoutingSnapshot)
 	r.Get("/metrics", s.handleMetrics)
 	r.Get("/api/settings", s.handleSettingsGet)
+	r.Put("/api/settings", s.handleSettingsPut)
+	r.Delete("/api/settings/{key}", s.handleSettingsDelete)
 
 	// Static web UI (serve at root and /web/*).
 	webRoot, err := fs.Sub(webFS, "web")

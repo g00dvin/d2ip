@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 
 	"github.com/go-chi/chi/v5"
@@ -78,5 +79,40 @@ func TestHandleSettingsGet_ReturnsConfig(t *testing.T) {
 	}
 	if overrides["resolver.qps"] != "500" {
 		t.Errorf("expected resolver.qps=500, got %v", overrides["resolver.qps"])
+	}
+}
+
+func TestHandleSettingsPut_UpdatesOverride(t *testing.T) {
+	cfg := config.Defaults()
+	watcher := config.NewWatcher(cfg, 1)
+
+	s := &Server{cfgWatcher: watcher, kvStore: nil}
+	r := chi.NewRouter()
+	r.Put("/api/settings", s.handleSettingsPut)
+
+	body := `{"resolver.qps": "100"}`
+	req := httptest.NewRequest(http.MethodPut, "/api/settings", strings.NewReader(body))
+	rec := httptest.NewRecorder()
+	r.ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusInternalServerError {
+		t.Fatalf("expected 500 with nil kvStore, got %d", rec.Code)
+	}
+}
+
+func TestHandleSettingsDelete_RemovesOverride(t *testing.T) {
+	cfg := config.Defaults()
+	watcher := config.NewWatcher(cfg, 1)
+
+	s := &Server{cfgWatcher: watcher, kvStore: nil}
+	r := chi.NewRouter()
+	r.Delete("/api/settings/{key}", s.handleSettingsDelete)
+
+	req := httptest.NewRequest(http.MethodDelete, "/api/settings/resolver.qps", nil)
+	rec := httptest.NewRecorder()
+	r.ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusInternalServerError {
+		t.Fatalf("expected 500 with nil kvStore, got %d", rec.Code)
 	}
 }
