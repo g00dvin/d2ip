@@ -14,7 +14,7 @@ func TestWebFilesEmbedded(t *testing.T) {
 	}{
 		{"web/index.html", "<!DOCTYPE html>"},
 		{"web/index.html", "d2ip"},
-		{"web/index.html", "htmx.org"},
+		{"web/index.html", "htmx"},
 		{"web/styles.css", ":root"},
 		{"web/styles.css", "--bg-primary"},
 	}
@@ -67,7 +67,7 @@ func TestWebFilesSize(t *testing.T) {
 		t.Fatalf("failed to walk web dir: %v", err)
 	}
 
-	const maxSize = 50 * 1024 // 50KB
+	const maxSize = 100 * 1024 // 100KB (includes bundled HTMX)
 	if total > maxSize {
 		t.Errorf("web files size %d bytes exceeds %d bytes", total, maxSize)
 	}

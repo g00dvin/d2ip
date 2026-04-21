@@ -8,6 +8,7 @@ import (
 	"io/fs"
 	"net/http"
 	"net/netip"
+	"strings"
 
 	"github.com/go-chi/chi/v5"
 	"github.com/go-chi/chi/v5/middleware"
@@ -105,14 +106,23 @@ func (s *Server) Handler() http.Handler {
 	if err != nil {
 		log.Warn().Err(err).Msg("api: failed to embed web files")
 	} else {
-		fileServer := http.FileServer(http.FS(webRoot))
 		r.Get("/*", func(w http.ResponseWriter, r *http.Request) {
 			// Serve index.html for root path
 			if r.URL.Path == "/" {
+				w.Header().Set("Content-Type", "text/html; charset=utf-8")
 				http.ServeFileFS(w, r, webRoot, "index.html")
 				return
 			}
-			fileServer.ServeHTTP(w, r)
+			// Set correct MIME types for known extensions
+			switch {
+			case strings.HasSuffix(r.URL.Path, ".css"):
+				w.Header().Set("Content-Type", "text/css; charset=utf-8")
+			case strings.HasSuffix(r.URL.Path, ".js"):
+				w.Header().Set("Content-Type", "application/javascript")
+			case strings.HasSuffix(r.URL.Path, ".html"):
+				w.Header().Set("Content-Type", "text/html; charset=utf-8")
+			}
+			http.FileServer(http.FS(webRoot)).ServeHTTP(w, r)
 		})
 	}
 
