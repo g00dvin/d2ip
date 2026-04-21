@@ -100,6 +100,67 @@ func TestHandleSettingsPut_UpdatesOverride(t *testing.T) {
 	}
 }
 
+func TestHandleSettingsPut_WithMockKVStore(t *testing.T) {
+	cfg := config.Defaults()
+	watcher := config.NewWatcher(cfg, 1)
+
+	kv := &mockKVStore{data: make(map[string]string)}
+	s := &Server{cfgWatcher: watcher, kvStore: kv}
+	r := chi.NewRouter()
+	r.Put("/api/settings", s.handleSettingsPut)
+
+	// Simulate what the JS config editor sends: all fields as string overrides
+	body := `{
+		"source.url": "https://example.com/dlc.dat",
+		"source.cache_path": "/var/lib/d2ip/dlc.dat",
+		"source.refresh_interval": "24h0m0s",
+		"source.http_timeout": "30s",
+		"resolver.upstream": "1.1.1.1:53",
+		"resolver.network": "udp",
+		"resolver.concurrency": "64",
+		"resolver.qps": "200",
+		"resolver.timeout": "3s",
+		"resolver.retries": "3",
+		"resolver.backoff_base": "200ms",
+		"resolver.backoff_max": "5s",
+		"resolver.follow_cname": "true",
+		"resolver.enable_v4": "true",
+		"resolver.enable_v6": "true",
+		"cache.db_path": "/var/lib/d2ip/cache.db",
+		"cache.ttl": "6h0m0s",
+		"cache.failed_ttl": "30m0s",
+		"cache.vacuum_after": "720h0m0s",
+		"aggregation.enabled": "true",
+		"aggregation.level": "balanced",
+		"aggregation.v4_max_prefix": "16",
+		"aggregation.v6_max_prefix": "32",
+		"export.dir": "/var/lib/d2ip/out",
+		"export.ipv4_file": "ipv4.txt",
+		"export.ipv6_file": "ipv6.txt",
+		"routing.enabled": "false",
+		"routing.backend": "nftables",
+		"routing.table_id": "100",
+		"routing.nft_table": "inet d2ip",
+		"routing.nft_set_v4": "d2ip_v4",
+		"routing.nft_set_v6": "d2ip_v6",
+		"routing.state_path": "/var/lib/d2ip/state.json",
+		"routing.dry_run": "false",
+		"scheduler.dlc_refresh": "24h0m0s",
+		"scheduler.resolve_cycle": "1h0m0s",
+		"logging.level": "info",
+		"logging.format": "json",
+		"metrics.enabled": "true",
+		"metrics.path": "/metrics"
+	}`
+	req := httptest.NewRequest(http.MethodPut, "/api/settings", strings.NewReader(body))
+	rec := httptest.NewRecorder()
+	r.ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d: %s", rec.Code, rec.Body.String())
+	}
+}
+
 func TestHandleSettingsDelete_RemovesOverride(t *testing.T) {
 	cfg := config.Defaults()
 	watcher := config.NewWatcher(cfg, 1)

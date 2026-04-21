@@ -1,6 +1,10 @@
 package api
 
-import "net/http"
+import (
+	"net/http"
+
+	"github.com/goodvin/d2ip/internal/orchestrator"
+)
 
 // handlePipelineHistory returns the last 10 pipeline runs.
 func (s *Server) handlePipelineHistory(w http.ResponseWriter, r *http.Request) {
@@ -23,6 +27,11 @@ func (s *Server) handlePipelineCancel(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if err := s.orch.Cancel(); err != nil {
+		// Pipeline already finished — treat as success (idempotent).
+		if err == orchestrator.ErrNotRunning {
+			s.jsonOK(w, map[string]string{"status": "not running"})
+			return
+		}
 		s.jsonError(w, http.StatusConflict, err.Error())
 		return
 	}

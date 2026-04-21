@@ -7,6 +7,7 @@ import (
 
 	"github.com/go-chi/chi/v5"
 	"github.com/goodvin/d2ip/internal/config"
+	"github.com/rs/zerolog/log"
 )
 
 // settingsResponse is the JSON response for GET /api/settings.
@@ -61,12 +62,14 @@ func (s *Server) handleSettingsPut(w http.ResponseWriter, r *http.Request) {
 
 	for key, value := range overrides {
 		if err := s.kvStore.Set(r.Context(), key, value); err != nil {
+			log.Error().Err(err).Str("key", key).Msg("api: failed to set kv override")
 			s.jsonError(w, http.StatusInternalServerError, "failed to set "+key+": "+err.Error())
 			return
 		}
 	}
 
 	if err := s.reloadConfig(r.Context()); err != nil {
+		log.Error().Err(err).Msg("api: config reload failed")
 		s.jsonError(w, http.StatusInternalServerError, "config reload failed: "+err.Error())
 		return
 	}

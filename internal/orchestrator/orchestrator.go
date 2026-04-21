@@ -59,6 +59,9 @@ type RunStatus struct {
 // ErrBusy is returned when a second Run() is attempted while one is in flight.
 var ErrBusy = errors.New("orchestrator: pipeline already running")
 
+// ErrNotRunning is returned when Cancel() is called but no pipeline is active.
+var ErrNotRunning = errors.New("orchestrator: no pipeline running")
+
 // Orchestrator composes the agents and executes the pipeline.
 type Orchestrator struct {
 	// Agent dependencies (injected by cmd/d2ip).
@@ -475,7 +478,7 @@ func (o *Orchestrator) Status() RunStatus {
 // Cancel aborts the current run (if any) by canceling its context.
 func (o *Orchestrator) Cancel() error {
 	if !o.running.Load() {
-		return errors.New("no pipeline running")
+		return ErrNotRunning
 	}
 	o.mu.Lock()
 	defer o.mu.Unlock()
@@ -483,7 +486,7 @@ func (o *Orchestrator) Cancel() error {
 		o.cancelFn()
 		return nil
 	}
-	return errors.New("no cancel function available")
+	return ErrNotRunning
 }
 
 // History returns the last 10 pipeline runs.

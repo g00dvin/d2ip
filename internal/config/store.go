@@ -204,6 +204,7 @@ func seedViperFromConfig(v *viper.Viper, c Config) {
 	v.Set("routing.enabled", c.Routing.Enabled)
 	v.Set("routing.backend", string(c.Routing.Backend))
 	v.Set("routing.table_id", c.Routing.TableID)
+	v.Set("routing.iface", c.Routing.Iface)
 	v.Set("routing.nft_table", c.Routing.NFTTable)
 	v.Set("routing.nft_set_v4", c.Routing.NFTSetV4)
 	v.Set("routing.nft_set_v6", c.Routing.NFTSetV6)

@@ -5,10 +5,12 @@ import (
 	"fmt"
 	"net/http"
 	"sort"
+	"strings"
 
 	"github.com/go-chi/chi/v5"
 	"github.com/goodvin/d2ip/internal/config"
 	"github.com/goodvin/d2ip/internal/domainlist"
+	"github.com/rs/zerolog/log"
 )
 
 // categoryInfo represents a category with its domain count.
@@ -57,9 +59,15 @@ func (s *Server) handleCategoriesList(w http.ResponseWriter, r *http.Request) {
 	if s.dlProvider != nil {
 		allCats := s.dlProvider.Categories()
 		for _, code := range allCats {
-			if _, isConfigured := configuredSet[code]; !isConfigured {
-				available = append(available, code)
+			// Check if configured with or without geosite: prefix
+			geositeCode := "geosite:" + code
+			if _, isConfigured := configuredSet[code]; isConfigured {
+				continue
 			}
+			if _, isConfigured := configuredSet[geositeCode]; isConfigured {
+				continue
+			}
+			available = append(available, geositeCode)
 		}
 	}
 	sort.Strings(available)
@@ -147,23 +155,30 @@ func (s *Server) handleCategoriesAdd(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// Normalize: ensure "geosite:" prefix
+	code := req.Code
+	if !strings.HasPrefix(code, "geosite:") {
+		code = "geosite:" + code
+	}
+
 	snapshot := s.cfgWatcher.Current()
 	cfg := snapshot.Config.Clone()
 
-	// Check for duplicate
+	// Check for duplicate (case-insensitive)
 	for _, cat := range cfg.Categories {
-		if cat.Code == req.Code {
-			s.jsonError(w, http.StatusConflict, "category already exists: "+req.Code)
+		if strings.EqualFold(cat.Code, code) {
+			s.jsonError(w, http.StatusConflict, "category already exists: "+code)
 			return
 		}
 	}
 
 	cfg.Categories = append(cfg.Categories, config.CategoryConfig{
-		Code:  req.Code,
+		Code:  code,
 		Attrs: req.Attrs,
 	})
 
 	if err := s.cfgWatcher.Publish(cfg); err != nil {
+		log.Error().Err(err).Str("code", req.Code).Msg("api: failed to add category")
 		s.jsonError(w, http.StatusInternalServerError, "failed to update config: "+err.Error())
 		return
 	}
@@ -179,12 +194,17 @@ func (s *Server) handleCategoriesDelete(w http.ResponseWriter, r *http.Request) 
 		return
 	}
 
+	// Normalize: ensure "geosite:" prefix
+	if !strings.HasPrefix(code, "geosite:") {
+		code = "geosite:" + code
+	}
+
 	snapshot := s.cfgWatcher.Current()
 	cfg := snapshot.Config.Clone()
 
 	found := false
 	for i, cat := range cfg.Categories {
-		if cat.Code == code {
+		if strings.EqualFold(cat.Code, code) {
 			cfg.Categories = append(cfg.Categories[:i], cfg.Categories[i+1:]...)
 			found = true
 			break
@@ -197,6 +217,7 @@ func (s *Server) handleCategoriesDelete(w http.ResponseWriter, r *http.Request) 
 	}
 
 	if err := s.cfgWatcher.Publish(cfg); err != nil {
+		log.Error().Err(err).Str("code", code).Msg("api: failed to delete category")
 		s.jsonError(w, http.StatusInternalServerError, "failed to update config: "+err.Error())
 		return
 	}
