@@ -1,0 +1,13 @@
+{
+  "name": "d2ip-e2e",
+  "private": true,
+  "type": "module",
+  "devDependencies": {
+    "@playwright/test": "^1.48.0"
+  },
+  "scripts": {
+    "test": "playwright test",
+    "test:ui": "playwright test --ui",
+    "install:browser": "npx playwright install chromium"
+  }
+}
