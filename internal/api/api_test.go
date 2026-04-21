@@ -226,3 +226,19 @@ func TestHandleSourceInfo_ReturnsInfo(t *testing.T) {
 		t.Errorf("expected available=false, got %v", resp["available"])
 	}
 }
+
+func TestHandleRoutingDryRun_EmptyPrefixes(t *testing.T) {
+	s := &Server{router: nil}
+	r := chi.NewRouter()
+	r.Post("/routing/dry-run", s.handleRoutingDryRun)
+
+	body := `{"ipv4_prefixes":[],"ipv6_prefixes":[]}`
+	req := httptest.NewRequest(http.MethodPost, "/routing/dry-run", strings.NewReader(body))
+	rec := httptest.NewRecorder()
+	r.ServeHTTP(rec, req)
+
+	// With empty prefixes, should return 200 (not call router)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("expected 200 for empty prefixes, got %d", rec.Code)
+	}
+}

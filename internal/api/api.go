@@ -221,6 +221,18 @@ func (s *Server) handleRoutingDryRun(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// Handle empty prefix arrays without calling router
+	if len(req.IPv4Prefixes) == 0 && len(req.IPv6Prefixes) == 0 {
+		s.jsonOK(w, map[string]interface{}{
+			"v4_plan":  map[string]interface{}{"add": []interface{}{}, "remove": []interface{}{}},
+			"v6_plan":  map[string]interface{}{"add": []interface{}{}, "remove": []interface{}{}},
+			"v4_diff":  "",
+			"v6_diff":  "",
+			"message":  "no prefixes to test",
+		})
+		return
+	}
+
 	v4Plan, v4Diff, err := s.router.DryRun(r.Context(), req.IPv4Prefixes, routing.FamilyV4)
 	if err != nil {
 		if errors.Is(err, routing.ErrDisabled) {
