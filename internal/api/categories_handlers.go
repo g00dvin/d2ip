@@ -98,8 +98,9 @@ func (s *Server) handleCategoryDomains(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 	if pp := r.URL.Query().Get("per_page"); pp != "" {
-		if _, err := fmt.Sscanf(pp, "%d", &perPage); err == nil && perPage > 0 && perPage <= 500 {
-			// perPage already set
+		var n int
+		if _, err := fmt.Sscanf(pp, "%d", &n); err == nil && n > 0 && n <= 500 {
+			perPage = n
 		}
 	}
 
