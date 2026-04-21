@@ -459,12 +459,18 @@
         // Load category domains
         function loadCategoryDomains(code) {
             fetch('/api/categories/' + encodeURIComponent(code) + '/domains?per_page=500')
-                .then(function(r) { return r.json(); })
+                .then(function(r) {
+                    if (!r.ok) return r.json().then(function(e) { throw new Error(e.error || 'failed') });
+                    return r.json();
+                })
                 .then(function(data) {
                     allDomains = data.domains || [];
                     document.getElementById('category-domains-title').textContent = 'domains: ' + code;
                     document.getElementById('category-domains-panel').style.display = 'block';
                     renderDomainList(allDomains);
+                })
+                .catch(function(e) {
+                    showToast('categories: ' + e.message);
                 });
         }
 

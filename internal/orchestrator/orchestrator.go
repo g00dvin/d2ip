@@ -200,6 +200,9 @@ func (o *Orchestrator) Run(ctx context.Context, req PipelineRequest) (PipelineRe
 		return report, fmt.Errorf("domainlist select: %w", err)
 	}
 	report.Domains = len(rules)
+	if len(rules) == 0 {
+		log.Warn().Msg("orchestrator: no categories configured; add entries to config.categories to resolve domains")
+	}
 
 	// Filter to only resolvable rules (Full and RootDomain)
 	resolvable := make([]string, 0, len(rules))
@@ -289,6 +292,8 @@ func (o *Orchestrator) Run(ctx context.Context, req PipelineRequest) (PipelineRe
 			log.Error().Err(err).Msg("orchestrator: cache upsert failed")
 			return report, fmt.Errorf("cache upsert: %w", err)
 		}
+	} else if len(resolvable) == 0 {
+		log.Info().Msg("orchestrator: no resolvable domains selected, skipping resolution")
 	} else {
 		log.Info().Msg("orchestrator: all domains cached, skipping resolution")
 	}

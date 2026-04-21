@@ -80,7 +80,7 @@ func printUsage() {
 func serveCmd() {
 	// Parse flags for serve command
 	fs := flag.NewFlagSet("serve", flag.ExitOnError)
-	logLevel := fs.String("log-level", "info", "Log level (debug, info, warn, error)")
+	logLevel := fs.String("log-level", "", "Log level (debug, info, warn, error)")
 	logJSON := fs.Bool("log-json", true, "Output logs in JSON format")
 	configFile := fs.String("config", "", "Optional YAML config file path")
 	if err := fs.Parse(os.Args[2:]); err != nil {
@@ -98,10 +98,10 @@ func serveCmd() {
 		os.Exit(1)
 	}
 
-	// Initialize logging (CLI flags override config)
-	level := *logLevel
-	if level == "" {
-		level = cfg.Logging.Level
+	// Initialize logging (config/ENV first, CLI flag overrides if set)
+	level := cfg.Logging.Level
+	if *logLevel != "" {
+		level = *logLevel
 	}
 	jsonFmt := *logJSON
 	if err := logging.Setup(level, jsonFmt); err != nil {
@@ -147,6 +147,17 @@ func serveCmd() {
 
 	// Initialize domain list provider
 	domainProvider := domainlist.NewProvider()
+
+	// Pre-load dlc.dat into the provider so the API can serve categories/domains
+	if _, err := os.Stat(cfg.Source.CachePath); err == nil {
+		if err := domainProvider.Load(cfg.Source.CachePath); err != nil {
+			log.Warn().Err(err).Msg("Failed to preload domain list; categories API will be unavailable until first pipeline run")
+		} else {
+			log.Info().Int("categories", len(domainProvider.Categories())).Msg("Domain list preloaded")
+		}
+	} else {
+		log.Info().Msg("No cached dlc.dat found; categories API will be available after first pipeline run")
+	}
 
 	// Initialize resolver
 	resolverCfg := resolver.Config{
