@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
+	"net/url"
 	"sort"
 	"strings"
 
@@ -192,6 +193,12 @@ func (s *Server) handleCategoriesDelete(w http.ResponseWriter, r *http.Request) 
 	if code == "" {
 		s.jsonError(w, http.StatusBadRequest, "code is required")
 		return
+	}
+
+	// URL-decode the code (chi doesn't auto-decode path params)
+	decoded, err := url.PathUnescape(code)
+	if err == nil {
+		code = decoded
 	}
 
 	// Normalize: ensure "geosite:" prefix
