@@ -13,7 +13,7 @@ const ROOT = path.resolve(__dirname, '..');
 async function startContainer() {
   const volumeName = `d2ip-e2e-${Date.now()}`;
 
-  // Build image if needed
+  // Build image if needed (try local tag first, fall back to registry)
   try {
     execSync('make docker', { cwd: ROOT, stdio: 'pipe' });
   } catch {
@@ -27,7 +27,7 @@ async function startContainer() {
       '-v', `${volumeName}:/var/lib/d2ip`,
       '-e', 'D2IP_RESOLVER_UPSTREAM=1.1.1.1:53',
       '-e', 'D2IP_LOGGING_LEVEL=info',
-      'ghcr.io/g00dvin/d2ip:latest',
+      'd2ip:latest',
       'd2ip', 'serve',
     ],
     { stdio: ['ignore', 'pipe', 'pipe'] },
@@ -54,15 +54,19 @@ async function startContainer() {
 
   if (!started) {
     container.kill();
-    throw new Error('d2ip container failed to start within 30s');
+    throw new Error(`d2ip container failed to start within 30s. Output:\n${output}`);
   }
 
   return {
     container,
-    stop: () => {
+    stop: async () => {
       container.kill();
+      // Wait for process to exit
+      await new Promise((resolve) => container.on('close', resolve));
       // Clean up volume
-      try { execSync(`docker volume rm ${volumeName}`, { stdio: 'pipe' }); } catch {}
+      try { execSync(`docker volume rm ${volumeName}`, { stdio: 'pipe' }); } catch (e) {
+        console.warn(`Warning: failed to clean up volume ${volumeName}:`, e.message);
+      }
     },
   };
 }
@@ -73,7 +77,7 @@ export const test = base.extend({
     try {
       await use(page);
     } finally {
-      ctx.stop();
+      await ctx.stop();
     }
   },
 });
