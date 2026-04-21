@@ -18,47 +18,55 @@ type categoryInfo struct {
 	DomainCount int      `json:"domain_count"`
 }
 
-// handleCategoriesList returns all available geosite categories.
+// handleCategoriesList returns configured and available geosite categories.
 func (s *Server) handleCategoriesList(w http.ResponseWriter, r *http.Request) {
 	snapshot := s.cfgWatcher.Current()
 
-	// Get configured categories
-	configured := make(map[string]categoryInfo)
+	// Build configured categories map
+	configuredSet := make(map[string]categoryInfo)
 	for _, cat := range snapshot.Config.Categories {
-		configured[cat.Code] = categoryInfo{
+		configuredSet[cat.Code] = categoryInfo{
 			Code:  cat.Code,
 			Attrs: cat.Attrs,
 		}
 	}
 
-	// Get all available categories from the provider
+	// Enrich with domain counts from provider
 	if s.dlProvider != nil {
-		available := s.dlProvider.Categories()
-		for _, code := range available {
-			if info, ok := configured[code]; ok {
-				// Count domains by selecting rules for this category
-				rules, err := s.dlProvider.Select([]domainlist.CategorySelector{{Code: code}})
-				if err == nil {
-					info.DomainCount = len(rules)
-				}
-				configured[code] = info
-			} else {
-				configured[code] = categoryInfo{Code: code}
+		for code := range configuredSet {
+			rules, err := s.dlProvider.Select([]domainlist.CategorySelector{{Code: code}})
+			if err == nil {
+				info := configuredSet[code]
+				info.DomainCount = len(rules)
+				configuredSet[code] = info
 			}
 		}
 	}
 
-	// Convert to sorted slice
-	cats := make([]categoryInfo, 0, len(configured))
-	for _, c := range configured {
-		cats = append(cats, c)
+	// Build configured slice (sorted)
+	configured := make([]categoryInfo, 0, len(configuredSet))
+	for _, c := range configuredSet {
+		configured = append(configured, c)
 	}
-	sort.Slice(cats, func(i, j int) bool {
-		return cats[i].Code < cats[j].Code
+	sort.Slice(configured, func(i, j int) bool {
+		return configured[i].Code < configured[j].Code
 	})
 
+	// Build available slice (all provider categories minus configured)
+	available := []string{}
+	if s.dlProvider != nil {
+		allCats := s.dlProvider.Categories()
+		for _, code := range allCats {
+			if _, isConfigured := configuredSet[code]; !isConfigured {
+				available = append(available, code)
+			}
+		}
+	}
+	sort.Strings(available)
+
 	s.jsonOK(w, map[string]interface{}{
-		"categories": cats,
+		"configured": configured,
+		"available":  available,
 	})
 }
 

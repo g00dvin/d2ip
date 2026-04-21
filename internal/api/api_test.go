@@ -146,6 +146,47 @@ func TestHandleCategoriesList_ReturnsCategories(t *testing.T) {
 	if rec.Code != http.StatusOK {
 		t.Fatalf("expected 200, got %d", rec.Code)
 	}
+
+	var resp map[string]interface{}
+	if err := json.Unmarshal(rec.Body.Bytes(), &resp); err != nil {
+		t.Fatalf("failed to parse JSON: %v", err)
+	}
+
+	if _, ok := resp["configured"]; !ok {
+		t.Error("response missing 'configured' key")
+	}
+	if _, ok := resp["available"]; !ok {
+		t.Error("response missing 'available' key")
+	}
+}
+
+func TestHandleCategoriesList_ReturnsConfiguredAndAvailable(t *testing.T) {
+	cfg := config.Defaults()
+	watcher := config.NewWatcher(cfg, 1)
+
+	s := &Server{cfgWatcher: watcher, dlProvider: nil}
+	r := chi.NewRouter()
+	r.Get("/api/categories", s.handleCategoriesList)
+
+	req := httptest.NewRequest(http.MethodGet, "/api/categories", nil)
+	rec := httptest.NewRecorder()
+	r.ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d", rec.Code)
+	}
+
+	var resp map[string]interface{}
+	if err := json.Unmarshal(rec.Body.Bytes(), &resp); err != nil {
+		t.Fatalf("failed to parse JSON: %v", err)
+	}
+
+	if _, ok := resp["configured"]; !ok {
+		t.Error("response missing 'configured' key")
+	}
+	if _, ok := resp["available"]; !ok {
+		t.Error("response missing 'available' key")
+	}
 }
 
 func TestHandleCacheStats_ReturnsStats(t *testing.T) {
