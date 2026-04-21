@@ -1,8 +1,0 @@
-{"type":"server-started","port":65400,"host":"0.0.0.0","url_host":"10.77.32.20","url":"http://10.77.32.20:65400","screen_dir":"/home/goodvin/git/d2ip/.superpowers/brainstorm/97214-1776713648/content","state_dir":"/home/goodvin/git/d2ip/.superpowers/brainstorm/97214-1776713648/state"}
-{"type":"screen-added","file":"/home/goodvin/git/d2ip/.superpowers/brainstorm/97214-1776713648/content/layout.html"}
-{"source":"user-event","type":"click","text":"A\n    \n      Fixed Sidebar (shown above)\n      Sidebar stays visible, content scrolls independently. Classic admin layout.","choice":"sidebar-fixed","id":null,"timestamp":1776713740453}
-{"source":"user-event","type":"click","text":"A\n    \n      Fixed Sidebar (shown above)\n      Sidebar stays visible, content scrolls independently. Classic admin layout.","choice":"sidebar-fixed","id":null,"timestamp":1776713741356}
-{"type":"screen-added","file":"/home/goodvin/git/d2ip/.superpowers/brainstorm/97214-1776713648/content/cold-colors.html"}
-{"source":"user-event","type":"click","text":"✓\n    \n      This palette works\n      Cold blues, steel grays, muted green for status, amber for warnings. No neon.","choice":"cold-colors-approved","id":null,"timestamp":1776713840339}
-{"type":"screen-added","file":"/home/goodvin/git/d2ip/.superpowers/brainstorm/97214-1776713648/content/waiting-1.html"}
-{"type":"server-stopped","reason":"idle timeout"}
