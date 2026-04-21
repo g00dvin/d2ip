@@ -5,10 +5,12 @@ import (
 	"embed"
 	"encoding/json"
 	"errors"
+	"io"
 	"io/fs"
 	"net/http"
 	"net/netip"
 	"strings"
+	"time"
 
 	"github.com/go-chi/chi/v5"
 	"github.com/go-chi/chi/v5/middleware"
@@ -109,24 +111,43 @@ func (s *Server) Handler() http.Handler {
 		r.Get("/*", func(w http.ResponseWriter, r *http.Request) {
 			// Serve index.html for root path
 			if r.URL.Path == "/" {
-				w.Header().Set("Content-Type", "text/html; charset=utf-8")
-				http.ServeFileFS(w, r, webRoot, "index.html")
+				serveEmbeddedFile(w, r, webRoot, "index.html")
 				return
 			}
-			// Set correct MIME types for known extensions
-			switch {
-			case strings.HasSuffix(r.URL.Path, ".css"):
-				w.Header().Set("Content-Type", "text/css; charset=utf-8")
-			case strings.HasSuffix(r.URL.Path, ".js"):
-				w.Header().Set("Content-Type", "application/javascript")
-			case strings.HasSuffix(r.URL.Path, ".html"):
-				w.Header().Set("Content-Type", "text/html; charset=utf-8")
+			// Strip /web/ prefix to get the file path within the embedded FS
+			name := strings.TrimPrefix(r.URL.Path, "/web/")
+			if name == "" {
+				name = "index.html"
 			}
-			http.FileServer(http.FS(webRoot)).ServeHTTP(w, r)
+			serveEmbeddedFile(w, r, webRoot, name)
 		})
 	}
 
 	return r
+}
+
+// serveEmbeddedFile serves a file from the embedded FS with correct MIME types.
+func serveEmbeddedFile(w http.ResponseWriter, r *http.Request, fs fs.FS, name string) {
+	// Determine MIME type by extension
+	switch {
+	case strings.HasSuffix(name, ".css"):
+		w.Header().Set("Content-Type", "text/css; charset=utf-8")
+	case strings.HasSuffix(name, ".js"):
+		w.Header().Set("Content-Type", "application/javascript")
+	case strings.HasSuffix(name, ".html"):
+		w.Header().Set("Content-Type", "text/html; charset=utf-8")
+	default:
+		w.Header().Set("Content-Type", "application/octet-stream")
+	}
+
+	f, err := fs.Open(name)
+	if err != nil {
+		http.Error(w, "not found", http.StatusNotFound)
+		return
+	}
+	defer f.Close()
+
+	http.ServeContent(w, r, name, time.Time{}, f.(io.ReadSeeker))
 }
 
 // handleHealth returns 200 if the process is alive.
