@@ -296,6 +296,12 @@ body {
     background: var(--bg-code);
     border: 1px solid var(--border);
     color: var(--text-primary);
+    width: 100%;
+}
+
+.form-select:focus {
+    outline: none;
+    border-color: var(--accent);
 }
 
 .form-error {
@@ -378,4 +384,45 @@ body {
     .actions {
         flex-direction: column;
     }
+}
+
+/* ===== Warning Banner ===== */
+.warning-banner {
+    background: rgba(224, 160, 80, 0.1);
+    border: 1px solid var(--warning);
+    color: var(--warning);
+    padding: var(--spacing-md);
+    font-size: 12px;
+    display: flex;
+    align-items: center;
+    gap: var(--spacing-sm);
+}
+
+.warning-banner a {
+    color: var(--warning);
+    text-decoration: underline;
+    cursor: pointer;
+}
+
+.warning-banner a:hover {
+    color: var(--accent);
+}
+
+/* ===== Checkbox styling ===== */
+input[type="checkbox"] {
+    accent-color: var(--accent);
+    width: 16px;
+    height: 16px;
+    cursor: pointer;
+}
+
+/* ===== Number input ===== */
+input[type="number"] {
+    -moz-appearance: textfield;
+}
+
+input[type="number"]::-webkit-outer-spin-button,
+input[type="number"]::-webkit-inner-spin-button {
+    -webkit-appearance: none;
+    margin: 0;
 }

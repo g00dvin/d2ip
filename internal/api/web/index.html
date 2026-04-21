@@ -4,6 +4,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>d2ip — Domain to IP Resolver</title>
+    <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'><text y='14' font-size='14' fill='%235dade2'>⬡</text></svg>">
     <link rel="stylesheet" href="/web/styles.css">
     <script src="/web/htmx.min.js"></script>
 </head>
@@ -39,7 +40,7 @@
                 </a>
             </nav>
             <div class="sidebar-footer">
-                <span class="version">v0.1.0</span>
+                <span class="version">v0.1.4</span>
                 <span class="listen-address" id="listen-addr">:9099</span>
             </div>
         </aside>
@@ -81,6 +82,14 @@
                          hx-trigger="load, every 10s"
                          hx-swap="innerHTML">
                         loading...
+                    </div>
+                </div>
+                <div class="panel" id="no-config-warning" style="display:none;">
+                    <div class="warning-banner">
+                        ⚠ No categories configured.
+                        <a href="#" onclick="showSection('categories', document.querySelector('[data-section=categories]')); return false;">
+                            Go to Categories →
+                        </a>
                     </div>
                 </div>
                 <div class="panel">
@@ -157,12 +166,30 @@
             <!-- Categories Section -->
             <div id="section-categories" class="section-page" style="display:none;">
                 <div class="panel">
-                    <div class="panel-label">categories</div>
-                    <div id="categories-list"
+                    <div class="panel-label">configured categories</div>
+                    <div id="configured-categories"
                          hx-get="/api/categories"
                          hx-trigger="load"
                          hx-swap="innerHTML"
-                         hx-on::after-request="renderCategories(event)">
+                         hx-on::after-request="renderConfiguredCategories(event)">
+                        loading...
+                    </div>
+                    <div id="no-categories-warning" style="display:none;">
+                        <div class="warning-banner">
+                            No categories configured. Search below and click 'add' to start.
+                        </div>
+                    </div>
+                </div>
+                <div class="panel">
+                    <div class="panel-label">available categories</div>
+                    <input type="text" class="form-input" id="available-search"
+                           placeholder="filter categories..." oninput="filterAvailableCategories()">
+                    <div id="available-categories"
+                         hx-get="/api/categories"
+                         hx-trigger="load"
+                         hx-swap="innerHTML"
+                         hx-on::after-request="renderAvailableCategories(event)"
+                         style="margin-top:12px;">
                         loading...
                     </div>
                 </div>
@@ -227,6 +254,9 @@
                         loading...
                     </div>
                 </div>
+                <div id="routing-disabled-msg" style="display:none;">
+                    <div class="warning-banner">Routing is disabled. Enable it in Config → routing.enabled.</div>
+                </div>
                 <div class="panel">
                     <div class="panel-label">actions</div>
                     <div class="actions">
@@ -290,22 +320,42 @@
                 }
             }
 
-            // Format pipeline status (dashboard)
+            // Format pipeline status (dashboard last-run)
             if (event.detail.target.id === 'last-run') {
                 try {
                     var data = JSON.parse(event.detail.target.textContent.trim());
+                    var warningEl = document.getElementById('no-config-warning');
+
                     if (data.running) {
                         event.detail.target.innerHTML = '<span class="status-warn">● running (id: ' + data.run_id + ')</span>';
+                        if (warningEl) warningEl.style.display = 'none';
                     } else if (data.report) {
                         var r = data.report;
                         var dur = (r.duration / 1000000000).toFixed(1);
+                        var statusIcon = '● completed';
+                        var statusClass = 'status-ok';
+
+                        if (r.domains === 0) {
+                            statusIcon = '⚠ no categories configured';
+                            statusClass = 'status-warn';
+                            if (warningEl) warningEl.style.display = 'block';
+                        } else {
+                            if (warningEl) warningEl.style.display = 'none';
+                        }
+
+                        if (r.failed > 0 && r.resolved === 0) {
+                            statusIcon = '⚠ all resolutions failed';
+                            statusClass = 'status-error';
+                        }
+
                         event.detail.target.innerHTML =
-                            '<span class="status-ok">● completed</span>' +
+                            '<span class="' + statusClass + '">' + statusIcon + '</span>' +
                             '<div class="meta">id:' + r.run_id + ' | ' + dur + 's | ' +
                             r.domains + ' domains | ' + r.resolved + ' resolved | ' +
                             r.failed + ' failed | v4:' + r.ipv4_out + ' v6:' + r.ipv6_out + '</div>';
                     } else {
                         event.detail.target.innerHTML = '<span class="status-muted">no runs yet</span>';
+                        if (warningEl) warningEl.style.display = 'block';
                     }
                 } catch(e) {
                     event.detail.target.innerHTML = '<span class="status-muted">unavailable</span>';
@@ -318,10 +368,17 @@
                     var data = JSON.parse(event.detail.target.textContent.trim());
                     var v4 = data.v4 ? data.v4.length : 0;
                     var v6 = data.v6 ? data.v6.length : 0;
+                    var backend = data.backend || 'none';
                     event.detail.target.innerHTML =
-                        '<div class="meta">backend: ' + (data.backend || 'none') + '</div>' +
+                        '<div class="meta">backend: ' + backend + '</div>' +
                         '<div class="meta">ipv4: ' + v4 + ' prefixes | ipv6: ' + v6 + ' prefixes</div>' +
                         '<div class="meta">applied: ' + (data.applied_at ? new Date(data.applied_at).toLocaleString() : 'never') + '</div>';
+
+                    // Show/hide routing disabled message
+                    var disabledMsg = document.getElementById('routing-disabled-msg');
+                    if (disabledMsg) {
+                        disabledMsg.style.display = (backend === 'none' || backend === '') ? 'block' : 'none';
+                    }
                 } catch(e) {
                     event.detail.target.innerHTML = '<span class="status-muted">routing disabled</span>';
                 }
@@ -337,8 +394,19 @@
                     } else if (data.report) {
                         var r = data.report;
                         var dur = (r.duration / 1000000000).toFixed(1);
+                        var statusIcon = '● completed';
+                        var statusClass = 'status-ok';
+
+                        if (r.domains === 0) {
+                            statusIcon = '⚠ nothing to resolve — check categories';
+                            statusClass = 'status-warn';
+                        } else if (r.failed > 0 && r.resolved === 0) {
+                            statusIcon = '⚠ all resolutions failed — check DNS upstream';
+                            statusClass = 'status-error';
+                        }
+
                         event.detail.target.innerHTML =
-                            '<span class="status-ok">● completed</span>' +
+                            '<span class="' + statusClass + '">' + statusIcon + '</span>' +
                             '<div class="meta">id:' + r.run_id + ' | ' + dur + 's | ' +
                             r.domains + ' domains | ' + r.resolved + ' resolved | ' +
                             r.failed + ' failed | v4:' + r.ipv4_out + ' v6:' + r.ipv6_out + '</div>';
@@ -369,7 +437,9 @@
                 for (var i = history.length - 1; i >= 0; i--) {
                     var r = history[i];
                     var dur = (r.duration / 1000000000).toFixed(1);
-                    html += '<tr><td>' + r.run_id + '</td><td>' + r.domains + '</td><td>' + r.resolved + '</td><td>' + r.failed + '</td><td>' + r.ipv4_out + '</td><td>' + r.ipv6_out + '</td><td>' + dur + 's</td></tr>';
+                    var rowClass = '';
+                    if (r.domains === 0) rowClass = ' style="color:var(--warning)"';
+                    html += '<tr' + rowClass + '><td>' + r.run_id + '</td><td>' + r.domains + '</td><td>' + r.resolved + '</td><td>' + r.failed + '</td><td>' + r.ipv4_out + '</td><td>' + r.ipv6_out + '</td><td>' + dur + 's</td></tr>';
                 }
                 html += '</table>';
                 event.detail.target.innerHTML = html;
@@ -378,76 +448,26 @@
             }
         }
 
-        // Render config editor
-        function renderConfigEditor(event) {
+        // Render configured categories
+        function renderConfiguredCategories(event) {
             try {
                 var data = JSON.parse(event.detail.xhr.responseText);
-                var cfg = data.config || {};
-                var defaults = data.defaults || {};
-                var overrides = data.overrides || {};
+                var cats = data.configured || [];
+                var warningEl = document.getElementById('no-categories-warning');
 
-                var sections = ['source', 'resolver', 'cache', 'aggregation', 'export', 'routing', 'scheduler', 'logging', 'metrics'];
-                var html = '';
-
-                for (var s = 0; s < sections.length; s++) {
-                    var sec = sections[s];
-                    var secData = cfg[sec] || {};
-                    var defData = defaults[sec] || {};
-                    html += '<div class="panel"><div class="panel-label">' + sec + '</div>';
-                    for (var key in secData) {
-                        if (typeof secData[key] === 'object') continue;
-                        var dottedKey = sec + '.' + key;
-                        var isOverride = overrides.hasOwnProperty(dottedKey);
-                        var val = isOverride ? overrides[dottedKey] : secData[key];
-                        html += '<div class="form-group"><label class="form-label">' + key + (isOverride ? ' *' : '') + '</label>';
-                        html += '<input type="text" class="form-input" data-key="' + dottedKey + '" value="' + val + '">';
-                        html += '</div>';
-                    }
-                    html += '</div>';
-                }
-
-                html += '<div class="actions"><button class="btn btn-accent" onclick="saveConfig()">save</button></div>';
-                event.detail.target.innerHTML = html;
-            } catch(e) {
-                event.detail.target.innerHTML = '<span class="status-error">failed to load config</span>';
-            }
-        }
-
-        // Save config
-        function saveConfig() {
-            var overrides = {};
-            document.querySelectorAll('#config-editor .form-input[data-key]').forEach(function(input) {
-                overrides[input.getAttribute('data-key')] = input.value;
-            });
-            fetch('/api/settings', {
-                method: 'PUT',
-                headers: {'Content-Type': 'application/json'},
-                body: JSON.stringify(overrides)
-            }).then(function(r) {
-                if (r.ok) {
-                    showToast('config saved');
-                    htmx.trigger('#config-editor', 'load');
-                } else {
-                    showToast('save failed');
-                }
-            });
-        }
-
-        // Render categories
-        var allDomains = [];
-        function renderCategories(event) {
-            try {
-                var data = JSON.parse(event.detail.xhr.responseText);
-                var cats = data.categories || [];
                 if (cats.length === 0) {
-                    event.detail.target.innerHTML = '<span class="status-muted">no categories configured</span>';
+                    event.detail.target.innerHTML = '<span class="status-muted">none</span>';
+                    if (warningEl) warningEl.style.display = 'block';
                     return;
                 }
+                if (warningEl) warningEl.style.display = 'none';
+
                 var html = '<table class="table"><tr><th>code</th><th>domains</th><th>action</th></tr>';
                 for (var i = 0; i < cats.length; i++) {
                     var c = cats[i];
                     html += '<tr><td>' + c.code + '</td><td>' + (c.domain_count || '?') + '</td>';
-                    html += '<td><button class="btn btn-accent" onclick="loadCategoryDomains(\'' + c.code + '\')">browse</button></td></tr>';
+                    html += '<td><button class="btn btn-accent" onclick="loadCategoryDomains(\'' + c.code + '\')">browse</button> ';
+                    html += '<button class="btn btn-danger" onclick="removeCategory(\'' + c.code + '\')">✕</button></td></tr>';
                 }
                 html += '</table>';
                 event.detail.target.innerHTML = html;
@@ -456,7 +476,87 @@
             }
         }
 
+        // Render available categories
+        var allAvailableCategories = [];
+        function renderAvailableCategories(event) {
+            try {
+                var data = JSON.parse(event.detail.xhr.responseText);
+                allAvailableCategories = data.available || [];
+                renderAvailableList(allAvailableCategories);
+            } catch(e) {
+                event.detail.target.innerHTML = '<span class="status-error">failed to load available categories</span>';
+            }
+        }
+
+        function renderAvailableList(cats) {
+            var html = '';
+            var limit = Math.min(cats.length, 50);
+            for (var i = 0; i < limit; i++) {
+                html += '<div style="display:flex;justify-content:space-between;align-items:center;padding:4px 0;border-bottom:1px solid var(--border);">';
+                html += '<span>' + cats[i] + '</span>';
+                html += '<button class="btn btn-accent" style="font-size:11px;padding:2px 8px;" onclick="addCategory(\'' + cats[i] + '\')">add</button>';
+                html += '</div>';
+            }
+            if (cats.length > 50) {
+                html += '<div class="meta">... and ' + (cats.length - 50) + ' more (use search to filter)</div>';
+            }
+            if (cats.length === 0) {
+                html = '<span class="status-muted">all categories configured</span>';
+            }
+            var target = document.getElementById('available-categories');
+            if (target) target.innerHTML = html;
+        }
+
+        function filterAvailableCategories() {
+            var q = document.getElementById('available-search').value.toLowerCase();
+            if (!q) {
+                renderAvailableList(allAvailableCategories);
+                return;
+            }
+            var filtered = allAvailableCategories.filter(function(c) { return c.toLowerCase().indexOf(q) !== -1; });
+            renderAvailableList(filtered);
+        }
+
+        // Add category
+        function addCategory(code) {
+            fetch('/api/categories', {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify({code: code})
+            }).then(function(r) {
+                if (r.ok) {
+                    showToast('added: ' + code);
+                    htmx.trigger('#configured-categories', 'load');
+                    htmx.trigger('#available-categories', 'load');
+                } else {
+                    return r.json().then(function(e) { showToast('error: ' + (e.error || 'failed')); });
+                }
+            }).catch(function(e) {
+                showToast('error: ' + e.message);
+            });
+        }
+
+        // Remove category
+        function removeCategory(code) {
+            if (!confirm('remove ' + code + '?')) return;
+            fetch('/api/categories/' + encodeURIComponent(code), {
+                method: 'DELETE'
+            }).then(function(r) {
+                if (r.ok) {
+                    showToast('removed: ' + code);
+                    htmx.trigger('#configured-categories', 'load');
+                    htmx.trigger('#available-categories', 'load');
+                    document.getElementById('category-domains-panel').style.display = 'none';
+                } else {
+                    return r.json().then(function(e) { showToast('error: ' + (e.error || 'failed')); });
+                }
+            }).catch(function(e) {
+                showToast('error: ' + e.message);
+            });
+        }
+
         // Load category domains
+        var allDomains = [];
         function loadCategoryDomains(code) {
             fetch('/api/categories/' + encodeURIComponent(code) + '/domains?per_page=500')
                 .then(function(r) {
@@ -495,6 +595,102 @@
             }
             var filtered = allDomains.filter(function(d) { return d.toLowerCase().indexOf(q) !== -1; });
             renderDomainList(filtered);
+        }
+
+        // Render config editor with proper input types
+        function renderConfigEditor(event) {
+            try {
+                var data = JSON.parse(event.detail.xhr.responseText);
+                var cfg = data.config || {};
+                var defaults = data.defaults || {};
+                var overrides = data.overrides || {};
+
+                var sections = ['source', 'resolver', 'cache', 'aggregation', 'export', 'routing', 'scheduler', 'logging', 'metrics'];
+                var html = '';
+
+                var enumFields = {
+                    'resolver.network': ['udp', 'tcp', 'tcp-tls'],
+                    'aggregation.level': ['off', 'conservative', 'balanced', 'aggressive'],
+                    'routing.backend': ['none', 'nftables', 'iproute2'],
+                    'logging.format': ['json', 'console'],
+                    'logging.level': ['debug', 'info', 'warn', 'error']
+                };
+
+                for (var s = 0; s < sections.length; s++) {
+                    var sec = sections[s];
+                    var secData = cfg[sec] || {};
+                    html += '<div class="panel"><div class="panel-label">' + sec + '</div>';
+                    for (var key in secData) {
+                        if (typeof secData[key] === 'object' && !Array.isArray(secData[key])) continue;
+                        var dottedKey = sec + '.' + key;
+                        var isOverride = overrides.hasOwnProperty(dottedKey);
+                        var val = isOverride ? overrides[dottedKey] : secData[key];
+                        var fieldId = 'field-' + dottedKey.replace(/\./g, '-');
+
+                        html += '<div class="form-group"><label class="form-label" for="' + fieldId + '">' + key + (isOverride ? ' *' : '') + '</label>';
+
+                        if (enumFields[dottedKey]) {
+                            html += '<select id="' + fieldId + '" class="form-select" data-key="' + dottedKey + '">';
+                            for (var j = 0; j < enumFields[dottedKey].length; j++) {
+                                var opt = enumFields[dottedKey][j];
+                                var selected = String(val) === opt ? ' selected' : '';
+                                html += '<option value="' + opt + '"' + selected + '>' + opt + '</option>';
+                            }
+                            html += '</select>';
+                        } else if (typeof val === 'boolean') {
+                            var checked = val ? ' checked' : '';
+                            html += '<label style="display:flex;align-items:center;gap:8px;cursor:pointer;">';
+                            html += '<input type="checkbox" id="' + fieldId + '" data-key="' + dottedKey + '" data-type="boolean"' + checked + '>';
+                            html += (val ? 'true' : 'false') + '</label>';
+                        } else if (typeof val === 'number') {
+                            html += '<input type="number" id="' + fieldId + '" class="form-input" data-key="' + dottedKey + '" value="' + val + '">';
+                        } else if (typeof val === 'string' && /^\d+[smh]$/.test(val)) {
+                            html += '<input type="text" id="' + fieldId + '" class="form-input" data-key="' + dottedKey + '" value="' + val + '">';
+                            html += '<div class="meta">format: number + s/m/h (e.g. 30s, 5m, 1h)</div>';
+                        } else {
+                            html += '<input type="text" id="' + fieldId + '" class="form-input" data-key="' + dottedKey + '" value="' + val + '">';
+                        }
+                        html += '</div>';
+                    }
+                    html += '</div>';
+                }
+
+                html += '<div class="actions"><button class="btn btn-accent" onclick="saveConfig()">save</button></div>';
+                event.detail.target.innerHTML = html;
+            } catch(e) {
+                event.detail.target.innerHTML = '<span class="status-error">failed to load config</span>';
+            }
+        }
+
+        // Save config
+        function saveConfig() {
+            var overrides = {};
+            document.querySelectorAll('#config-editor [data-key]').forEach(function(input) {
+                var key = input.getAttribute('data-key');
+                var val;
+                if (input.getAttribute('data-type') === 'boolean') {
+                    val = input.checked ? 'true' : 'false';
+                } else if (input.tagName === 'SELECT') {
+                    val = input.value;
+                } else {
+                    val = input.value;
+                }
+                overrides[key] = val;
+            });
+            fetch('/api/settings', {
+                method: 'PUT',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify(overrides)
+            }).then(function(r) {
+                if (r.ok) {
+                    showToast('config saved');
+                    htmx.trigger('#config-editor', 'load');
+                } else {
+                    return r.json().then(function(e) { showToast('save failed: ' + (e.error || 'unknown')); });
+                }
+            }).catch(function(e) {
+                showToast('save failed: ' + e.message);
+            });
         }
 
         // Render cache stats
