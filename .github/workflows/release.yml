@@ -1,0 +1,136 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - 'v*'
+
+env:
+  REGISTRY: ghcr.io
+  IMAGE_NAME: ${{ github.repository }}
+
+permissions:
+  contents: write
+  packages: write
+
+jobs:
+  release:
+    name: Build, Test, Release
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: '1.22'
+          cache: true
+
+      - name: Compute version
+        id: version
+        run: |
+          TAG="${GITHUB_REF#refs/tags/}"
+          TAG_BASE="${TAG#v}"
+          # Validate semver format (MAJOR.MINOR.PATCH with optional pre-release)
+          if ! echo "${TAG_BASE}" | grep -qE '^[0-9]+\.[0-9]+\.[0-9]+([+-].*)?$'; then
+            echo "::error::Tag '${TAG}' is not valid semver. Expected vMAJOR.MINOR.PATCH (e.g. v1.2.3, v0.1.0-alpha.1)"
+            exit 1
+          fi
+          SHORT_SHA="$(git rev-parse --short HEAD)"
+          echo "tag=${TAG}" >> "$GITHUB_OUTPUT"
+          echo "tag_base=${TAG_BASE}" >> "$GITHUB_OUTPUT"
+          echo "short_sha=${SHORT_SHA}" >> "$GITHUB_OUTPUT"
+          echo "version=${TAG}+${SHORT_SHA}" >> "$GITHUB_OUTPUT"
+          echo "semver=${TAG_BASE}+${SHORT_SHA}" >> "$GITHUB_OUTPUT"
+          echo "build_time=$(date -u '+%Y-%m-%d_%H:%M:%S')" >> "$GITHUB_OUTPUT"
+
+      - name: Run tests
+        run: go test -v ./...
+
+      - name: Run linter
+        uses: golangci/golangci-lint-action@v6
+        with:
+          version: latest
+          args: --timeout=5m
+
+      - name: Build binary
+        env:
+          VERSION: ${{ steps.version.outputs.version }}
+          BUILD_TIME: ${{ steps.version.outputs.build_time }}
+        run: |
+          CGO_ENABLED=0 go build \
+            -ldflags "-s -w -X main.Version=${VERSION} -X main.BuildTime=${BUILD_TIME}" \
+            -o bin/d2ip ./cmd/d2ip
+
+      - name: Verify binary version
+        run: ./bin/d2ip version
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Log in to GHCR
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Extract Docker metadata
+        id: meta
+        uses: docker/metadata-action@v5
+        with:
+          images: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}
+          tags: |
+            type=semver,pattern={{version}}
+            type=semver,pattern={{major}}.{{minor}}
+            type=semver,pattern={{major}},value={{major}}.{{minor}}.{{patch}}
+            type=raw,value=latest
+            type=sha,prefix=,suffix=,format=short
+
+      - name: Build and push Docker image
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: ./deploy/Dockerfile
+          push: true
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          build-args: |
+            VERSION=${{ steps.version.outputs.version }}
+            BUILD_TIME=${{ steps.version.outputs.build_time }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ steps.version.outputs.tag }}
+          name: ${{ steps.version.outputs.tag }}
+          body: |
+            ## d2ip ${{ steps.version.outputs.version }}
+
+            **Commit:** `${{ steps.version.outputs.short_sha }}`
+            **Built:** ${{ steps.version.outputs.build_time }} UTC
+
+            ### Docker image
+
+            ```
+            docker pull ghcr.io/${{ github.repository }}:${{ steps.version.outputs.tag_base }}
+            docker pull ghcr.io/${{ github.repository }}:latest
+            ```
+
+            ### Configuration
+
+            See [config.example.yaml](https://github.com/${{ github.repository }}/blob/main/config.example.yaml) for available options.
+
+            ### Changes
+
+            See commit history for details.
+          files: |
+            bin/d2ip
+          draft: false
+          prerelease: false

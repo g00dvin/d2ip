@@ -13,9 +13,12 @@ RUN go mod download
 
 COPY . .
 
+ARG VERSION=dev
+ARG BUILD_TIME=unknown
+
 # Static, CGO-free (modernc.org/sqlite is pure Go).
 ENV CGO_ENABLED=0 GOFLAGS=-trimpath
-RUN go build -ldflags='-s -w' -o /out/d2ip ./cmd/d2ip
+RUN go build -ldflags="-s -w -X main.Version=${VERSION} -X main.BuildTime=${BUILD_TIME}" -o /out/d2ip ./cmd/d2ip
 
 ############################
 # Runtime stage

@@ -14,6 +14,10 @@ import (
 // e.g. resolver.qps → D2IP_RESOLVER_QPS.
 const EnvPrefix = "D2IP"
 
+// DefaultSearchPaths is the list of directories searched for config.yaml
+// when neither -config nor SearchPaths are provided.
+var DefaultSearchPaths = []string{".", "/etc/d2ip", "/var/lib/d2ip"}
+
 // LoadOptions configures Load.
 type LoadOptions struct {
 	// ConfigFile is an optional path to a YAML config (seed for first run).
@@ -47,7 +51,11 @@ func Load(opts LoadOptions) (*Config, error) {
 	} else {
 		v.SetConfigName("config")
 		v.SetConfigType("yaml")
-		for _, p := range opts.SearchPaths {
+		searchPaths := opts.SearchPaths
+		if len(searchPaths) == 0 {
+			searchPaths = DefaultSearchPaths
+		}
+		for _, p := range searchPaths {
 			v.AddConfigPath(p)
 		}
 	}

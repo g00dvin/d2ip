@@ -152,6 +152,45 @@ categories:
 	}
 }
 
+func TestLoad_DefaultSearchPaths(t *testing.T) {
+	clearEnv(t)
+
+	dir := t.TempDir()
+	yaml := filepath.Join(dir, "config.yaml")
+	const body = `
+listen: ":8080"
+resolver:
+  qps: 777
+`
+	if err := os.WriteFile(yaml, []byte(body), 0o600); err != nil {
+		t.Fatalf("write yaml: %v", err)
+	}
+
+	cfg, err := Load(LoadOptions{SearchPaths: []string{dir}})
+	if err != nil {
+		t.Fatalf("Load: %v", err)
+	}
+	if cfg.Listen != ":8080" {
+		t.Errorf("Listen: got %q, want :8080", cfg.Listen)
+	}
+	if cfg.Resolver.QPS != 777 {
+		t.Errorf("QPS: got %d, want 777", cfg.Resolver.QPS)
+	}
+}
+
+func TestLoad_DefaultSearchPathsFallsBackToDefaults(t *testing.T) {
+	clearEnv(t)
+
+	cfg, err := Load(LoadOptions{})
+	if err != nil {
+		t.Fatalf("Load with no config file: %v", err)
+	}
+	want := Defaults()
+	if cfg.Listen != want.Listen {
+		t.Errorf("Listen: got %q, want %q", cfg.Listen, want.Listen)
+	}
+}
+
 func TestLoad_EnvBeatsYAMLBeatsKVBeatsDefaults(t *testing.T) {
 	// Precedence: ENV > kv > YAML > defaults (per docs/agents/08-config.md §2,
 	// with YAML treated as a first-run seed that kv and ENV override).
