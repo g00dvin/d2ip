@@ -1,0 +1,1 @@
+import{l as u,r as s}from"./index.IIYU6UKd.js";function c(e,o,i){let n=null;const t=s(!1);async function l(){t.value=!0;try{await e()}finally{t.value=!1}}function r(){a(),l(),n=setInterval(()=>l(),o)}function a(){n&&(clearInterval(n),n=null)}return u(()=>a()),{loading:t,start:r,stop:a,poll:l}}export{c as u};

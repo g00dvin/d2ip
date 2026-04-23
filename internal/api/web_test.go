@@ -14,9 +14,8 @@ func TestWebFilesEmbedded(t *testing.T) {
 	}{
 		{"web/index.html", "<!DOCTYPE html>"},
 		{"web/index.html", "d2ip"},
-		{"web/index.html", "htmx"},
-		{"web/styles.css", ":root"},
-		{"web/styles.css", "--bg-primary"},
+		{"web/index.html", "id=\"app\""},
+		{"web/assets", ""},
 	}
 
 	for _, tt := range tests {
@@ -27,6 +26,15 @@ func TestWebFilesEmbedded(t *testing.T) {
 			}
 			defer f.Close()
 
+			info, err := f.Stat()
+			if err != nil {
+				t.Fatalf("failed to stat %s: %v", tt.path, err)
+			}
+
+			if info.IsDir() {
+				return
+			}
+
 			content, err := io.ReadAll(f)
 			if err != nil {
 				t.Fatalf("failed to read %s: %v", tt.path, err)
@@ -36,7 +44,6 @@ func TestWebFilesEmbedded(t *testing.T) {
 				t.Errorf("%s is empty", tt.path)
 			}
 
-			// Check for expected substring
 			if tt.want != "" {
 				s := string(content)
 				if len(s) < len(tt.want) || !contains(s, tt.want) {
@@ -47,7 +54,7 @@ func TestWebFilesEmbedded(t *testing.T) {
 	}
 }
 
-// TestWebFilesSize verifies total web size is under 50KB.
+// TestWebFilesSize verifies total web size is under 500KB.
 func TestWebFilesSize(t *testing.T) {
 	var total int64
 	err := fs.WalkDir(webFS, "web", func(path string, d fs.DirEntry, err error) error {
@@ -67,7 +74,7 @@ func TestWebFilesSize(t *testing.T) {
 		t.Fatalf("failed to walk web dir: %v", err)
 	}
 
-	const maxSize = 100 * 1024 // 100KB (includes bundled HTMX)
+	const maxSize = 500 * 1024 // 500KB (Vue SPA with Tailwind)
 	if total > maxSize {
 		t.Errorf("web files size %d bytes exceeds %d bytes", total, maxSize)
 	}

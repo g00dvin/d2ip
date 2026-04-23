@@ -1,4 +1,4 @@
-.PHONY: build test lint docker docker-dev clean proto help
+.PHONY: build test lint docker docker-dev clean proto help web-build
 
 BINARY_NAME=d2ip
 VERSION?=$(shell git describe --tags --always --dirty 2>/dev/null || echo "dev")
@@ -59,6 +59,12 @@ lint: ## Run linters
 docker: ## Build production Docker image
 	@echo "Building production Docker image..."
 	docker build -f deploy/Dockerfile -t $(BINARY_NAME):$(VERSION) -t $(BINARY_NAME):latest .
+
+web-build: ## Build the web UI and copy to internal/api/web/
+	@echo "Building web UI..."
+	cd web && npm ci && npm run build
+	rm -rf internal/api/web/index.html internal/api/web/assets
+	cp -r web/dist/* internal/api/web/
 
 clean: ## Clean build artifacts
 	@echo "Cleaning..."
