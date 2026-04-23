@@ -1,27 +1,34 @@
 <script setup lang="ts">
 import { computed } from 'vue'
-import VueApexCharts from 'vue3-apexcharts'
-import { useAppStore } from '@/stores/app'
+import { Doughnut } from 'vue-chartjs'
+import { Chart as ChartJS, ArcElement, Tooltip, Legend } from 'chart.js'
+ChartJS.register(ArcElement, Tooltip, Legend)
 
 const props = defineProps<{
   stats: { records_valid: number; records_failed: number } | null
 }>()
 
-const app = useAppStore()
-
-const options = computed(() => ({
-  theme: { mode: app.isDark ? 'dark' : 'light' as 'dark' | 'light' },
-  chart: { type: 'donut' as const, background: 'transparent' },
+const chartData = computed(() => ({
   labels: ['Valid', 'Failed'],
-  legend: { position: 'bottom' as const },
+  datasets: [
+    {
+      data: props.stats ? [props.stats.records_valid, props.stats.records_failed] : [0, 0],
+      backgroundColor: ['#18a058', '#d03050'],
+    },
+  ],
 }))
 
-const series = computed(() => {
-  if (!props.stats) return [0, 0]
-  return [props.stats.records_valid, props.stats.records_failed]
-})
+const options = computed(() => ({
+  responsive: true,
+  maintainAspectRatio: false,
+  plugins: {
+    legend: { position: 'bottom' as const },
+  },
+}))
 </script>
 
 <template>
-  <VueApexCharts type="donut" height="250" :options="options" :series="series" />
+  <div style="height: 250px">
+    <Doughnut :data="chartData" :options="options" />
+  </div>
 </template>
