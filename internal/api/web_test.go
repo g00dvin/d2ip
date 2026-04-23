@@ -3,6 +3,7 @@ package api
 import (
 	"io"
 	"io/fs"
+	"strings"
 	"testing"
 )
 
@@ -46,7 +47,7 @@ func TestWebFilesEmbedded(t *testing.T) {
 
 			if tt.want != "" {
 				s := string(content)
-				if len(s) < len(tt.want) || !contains(s, tt.want) {
+				if len(s) < len(tt.want) || !strings.Contains(s, tt.want) {
 					t.Errorf("%s does not contain %q", tt.path, tt.want)
 				}
 			}
@@ -81,12 +82,3 @@ func TestWebFilesSize(t *testing.T) {
 	t.Logf("Total web size: %d bytes (%.1fKB)", total, float64(total)/1024)
 }
 
-// contains is a simple substring check helper.
-func contains(s, substr string) bool {
-	for i := 0; i <= len(s)-len(substr); i++ {
-		if s[i:i+len(substr)] == substr {
-			return true
-		}
-	}
-	return false
-}

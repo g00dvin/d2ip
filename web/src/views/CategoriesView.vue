@@ -96,8 +96,8 @@ async function handleBrowse(code: string) {
         </template>
         <template v-else>
           <div
-            v-for="(cat, i) in filteredAvailable.slice(0, 50)"
-            :key="i"
+            v-for="cat in filteredAvailable.slice(0, 50)"
+            :key="cat"
             class="flex justify-between items-center py-1 border-b border-border"
           >
             <span>{{ cat }}</span>

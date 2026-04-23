@@ -168,6 +168,11 @@ func (s *Server) handleReady(w http.ResponseWriter, r *http.Request) {
 // The pipeline runs with a background-derived context so that
 // client disconnects don't cancel the long-running job.
 func (s *Server) handlePipelineRun(w http.ResponseWriter, r *http.Request) {
+	if s.orch == nil {
+		s.jsonError(w, http.StatusServiceUnavailable, "orchestrator not initialized")
+		return
+	}
+
 	var req orchestrator.PipelineRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		// Empty body is fine; use defaults.
@@ -190,6 +195,10 @@ func (s *Server) handlePipelineRun(w http.ResponseWriter, r *http.Request) {
 
 // handlePipelineStatus returns the current/last run status.
 func (s *Server) handlePipelineStatus(w http.ResponseWriter, r *http.Request) {
+	if s.orch == nil {
+		s.jsonError(w, http.StatusServiceUnavailable, "orchestrator not initialized")
+		return
+	}
 	status := s.orch.Status()
 	s.jsonOK(w, status)
 }

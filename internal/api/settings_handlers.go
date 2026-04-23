@@ -3,6 +3,7 @@ package api
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"net/http"
 
 	"github.com/go-chi/chi/v5"
@@ -105,6 +106,10 @@ func (s *Server) handleSettingsDelete(w http.ResponseWriter, r *http.Request) {
 
 // reloadConfig fetches current config, applies KV overrides, and publishes.
 func (s *Server) reloadConfig(ctx context.Context) error {
+	if s.kvStore == nil {
+		return errors.New("kvStore not initialized")
+	}
+
 	overrides, err := s.kvStore.GetAll(ctx)
 	if err != nil {
 		return err

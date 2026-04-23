@@ -88,17 +88,6 @@ func (s *Server) handleCacheEntries(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Get all cached IPs — domain-level filtering not available in Snapshot
-	ipv4, ipv6, err := s.cacheAgent.Snapshot(r.Context())
-	if err != nil {
-		s.jsonError(w, http.StatusInternalServerError, "failed to get snapshot: "+err.Error())
-		return
-	}
-
-	s.jsonOK(w, map[string]interface{}{
-		"domain":     domain,
-		"ipv4_count": len(ipv4),
-		"ipv6_count": len(ipv6),
-		"note":       "domain-level lookup requires cache.GetByDomain — showing totals",
-	})
+	s.jsonError(w, http.StatusServiceUnavailable, "domain-level lookup not yet implemented")
+	return
 }

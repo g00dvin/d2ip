@@ -49,7 +49,7 @@ const currentRoute = computed(() => route.name as string)
       </router-link>
     </nav>
     <div class="px-4 py-2 border-t border-border flex justify-between text-txt-muted text-[11px]">
-      <span>v0.1.4</span>
+      <span></span>
       <span>:9099</span>
     </div>
   </aside>

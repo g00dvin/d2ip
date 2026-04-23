@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { onMounted, onUnmounted, ref, watch } from 'vue'
+import { onMounted } from 'vue'
 import { useToast } from '@/stores/toast'
 import {
   status, history, isRunning,
@@ -7,49 +7,14 @@ import {
 } from '@/stores/pipeline'
 import StatusBadge from '@/components/StatusBadge.vue'
 import { useConfirm } from '@/composables/useConfirm'
+import { usePolling } from '@/composables/usePolling'
 
 const toast = useToast()
 const confirm = useConfirm()
 
-let pollTimer: ReturnType<typeof setInterval> | null = null
-const pollLoading = ref(false)
+usePolling(fetchStatus, () => isRunning.value ? 2000 : 10000)
 
-function getInterval() {
-  return isRunning.value ? 2_000 : 10_000
-}
-
-async function poll() {
-  pollLoading.value = true
-  try {
-    await fetchStatus()
-  } finally {
-    pollLoading.value = false
-  }
-}
-
-function startPoll() {
-  stopPoll()
-  poll()
-  pollTimer = setInterval(() => poll(), getInterval())
-}
-
-function stopPoll() {
-  if (pollTimer) {
-    clearInterval(pollTimer)
-    pollTimer = null
-  }
-}
-
-watch(isRunning, () => {
-  startPoll()
-})
-
-onMounted(async () => {
-  await fetchHistory()
-  startPoll()
-})
-
-onUnmounted(() => stopPoll())
+onMounted(fetchHistory)
 
 async function handleRun() {
   try {

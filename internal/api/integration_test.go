@@ -130,19 +130,24 @@ func TestReadyz_ReturnsReady(t *testing.T) {
 	assert.Equal(t, "ready", body["status"])
 }
 
-func TestPipelineStatus_NilOrchestrator_Panics(t *testing.T) {
+func TestPipelineStatus_NilOrchestrator_ReturnsUnavailable(t *testing.T) {
 	s := newTestServer(t)
 	r := s.Handler()
 	req := httptest.NewRequest(http.MethodGet, "/pipeline/status", nil)
 	rec := httptest.NewRecorder()
 
-	// Pipeline status without orchestrator will panic since handler doesn't nil-check
-	defer func() {
-		if r := recover(); r == nil {
-			t.Log("handler did not panic — Status() on nil orch may be safe if orchestrator adds nil-check")
-		}
-	}()
 	r.ServeHTTP(rec, req)
+	assert.Equal(t, http.StatusServiceUnavailable, rec.Code)
+}
+
+func TestPipelineRun_NilOrchestrator_ReturnsUnavailable(t *testing.T) {
+	s := newTestServer(t)
+	r := s.Handler()
+	req := httptest.NewRequest(http.MethodPost, "/pipeline/run", nil)
+	rec := httptest.NewRecorder()
+
+	r.ServeHTTP(rec, req)
+	assert.Equal(t, http.StatusServiceUnavailable, rec.Code)
 }
 
 func TestPipelineCancel_NilOrchestrator_ReturnsUnavailable(t *testing.T) {
@@ -650,13 +655,11 @@ func TestCacheEntries_WithDomainParam(t *testing.T) {
 	resp, err := http.Get(srv.URL + "/api/cache/entries?domain=test.example.com")
 	require.NoError(t, err)
 	defer resp.Body.Close()
-	assert.Equal(t, http.StatusOK, resp.StatusCode)
+	assert.Equal(t, http.StatusServiceUnavailable, resp.StatusCode)
 
 	var body map[string]interface{}
 	require.NoError(t, json.NewDecoder(resp.Body).Decode(&body))
-	assert.Contains(t, body, "domain")
-	assert.Contains(t, body, "ipv4_count")
-	assert.Contains(t, body, "ipv6_count")
+	assert.Contains(t, body, "error")
 }
 
 func TestCachePurge_ReturnsPlaceholderResponse(t *testing.T) {
