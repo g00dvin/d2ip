@@ -89,5 +89,4 @@ func (s *Server) handleCacheEntries(w http.ResponseWriter, r *http.Request) {
 	}
 
 	s.jsonError(w, http.StatusServiceUnavailable, "domain-level lookup not yet implemented")
-	return
 }

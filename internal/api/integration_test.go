@@ -96,10 +96,6 @@ func withSource(st source.DLCStore) func(*Server) {
 	return func(s *Server) { s.sourceStore = st }
 }
 
-func withProvider(p domainlist.ListProvider) func(*Server) {
-	return func(s *Server) { s.dlProvider = p }
-}
-
 func TestHealthz_ReturnsOK(t *testing.T) {
 	s := newTestServer(t)
 	srv := httptest.NewServer(s.Handler())
