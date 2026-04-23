@@ -207,6 +207,9 @@ func serveCmd() {
 		Str("backend", string(cfg.Routing.Backend)).
 		Msg("Router initialized")
 
+	// Create event bus
+	eventBus := events.NewBus()
+
 	// Create orchestrator with all agents
 	orch := orchestrator.New(
 		sourceStore,
@@ -217,6 +220,7 @@ func serveCmd() {
 		exportAgent,
 		routerAgent,
 		configSnapshot,
+		eventBus,
 	)
 	log.Info().Msg("Orchestrator initialized with all agents")
 
@@ -237,10 +241,7 @@ func serveCmd() {
 	}
 
 	// Create config watcher with initial config
-	cfgWatcher := config.NewWatcher(*cfg, 1)
-
-	// Create event bus
-	eventBus := events.NewBus()
+	cfgWatcher := config.NewWatcher(*cfg, 1, eventBus)
 
 	// Create API server
 	apiServer := api.New(orch, routerAgent, cfgWatcher, cacheDB, domainProvider, sourceStore, cacheDB, eventBus)
@@ -275,6 +276,9 @@ func serveCmd() {
 	if err := httpServer.Shutdown(shutdownCtx); err != nil {
 		log.Error().Err(err).Msg("HTTP server shutdown error")
 	}
+
+	eventBus.Close()
+	log.Info().Msg("Event bus closed")
 
 	log.Info().Msg("Server stopped")
 }
