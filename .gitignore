@@ -12,6 +12,8 @@
 coverage.txt
 coverage.html
 
+/e2e/
+
 # Build artifacts
 /dist/
 /tmp/

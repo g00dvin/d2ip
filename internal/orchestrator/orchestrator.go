@@ -281,6 +281,12 @@ func (o *Orchestrator) Run(ctx context.Context, req PipelineRequest) (PipelineRe
 		}
 		metrics.PipelineStepDuration.WithLabelValues("resolver").Observe(time.Since(stepStart).Seconds())
 
+		log.Info().
+			Int("valid", report.Resolved).
+			Int("failed", report.Failed).
+			Int("total", len(results)).
+			Msg("orchestrator: resolution summary")
+
 		// Check context after resolution
 		select {
 		case <-ctx.Done():

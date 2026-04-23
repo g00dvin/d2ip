@@ -36,8 +36,9 @@ import (
 
 // Status is the lifecycle outcome of a single ResolveResult as observed by
 // the resolver. NXDOMAIN is surfaced separately by the resolver but is
-// persisted as 'failed' in the records table (the distinction only
-// matters for logging/metrics upstream of the cache).
+// persisted as 'nxdomain' in the domains table (the records table still
+// uses 'failed' for both NXDomain and Failed since those rows only exist
+// when a domain has IP addresses).
 type Status uint8
 
 // Status enumeration. The zero value is StatusValid because the most
@@ -47,6 +48,7 @@ const (
 	StatusValid Status = iota
 	StatusFailed
 	StatusNXDomain
+	StatusUnknown
 )
 
 // String renders the Status in the canonical lowercase form used in the
@@ -55,8 +57,12 @@ func (s Status) String() string {
 	switch s {
 	case StatusValid:
 		return "valid"
-	case StatusFailed, StatusNXDomain:
+	case StatusFailed:
 		return "failed"
+	case StatusNXDomain:
+		return "nxdomain"
+	case StatusUnknown:
+		return "unknown"
 	default:
 		return "failed"
 	}

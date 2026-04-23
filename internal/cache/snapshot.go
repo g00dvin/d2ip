@@ -79,6 +79,13 @@ func (c *SQLiteCache) snapshotFamily(ctx context.Context, typ string) ([]netip.A
 
 // NeedsRefresh returns the subset of `domains` that are stale according to
 // the TTL policy (see docs/agents/04-cache.md).
+//
+// A domain is considered fresh when:
+//   - It exists in the domains table with a known resolve_status
+//   - Its last_resolved_at is recent enough given the TTL for that status:
+//     'valid' → ttl, 'failed'/'nxdomain' → failedTTL, 'unknown' → stale
+//
+// Domains not present in the domains table are always stale.
 func (c *SQLiteCache) NeedsRefresh(ctx context.Context, domains []string, ttl, failedTTL time.Duration) ([]string, error) {
 	if len(domains) == 0 {
 		return nil, nil
@@ -88,7 +95,6 @@ func (c *SQLiteCache) NeedsRefresh(ctx context.Context, domains []string, ttl, f
 	validThreshold := now - int64(ttl.Seconds())
 	failedThreshold := now - int64(failedTTL.Seconds())
 
-	// Map of domain → max(updated_at) + status.
 	staleSet := make(map[string]bool, len(domains))
 
 	// Query in batches (SQLite param limit).
@@ -104,7 +110,7 @@ func (c *SQLiteCache) NeedsRefresh(ctx context.Context, domains []string, ttl, f
 		}
 	}
 
-	// Domains not in the result set are stale (no records at all).
+	// Domains not in the result set are stale (no row in domains table).
 	for _, name := range domains {
 		if _, seen := staleSet[name]; !seen {
 			staleSet[name] = true
@@ -125,7 +131,6 @@ func (c *SQLiteCache) NeedsRefresh(ctx context.Context, domains []string, ttl, f
 
 // checkStaleBatch queries a batch of domains and marks fresh ones in staleSet.
 func (c *SQLiteCache) checkStaleBatch(ctx context.Context, domains []string, validThresh, failedThresh int64, staleSet map[string]bool) error {
-	// Build query: for each domain, get MAX(updated_at) grouped by status.
 	placeholders := make([]string, len(domains))
 	args := make([]interface{}, len(domains))
 	for i, name := range domains {
@@ -133,12 +138,13 @@ func (c *SQLiteCache) checkStaleBatch(ctx context.Context, domains []string, val
 		args[i] = name
 	}
 
+	// Use domain-level resolve_status and last_resolved_at instead of
+	// aggregating from the records table. This correctly handles domains
+	// that resolved to zero IPs (failed/nxdomain).
 	query := `
-		SELECT d.name, r.status, MAX(r.updated_at) as max_updated
-		FROM domains d
-		LEFT JOIN records r ON r.domain_id = d.id
-		WHERE d.name IN (` + strings.Join(placeholders, ",") + `)
-		GROUP BY d.name, r.status
+		SELECT name, resolve_status, last_resolved_at
+		FROM domains
+		WHERE name IN (` + strings.Join(placeholders, ",") + `)
 	`
 
 	rows, err := c.db.QueryContext(ctx, query, args...)
@@ -147,45 +153,36 @@ func (c *SQLiteCache) checkStaleBatch(ctx context.Context, domains []string, val
 	}
 	defer rows.Close()
 
-	// Track which domains we've seen with fresh records.
-	freshSet := make(map[string]bool, len(domains))
-
 	for rows.Next() {
 		var name string
-		var status sql.NullString
-		var maxUpdated sql.NullInt64
+		var resolveStatus string
+		var lastResolvedAt sql.NullInt64
 
-		if err := rows.Scan(&name, &status, &maxUpdated); err != nil {
+		if err := rows.Scan(&name, &resolveStatus, &lastResolvedAt); err != nil {
 			return fmt.Errorf("scan: %w", err)
 		}
 
-		// Domain exists but has no records (LEFT JOIN → null).
-		if !maxUpdated.Valid {
-			continue // stale (will be marked below)
+		// Domain exists but was never resolved → stale.
+		if !lastResolvedAt.Valid || resolveStatus == "unknown" {
+			staleSet[name] = true
+			continue
 		}
 
-		// Check TTL based on status.
+		// Choose threshold based on resolve status.
 		threshold := validThresh
-		if status.Valid && status.String == "failed" {
+		if resolveStatus == "failed" || resolveStatus == "nxdomain" {
 			threshold = failedThresh
 		}
 
-		if maxUpdated.Int64 >= threshold {
-			freshSet[name] = true
+		if lastResolvedAt.Int64 >= threshold {
+			staleSet[name] = false
+		} else {
+			staleSet[name] = true
 		}
 	}
 
 	if err := rows.Err(); err != nil {
 		return fmt.Errorf("iterate: %w", err)
-	}
-
-	// Mark domains: if in freshSet → not stale, else stale.
-	for _, name := range domains {
-		if freshSet[name] {
-			staleSet[name] = false
-		} else {
-			staleSet[name] = true
-		}
 	}
 
 	return nil

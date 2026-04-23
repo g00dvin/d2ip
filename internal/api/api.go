@@ -2,6 +2,7 @@
 package api
 
 import (
+	"context"
 	"embed"
 	"encoding/json"
 	"errors"
@@ -164,6 +165,8 @@ func (s *Server) handleReady(w http.ResponseWriter, r *http.Request) {
 }
 
 // handlePipelineRun triggers a new pipeline execution.
+// The pipeline runs with a background-derived context so that
+// client disconnects don't cancel the long-running job.
 func (s *Server) handlePipelineRun(w http.ResponseWriter, r *http.Request) {
 	var req orchestrator.PipelineRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
@@ -171,7 +174,7 @@ func (s *Server) handlePipelineRun(w http.ResponseWriter, r *http.Request) {
 		_ = err
 	}
 
-	report, err := s.orch.Run(r.Context(), req)
+	report, err := s.orch.Run(context.Background(), req)
 	if err != nil {
 		if err == orchestrator.ErrBusy {
 			s.jsonError(w, http.StatusConflict, "pipeline already running")

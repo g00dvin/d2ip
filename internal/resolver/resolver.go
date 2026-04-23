@@ -227,17 +227,28 @@ func (r *DNSResolver) queryDomain(ctx context.Context, domain string) (ResolveRe
 		return result, false // Don't retry NXDOMAIN
 	}
 
-	// Both queries failed
-	result.Status = StatusFailed
-	if errA != nil {
-		result.Err = errA
-	} else {
-		result.Err = errAAAA
+	// Both queries returned no IPs
+	if len(ipv4) == 0 && len(ipv6) == 0 {
+		// If both queries returned nil error (NOERROR with no records),
+		// this is a valid domain that simply has no A/AAAA records (e.g. MX-only).
+		if errA == nil && errAAAA == nil {
+			result.Status = StatusNXDomain
+			return result, false
+		}
+		// Otherwise one or both queries failed
+		result.Status = StatusFailed
+		if errA != nil {
+			result.Err = errA
+		} else {
+			result.Err = errAAAA
+		}
+		shouldRetry := isRetryable(errA) || isRetryable(errAAAA)
+		return result, shouldRetry
 	}
 
-	// Retry on SERVFAIL or timeout
-	shouldRetry := isRetryable(errA) || isRetryable(errAAAA)
-	return result, shouldRetry
+	// Should not reach here, but handle defensively
+	result.Status = StatusFailed
+	return result, false
 }
 
 // calculateBackoff returns the backoff duration for the given attempt.
