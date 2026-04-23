@@ -1,24 +1,36 @@
+import { defineStore } from 'pinia'
 import { ref } from 'vue'
-import { getCacheStats, vacuumCache } from '@/api/rest'
+import * as api from '@/api/rest'
 import type { CacheStats } from '@/api/types'
 
-export const stats = ref<CacheStats | null>(null)
-export const loading = ref(false)
+export const useCacheStore = defineStore('cache', () => {
+  const stats = ref<CacheStats | null>(null)
+  const loading = ref(false)
+  const error = ref<Error | null>(null)
 
-export async function fetchStats() {
-  try {
-    stats.value = await getCacheStats()
-  } catch {
-    // keep previous state
+  async function fetchStats() {
+    loading.value = true
+    try {
+      const data = await api.getCacheStats()
+      stats.value = data
+      error.value = null
+    } catch (e) {
+      error.value = e as Error
+    } finally {
+      loading.value = false
+    }
   }
-}
 
-export async function vacuum() {
-  loading.value = true
-  try {
-    await vacuumCache()
-  } finally {
-    loading.value = false
+  async function vacuum() {
+    try {
+      await api.vacuumCache()
+      await fetchStats()
+      error.value = null
+    } catch (e) {
+      error.value = e as Error
+      throw e
+    }
   }
-  await fetchStats()
-}
+
+  return { stats, loading, error, fetchStats, vacuum }
+})

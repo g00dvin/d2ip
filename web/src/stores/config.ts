@@ -1,10 +1,7 @@
+import { defineStore } from 'pinia'
 import { ref } from 'vue'
-import { getSettings, updateSettings, deleteSetting } from '@/api/rest'
-
-export const config = ref<Record<string, unknown>>({})
-export const defaults = ref<Record<string, unknown>>({})
-export const overrides = ref<Record<string, string>>({})
-export const loading = ref(false)
+import * as api from '@/api/rest'
+import type { SettingsResponse } from '@/api/types'
 
 export const enumFields: Record<string, string[]> = {
   'resolver.network': ['udp', 'tcp', 'tcp-tls'],
@@ -25,24 +22,60 @@ export const durationFields = new Set([
   'scheduler.resolve_cycle',
 ])
 
-export async function fetchSettings() {
-  loading.value = true
-  try {
-    const data = await getSettings()
-    config.value = data.config
-    defaults.value = data.defaults
-    overrides.value = data.overrides
-  } finally {
-    loading.value = false
+export const useConfigStore = defineStore('config', () => {
+  const settings = ref<SettingsResponse | null>(null)
+  const loading = ref(false)
+  const error = ref<Error | null>(null)
+
+  async function fetchSettings() {
+    loading.value = true
+    try {
+      const data = await api.getSettings()
+      settings.value = data
+      error.value = null
+    } catch (e) {
+      error.value = e as Error
+    } finally {
+      loading.value = false
+    }
   }
-}
 
-export async function saveSettings(newOverrides: Record<string, string>) {
-  await updateSettings(newOverrides)
-  await fetchSettings()
-}
+  async function updateOverride(key: string, value: string) {
+    try {
+      await api.updateSettings({ [key]: value })
+      await fetchSettings()
+      error.value = null
+    } catch (e) {
+      error.value = e as Error
+      throw e
+    }
+  }
 
-export async function deleteOverride(key: string) {
-  await deleteSetting(key)
-  await fetchSettings()
-}
+  async function saveSettings(newOverrides: Record<string, string>) {
+    try {
+      await api.updateSettings(newOverrides)
+      await fetchSettings()
+      error.value = null
+    } catch (e) {
+      error.value = e as Error
+      throw e
+    }
+  }
+
+  async function deleteOverride(key: string) {
+    try {
+      await api.deleteSetting(key)
+      await fetchSettings()
+      error.value = null
+    } catch (e) {
+      error.value = e as Error
+      throw e
+    }
+  }
+
+  function handleSSE(_event: string, _data: unknown) {
+    fetchSettings()
+  }
+
+  return { settings, loading, error, fetchSettings, updateOverride, saveSettings, deleteOverride, handleSSE }
+})

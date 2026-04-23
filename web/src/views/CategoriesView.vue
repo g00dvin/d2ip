@@ -1,33 +1,35 @@
 <script setup lang="ts">
 import { onMounted, ref, computed } from 'vue'
 import { useToast } from '@/stores/toast'
-import { configured, allAvailable, domains, domainsCode, domainsTotal, fetchCategories, addCategory, removeCategory, fetchDomains } from '@/stores/categories'
+import { useCategoriesStore } from '@/stores/categories'
 import StatusBadge from '@/components/StatusBadge.vue'
 import { useConfirm } from '@/composables/useConfirm'
 
 const toast = useToast()
 const confirm = useConfirm()
+const categories = useCategoriesStore()
 
 const searchTerm = ref('')
 const domainFilter = ref('')
 
-onMounted(fetchCategories)
+onMounted(() => categories.fetchCategories())
 
 const filteredAvailable = computed(() => {
   const q = searchTerm.value.toLowerCase()
-  if (!q) return allAvailable.value
-  return allAvailable.value.filter((c) => c.toLowerCase().includes(q))
+  if (!q) return categories.available
+  return categories.available.filter((c: string) => c.toLowerCase().includes(q))
 })
 
 const filteredDomains = computed(() => {
   const q = domainFilter.value.toLowerCase()
-  if (!q) return domains.value.slice(0, 100)
-  return domains.value.filter((d) => d.toLowerCase().includes(q)).slice(0, 100)
+  const list = categories.browserData?.domains ?? []
+  if (!q) return list.slice(0, 100)
+  return list.filter((d: string) => d.toLowerCase().includes(q)).slice(0, 100)
 })
 
 async function handleAdd(code: string) {
   try {
-    await addCategory(code)
+    await categories.addCategory(code)
     toast.success('added: ' + code)
   } catch (e) {
     toast.error((e as Error).message)
@@ -37,7 +39,7 @@ async function handleAdd(code: string) {
 async function handleRemove(code: string) {
   if (!(await confirm.confirm('remove ' + code + '?'))) return
   try {
-    await removeCategory(code)
+    await categories.removeCategory(code)
     toast.success('removed: ' + code)
   } catch (e) {
     toast.error((e as Error).message)
@@ -46,7 +48,7 @@ async function handleRemove(code: string) {
 
 async function handleBrowse(code: string) {
   try {
-    await fetchDomains(code)
+    await categories.browseCategory(code)
   } catch (e) {
     toast.error((e as Error).message)
   }
@@ -57,7 +59,7 @@ async function handleBrowse(code: string) {
   <div>
     <div class="panel">
       <div class="panel-label">configured categories</div>
-      <template v-if="configured.length === 0">
+      <template v-if="categories.configured.length === 0">
         <StatusBadge type="muted">none</StatusBadge>
         <div class="warning-banner mt-3">
           No categories configured. Search below and click 'add' to start.
@@ -69,7 +71,7 @@ async function handleBrowse(code: string) {
             <tr><th>code</th><th>domains</th><th>actions</th></tr>
           </thead>
           <tbody>
-            <tr v-for="c in configured" :key="c.code">
+            <tr v-for="c in categories.configured" :key="c.code">
               <td>{{ c.code }}</td>
               <td>{{ c.domain_count ?? '?' }}</td>
               <td>
@@ -110,8 +112,8 @@ async function handleBrowse(code: string) {
       </div>
     </div>
 
-    <div v-if="domainsCode" class="panel">
-      <div class="panel-label">domains: {{ domainsCode }}</div>
+    <div v-if="categories.browserOpen && categories.browserData" class="panel">
+      <div class="panel-label">domains: {{ categories.browserData.code }}</div>
       <input
         v-model="domainFilter"
         type="text"
@@ -119,8 +121,8 @@ async function handleBrowse(code: string) {
         placeholder="filter domains..."
       />
       <div v-for="d in filteredDomains" :key="d" class="text-xs">{{ d }}</div>
-      <div v-if="domains.length > 100 || (domainFilter === '' && domainsTotal > 100)" class="meta-text">
-        ... and {{ domainsTotal - 100 }} more (use filter)
+      <div v-if="categories.browserData.domains.length > 100 || (domainFilter === '' && categories.browserData.total > 100)" class="meta-text">
+        ... and {{ categories.browserData.total - 100 }} more (use filter)
       </div>
     </div>
   </div>

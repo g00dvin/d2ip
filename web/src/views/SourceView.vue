@@ -1,9 +1,10 @@
 <script setup lang="ts">
 import { onMounted } from 'vue'
-import { info, fetchSourceInfo } from '@/stores/source'
+import { useSourceStore } from '@/stores/source'
+const source = useSourceStore()
 import StatusBadge from '@/components/StatusBadge.vue'
 
-onMounted(fetchSourceInfo)
+onMounted(() => source.fetchInfo())
 
 function fmtDate(d: string | null | undefined) {
   return d ? new Date(d).toLocaleString() : 'never'
@@ -14,13 +15,13 @@ function fmtDate(d: string | null | undefined) {
   <div>
     <div class="panel">
       <div class="panel-label">source info</div>
-      <template v-if="info && info.available">
-        <div class="meta-text">fetched: {{ fmtDate(info.fetched_at) }}</div>
-        <div class="meta-text">size: {{ info.size ?? '?' }} bytes</div>
-        <div class="meta-text">etag: {{ info.etag ?? 'none' }}</div>
-        <div v-if="info.sha256" class="meta-text">sha256: {{ info.sha256.substring(0, 16) }}...</div>
+      <template v-if="source.info && source.info.available">
+        <div class="meta-text">fetched: {{ fmtDate(source.info.fetched_at) }}</div>
+        <div class="meta-text">size: {{ source.info.size ?? '?' }} bytes</div>
+        <div class="meta-text">etag: {{ source.info.etag ?? 'none' }}</div>
+        <div v-if="source.info.sha256" class="meta-text">sha256: {{ source.info.sha256.substring(0, 16) }}...</div>
       </template>
-      <template v-else-if="info && !info.available">
+      <template v-else-if="source.info && !source.info.available">
         <StatusBadge type="muted">source not available</StatusBadge>
       </template>
       <template v-else>

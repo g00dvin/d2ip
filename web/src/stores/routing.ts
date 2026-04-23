@@ -1,41 +1,52 @@
+import { defineStore } from 'pinia'
 import { ref } from 'vue'
-import { getRoutingSnapshot, dryRunRouting, rollbackRouting } from '@/api/rest'
+import * as api from '@/api/rest'
 import type { RoutingSnapshot, DryRunResult } from '@/api/types'
 
-export const snapshot = ref<RoutingSnapshot | null>(null)
-export const dryRunResult = ref<DryRunResult | null>(null)
-export const loading = ref(false)
+export const useRoutingStore = defineStore('routing', () => {
+  const snapshot = ref<RoutingSnapshot | null>(null)
+  const dryRunResult = ref<DryRunResult | null>(null)
+  const loading = ref(false)
+  const error = ref<Error | null>(null)
 
-export async function fetchSnapshot() {
-  try {
-    snapshot.value = await getRoutingSnapshot()
-  } catch {
-    // keep previous state
+  async function fetchSnapshot() {
+    try {
+      const data = await api.getRoutingSnapshot()
+      snapshot.value = data
+      error.value = null
+    } catch (e) {
+      error.value = e as Error
+    }
   }
-}
 
-export async function dryRun() {
-  loading.value = true
-  try {
-    dryRunResult.value = await dryRunRouting({
-      ipv4_prefixes: [],
-      ipv6_prefixes: [],
-    })
-  } catch (e) {
-    throw e
-  } finally {
-    loading.value = false
+  async function dryRun(ipv4: string[], ipv6: string[]) {
+    loading.value = true
+    try {
+      const data = await api.dryRunRouting({ ipv4_prefixes: ipv4, ipv6_prefixes: ipv6 })
+      dryRunResult.value = data
+      error.value = null
+    } catch (e) {
+      error.value = e as Error
+      throw e
+    } finally {
+      loading.value = false
+    }
   }
-}
 
-export async function rollback() {
-  loading.value = true
-  try {
-    await rollbackRouting()
-  } catch (e) {
-    throw e
-  } finally {
-    loading.value = false
+  async function rollback() {
+    try {
+      await api.rollbackRouting()
+      await fetchSnapshot()
+      error.value = null
+    } catch (e) {
+      error.value = e as Error
+      throw e
+    }
   }
-  await fetchSnapshot()
-}
+
+  function handleSSE(_event: string, data: unknown) {
+    snapshot.value = { ...snapshot.value, ...(data as Record<string, unknown>) } as RoutingSnapshot
+  }
+
+  return { snapshot, dryRunResult, loading, error, fetchSnapshot, dryRun, rollback, handleSSE }
+})

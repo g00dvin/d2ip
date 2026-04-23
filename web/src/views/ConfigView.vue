@@ -1,31 +1,31 @@
 <script setup lang="ts">
 import { onMounted, computed, ref, watch } from 'vue'
 import { useToast } from '@/stores/toast'
-import {
-  config, overrides, enumFields, durationFields,
-  fetchSettings, saveSettings, deleteOverride,
-} from '@/stores/config'
+import { useConfigStore, enumFields, durationFields } from '@/stores/config'
 
 const toast = useToast()
+const configStore = useConfigStore()
 
-onMounted(fetchSettings)
+onMounted(() => configStore.fetchSettings())
 
 const sections = computed(() => {
   const order = ['source', 'resolver', 'cache', 'aggregation', 'export', 'routing', 'scheduler', 'logging', 'metrics']
-  return order.filter((s) => config.value[s] !== undefined)
+  return order.filter((s) => configStore.settings?.config[s] !== undefined)
 })
 
 type FieldDef = { key: string; value: unknown; dottedKey: string; isOverride: boolean }
 
 function getFields(section: string): FieldDef[] {
-  const secData = config.value[section] as Record<string, unknown> | undefined
+  const cfg = configStore.settings?.config as Record<string, unknown> | undefined
+  const secData = cfg?.[section] as Record<string, unknown> | undefined
   if (!secData || typeof secData !== 'object') return []
+  const overrides = configStore.settings?.overrides ?? {}
   return Object.entries(secData)
     .filter(([, v]) => typeof v !== 'object' || Array.isArray(v))
     .map(([key, value]) => {
       const dottedKey = `${section}.${key}`
-      const isOverride = dottedKey in overrides.value
-      const displayValue = isOverride ? overrides.value[dottedKey] : value
+      const isOverride = dottedKey in overrides
+      const displayValue = isOverride ? overrides[dottedKey] : value
       return { key, value: displayValue, dottedKey, isOverride }
     })
 }
@@ -41,8 +41,8 @@ function formatDuration(ns: number): string {
 const formData = ref<Record<string, string>>({})
 
 // Build formData from config whenever settings load.
-watch(() => config.value, (cfg) => {
-  if (!cfg || !cfg.source) return
+watch(() => configStore.settings, (cfg) => {
+  if (!cfg || !cfg.config || !cfg.config.source) return
   const result: Record<string, string> = {}
   for (const section of sections.value) {
     for (const field of getFields(section)) {
@@ -62,11 +62,12 @@ watch(() => config.value, (cfg) => {
 async function handleSave() {
   // Only send fields that differ from current config values.
   const toSend: Record<string, string> = {}
+  const overrides = configStore.settings?.overrides ?? {}
   for (const section of sections.value) {
     for (const field of getFields(section)) {
       const dk = field.dottedKey
       const original = field.isOverride
-        ? overrides.value[dk]
+        ? overrides[dk]
         : (typeof field.value === 'number' && durationFields.has(dk))
           ? formatDuration(field.value as number)
           : String(field.value ?? '')
@@ -80,7 +81,7 @@ async function handleSave() {
     return
   }
   try {
-    await saveSettings(toSend)
+    await configStore.saveSettings(toSend)
     toast.success('config saved')
   } catch (e) {
     toast.error('save failed: ' + (e as Error).message)
@@ -89,7 +90,7 @@ async function handleSave() {
 
 async function handleReset(key: string) {
   try {
-    await deleteOverride(key)
+    await configStore.deleteOverride(key)
     toast.success('override removed: ' + key)
   } catch (e) {
     toast.error((e as Error).message)
@@ -109,7 +110,7 @@ function isDuration(dottedKey: string): boolean {
   <div>
     <div class="panel">
       <div class="panel-label">configuration</div>
-      <template v-if="!config || !config.source">
+      <template v-if="!configStore.settings || !configStore.settings.config || !configStore.settings.config.source">
         <span class="status-muted">loading...</span>
       </template>
       <template v-else>
