@@ -19,6 +19,7 @@ import (
 	"github.com/goodvin/d2ip/internal/cache"
 	"github.com/goodvin/d2ip/internal/config"
 	"github.com/goodvin/d2ip/internal/domainlist"
+	"github.com/goodvin/d2ip/internal/events"
 	"github.com/goodvin/d2ip/internal/exporter"
 	"github.com/goodvin/d2ip/internal/metrics"
 	"github.com/goodvin/d2ip/internal/resolver"
@@ -83,6 +84,9 @@ type Orchestrator struct {
 	// Run history (last 10).
 	history   []PipelineReport
 	historyMu sync.Mutex
+
+	// Event bus for pipeline notifications.
+	eventBus *events.Bus
 }
 
 // New creates an Orchestrator with injected agent dependencies.
@@ -108,6 +112,17 @@ func New(
 	}
 }
 
+func (o *Orchestrator) emit(eventType string, data any) {
+	if o.eventBus == nil {
+		return
+	}
+	o.eventBus.Publish("pipeline", events.Event{
+		Topic: "pipeline",
+		Type:  eventType,
+		Data:  data,
+	})
+}
+
 // Run executes the full pipeline: fetch → parse → resolve → cache → aggregate → export → route.
 // Returns ErrBusy if another run is already in progress.
 func (o *Orchestrator) Run(ctx context.Context, req PipelineRequest) (PipelineReport, error) {
@@ -121,6 +136,7 @@ func (o *Orchestrator) Run(ctx context.Context, req PipelineRequest) (PipelineRe
 	defer o.running.Store(false)
 
 	runID := time.Now().UnixNano() // temporary; in Iteration 4 we'll use DB-assigned id
+	o.emit("pipeline.start", map[string]any{"run_id": runID})
 	started := time.Now()
 
 	ctx, cancel := context.WithCancel(ctx)
@@ -137,6 +153,12 @@ func (o *Orchestrator) Run(ctx context.Context, req PipelineRequest) (PipelineRe
 	pipelineSucceeded := false
 	defer func() {
 		if !pipelineSucceeded {
+			if report.RunID != 0 {
+				o.emit("pipeline.failed", map[string]any{
+					"run_id": runID,
+					"error":  "pipeline failed",
+				})
+			}
 			metrics.PipelineRunsTotal.WithLabelValues("failed").Inc()
 			o.historyMu.Lock()
 			if len(o.history) >= 10 {
@@ -280,6 +302,13 @@ func (o *Orchestrator) Run(ctx context.Context, req PipelineRequest) (PipelineRe
 			}
 		}
 		metrics.PipelineStepDuration.WithLabelValues("resolver").Observe(time.Since(stepStart).Seconds())
+		o.emit("pipeline.progress", map[string]any{
+			"run_id":   runID,
+			"step":     "resolver",
+			"resolved": report.Resolved,
+			"failed":   report.Failed,
+			"total":    len(toResolve),
+		})
 
 		log.Info().
 			Int("valid", report.Resolved).
@@ -453,6 +482,16 @@ func (o *Orchestrator) Run(ctx context.Context, req PipelineRequest) (PipelineRe
 
 	report.Duration = time.Since(started)
 	log.Info().Int64("run_id", runID).Dur("duration", report.Duration).Msg("orchestrator: pipeline completed")
+
+	o.emit("pipeline.complete", map[string]any{
+		"run_id":   runID,
+		"domains":  report.Domains,
+		"resolved": report.Resolved,
+		"failed":   report.Failed,
+		"ipv4_out": report.IPv4Out,
+		"ipv6_out": report.IPv6Out,
+		"duration": report.Duration.Seconds(),
+	})
 
 	// Update metrics for successful pipeline run
 	pipelineSucceeded = true
