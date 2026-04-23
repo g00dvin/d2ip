@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { onMounted, computed } from 'vue'
+import { onMounted, computed, ref, watch } from 'vue'
 import { useToast } from '@/stores/toast'
 import {
   config, overrides, enumFields, durationFields,
@@ -30,23 +30,57 @@ function getFields(section: string): FieldDef[] {
     })
 }
 
-const formData = computed(() => {
+// Convert nanoseconds to human-readable duration string.
+function formatDuration(ns: number): string {
+  const seconds = Math.floor(ns / 1e9)
+  if (seconds % 3600 === 0 && seconds >= 3600) return `${seconds / 3600}h`
+  if (seconds % 60 === 0 && seconds >= 60) return `${seconds / 60}m`
+  return `${seconds}s`
+}
+
+const formData = ref<Record<string, string>>({})
+
+// Build formData from config whenever settings load.
+watch(() => config.value, (cfg) => {
+  if (!cfg || !cfg.source) return
   const result: Record<string, string> = {}
   for (const section of sections.value) {
     for (const field of getFields(section)) {
+      const dk = field.dottedKey
       if (typeof field.value === 'boolean') {
-        result[field.dottedKey] = field.value ? 'true' : 'false'
+        result[dk] = field.value ? 'true' : 'false'
+      } else if (typeof field.value === 'number' && durationFields.has(dk)) {
+        result[dk] = formatDuration(field.value as number)
       } else {
-        result[field.dottedKey] = String(field.value)
+        result[dk] = String(field.value ?? '')
       }
     }
   }
-  return result
-})
+  formData.value = result
+}, { immediate: true })
 
 async function handleSave() {
+  // Only send fields that differ from current config values.
+  const toSend: Record<string, string> = {}
+  for (const section of sections.value) {
+    for (const field of getFields(section)) {
+      const dk = field.dottedKey
+      const original = field.isOverride
+        ? overrides.value[dk]
+        : (typeof field.value === 'number' && durationFields.has(dk))
+          ? formatDuration(field.value as number)
+          : String(field.value ?? '')
+      if (formData.value[dk] !== original) {
+        toSend[dk] = formData.value[dk]
+      }
+    }
+  }
+  if (Object.keys(toSend).length === 0) {
+    toast.success('no changes to save')
+    return
+  }
   try {
-    await saveSettings(formData.value)
+    await saveSettings(toSend)
     toast.success('config saved')
   } catch (e) {
     toast.error('save failed: ' + (e as Error).message)

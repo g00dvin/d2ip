@@ -1,0 +1,1 @@
+import{d as a,c as r,n,y as s,j as o}from"./index.BuI8QwzL.js";const m=a({__name:"StatusBadge",props:{type:{}},setup(e){return(t,c)=>(o(),r("span",{class:n([e.type==="ok"?"text-ok":e.type==="warn"?"text-warn":e.type==="error"?"text-err":"text-txt-muted"])},[s(t.$slots,"default")],2))}});export{m as _};
