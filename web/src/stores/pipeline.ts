@@ -1,5 +1,6 @@
 import { ref, computed } from 'vue'
-import api, { type PipelineStatus, type PipelineHistory } from '@/api'
+import { getPipelineStatus, getPipelineHistory, runPipeline as apiRunPipeline, cancelPipeline as apiCancelPipeline } from '@/api/rest'
+import type { PipelineStatus, PipelineHistory } from '@/api/types'
 
 export const status = ref<PipelineStatus | null>(null)
 export const history = ref<PipelineHistory['history']>([])
@@ -9,8 +10,7 @@ export const isRunning = computed(() => status.value?.running ?? false)
 
 export async function fetchStatus() {
   try {
-    const { data } = await api.get<PipelineStatus>('/pipeline/status')
-    status.value = data
+    status.value = await getPipelineStatus()
   } catch {
     // keep previous state on error
   }
@@ -18,7 +18,7 @@ export async function fetchStatus() {
 
 export async function fetchHistory() {
   try {
-    const { data } = await api.get<PipelineHistory>('/api/pipeline/history')
+    const data = await getPipelineHistory()
     history.value = data.history || []
   } catch {
     // keep previous state
@@ -30,7 +30,7 @@ export async function runPipeline(forceResolve = false) {
   try {
     const body: Record<string, unknown> = {}
     if (forceResolve) body.force_resolve = true
-    await api.post('/pipeline/run', body)
+    await apiRunPipeline(body)
     return true
   } catch (e) {
     throw e
@@ -41,10 +41,12 @@ export async function runPipeline(forceResolve = false) {
 
 export async function cancelPipeline() {
   try {
-    await api.post('/pipeline/cancel')
+    await apiCancelPipeline()
     return true
   } catch (e) {
     throw e
+  } finally {
+    loading.value = false
   }
 }
 

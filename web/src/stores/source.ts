@@ -1,12 +1,12 @@
 import { ref } from 'vue'
-import api, { type SourceInfo } from '@/api'
+import { getSourceInfo } from '@/api/rest'
+import type { SourceInfo } from '@/api/types'
 
 export const info = ref<SourceInfo | null>(null)
 
 export async function fetchSourceInfo() {
   try {
-    const { data } = await api.get<SourceInfo>('/api/source/info')
-    info.value = data
+    info.value = await getSourceInfo()
   } catch {
     // keep previous state
   }

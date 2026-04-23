@@ -1,5 +1,5 @@
 import { ref } from 'vue'
-import api, { type SettingsResponse } from '@/api'
+import { getSettings, updateSettings, deleteSetting } from '@/api/rest'
 
 export const config = ref<Record<string, unknown>>({})
 export const defaults = ref<Record<string, unknown>>({})
@@ -28,7 +28,7 @@ export const durationFields = new Set([
 export async function fetchSettings() {
   loading.value = true
   try {
-    const { data } = await api.get<SettingsResponse>('/api/settings')
+    const data = await getSettings()
     config.value = data.config
     defaults.value = data.defaults
     overrides.value = data.overrides
@@ -38,11 +38,11 @@ export async function fetchSettings() {
 }
 
 export async function saveSettings(newOverrides: Record<string, string>) {
-  await api.put('/api/settings', newOverrides)
+  await updateSettings(newOverrides)
   await fetchSettings()
 }
 
 export async function deleteOverride(key: string) {
-  await api.delete(`/api/settings/${encodeURIComponent(key)}`)
+  await deleteSetting(key)
   await fetchSettings()
 }

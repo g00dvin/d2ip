@@ -1,29 +1,9 @@
-import axios from 'axios'
-
-const api = axios.create({
-  baseURL: '/',
-  timeout: 15000,
-  headers: { 'Content-Type': 'application/json' },
-})
-
-api.interceptors.response.use(
-  (r) => r,
-  (e) => {
-    if (e.response?.data?.error) {
-      return Promise.reject(new Error(e.response.data.error))
-    }
-    return Promise.reject(e)
-  },
-)
-
-export default api
-
 export interface PipelineStatus {
   running: boolean
-  run_id: string
+  run_id: number
   started: string
   report: {
-    run_id: string
+    run_id: number
     duration: number
     domains: number
     resolved: number
@@ -35,7 +15,7 @@ export interface PipelineStatus {
 
 export interface PipelineHistory {
   history: Array<{
-    run_id: string
+    run_id: number
     duration: number
     domains: number
     resolved: number

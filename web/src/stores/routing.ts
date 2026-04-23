@@ -1,5 +1,6 @@
 import { ref } from 'vue'
-import api, { type RoutingSnapshot, type DryRunResult } from '@/api'
+import { getRoutingSnapshot, dryRunRouting, rollbackRouting } from '@/api/rest'
+import type { RoutingSnapshot, DryRunResult } from '@/api/types'
 
 export const snapshot = ref<RoutingSnapshot | null>(null)
 export const dryRunResult = ref<DryRunResult | null>(null)
@@ -7,8 +8,7 @@ export const loading = ref(false)
 
 export async function fetchSnapshot() {
   try {
-    const { data } = await api.get<RoutingSnapshot>('/routing/snapshot')
-    snapshot.value = data
+    snapshot.value = await getRoutingSnapshot()
   } catch {
     // keep previous state
   }
@@ -17,11 +17,10 @@ export async function fetchSnapshot() {
 export async function dryRun() {
   loading.value = true
   try {
-    const { data } = await api.post<DryRunResult>('/routing/dry-run', {
+    dryRunResult.value = await dryRunRouting({
       ipv4_prefixes: [],
       ipv6_prefixes: [],
     })
-    dryRunResult.value = data
   } catch (e) {
     throw e
   } finally {
@@ -32,7 +31,7 @@ export async function dryRun() {
 export async function rollback() {
   loading.value = true
   try {
-    await api.post('/routing/rollback')
+    await rollbackRouting()
   } catch (e) {
     throw e
   } finally {

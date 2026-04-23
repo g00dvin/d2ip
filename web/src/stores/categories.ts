@@ -1,5 +1,6 @@
 import { ref } from 'vue'
-import api, { type CategoriesResponse, type CategoryDomainsResponse, type CategoryInfo } from '@/api'
+import { getCategories, addCategory as apiAddCategory, removeCategory as apiRemoveCategory, getCategoryDomains } from '@/api/rest'
+import type { CategoryInfo } from '@/api/types'
 
 export const configured = ref<CategoryInfo[]>([])
 export const available = ref<string[]>([])
@@ -12,7 +13,7 @@ export const loading = ref(false)
 export async function fetchCategories() {
   loading.value = true
   try {
-    const { data } = await api.get<CategoriesResponse>('/api/categories')
+    const data = await getCategories()
     configured.value = data.configured || []
     available.value = data.available || []
     allAvailable.value = data.available || []
@@ -22,22 +23,19 @@ export async function fetchCategories() {
 }
 
 export async function addCategory(code: string) {
-  await api.post('/api/categories', { code })
+  await apiAddCategory(code)
   await fetchCategories()
 }
 
 export async function removeCategory(code: string) {
-  await api.delete(`/api/categories/${encodeURIComponent(code)}`)
+  await apiRemoveCategory(code)
   domainsCode.value = ''
   domains.value = []
   await fetchCategories()
 }
 
 export async function fetchDomains(code: string) {
-  const { data } = await api.get<CategoryDomainsResponse>(
-    `/api/categories/${encodeURIComponent(code)}/domains`,
-    { params: { per_page: 500 } },
-  )
+  const data = await getCategoryDomains(code, { per_page: 500 })
   domains.value = data.domains || []
   domainsTotal.value = data.total
   domainsCode.value = code

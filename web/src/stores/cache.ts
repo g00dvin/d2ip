@@ -1,13 +1,13 @@
 import { ref } from 'vue'
-import api, { type CacheStats } from '@/api'
+import { getCacheStats, vacuumCache } from '@/api/rest'
+import type { CacheStats } from '@/api/types'
 
 export const stats = ref<CacheStats | null>(null)
 export const loading = ref(false)
 
 export async function fetchStats() {
   try {
-    const { data } = await api.get<CacheStats>('/api/cache/stats')
-    stats.value = data
+    stats.value = await getCacheStats()
   } catch {
     // keep previous state
   }
@@ -16,7 +16,7 @@ export async function fetchStats() {
 export async function vacuum() {
   loading.value = true
   try {
-    await api.post('/api/cache/vacuum')
+    await vacuumCache()
   } finally {
     loading.value = false
   }
