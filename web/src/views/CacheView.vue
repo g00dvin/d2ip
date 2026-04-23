@@ -1,54 +1,41 @@
 <script setup lang="ts">
-import { onMounted } from 'vue'
-import { usePolling } from '@/composables/usePolling'
-import { useToast } from '@/stores/toast'
 import { useCacheStore } from '@/stores/cache'
-const cache = useCacheStore()
-import StatusBadge from '@/components/StatusBadge.vue'
+import { usePolling } from '@/composables/usePolling'
 import { useConfirm } from '@/composables/useConfirm'
+import CacheChart from '@/components/CacheChart.vue'
 
-const toast = useToast()
+const cache = useCacheStore()
 const confirm = useConfirm()
 
-const poll = usePolling(() => cache.fetchStats(), 30_000)
-onMounted(() => poll.start())
-
-function fmtDate(d: string | null | undefined) {
-  return d ? new Date(d).toLocaleString() : '-'
-}
+usePolling(() => cache.fetchStats(), 30_000)
 
 async function handleVacuum() {
-  if (!(await confirm.confirm('run sqlite vacuum?'))) return
-  try {
-    await cache.vacuum()
-    toast.success('vacuum complete')
-  } catch (e) {
-    toast.error((e as Error).message)
-  }
+  if (!(await confirm.confirm('Run vacuum? This may take a while.'))) return
+  await cache.vacuum()
 }
 </script>
 
 <template>
-  <div>
-    <div class="panel">
-      <div class="panel-label">cache statistics</div>
-      <template v-if="cache.stats">
-        <div class="meta-text">domains: {{ cache.stats.domains }}</div>
-        <div class="meta-text">records: {{ cache.stats.records_total }} (v4:{{ cache.stats.records_v4 }} v6:{{ cache.stats.records_v6 }})</div>
-        <div class="meta-text">valid: {{ cache.stats.records_valid }} | failed: {{ cache.stats.records_failed }}</div>
-        <div class="meta-text">oldest: {{ fmtDate(cache.stats.oldest_updated) }}</div>
-        <div class="meta-text">newest: {{ fmtDate(cache.stats.newest_updated) }}</div>
-      </template>
-      <template v-else>
-        <StatusBadge type="muted">loading...</StatusBadge>
-      </template>
-    </div>
+  <div class="space-y-4">
+    <n-card title="Cache Statistics">
+      <n-spin v-if="cache.loading" />
+      <n-empty v-else-if="!cache.stats" description="No data" />
+      <n-grid v-else cols="2 s:3 m:4" :x-gap="16" :y-gap="16">
+        <n-gi><n-statistic label="Domains" :value="cache.stats.domains" /></n-gi>
+        <n-gi><n-statistic label="Records" :value="cache.stats.records_total" /></n-gi>
+        <n-gi><n-statistic label="Valid" :value="cache.stats.records_valid" /></n-gi>
+        <n-gi><n-statistic label="Failed" :value="cache.stats.records_failed" /></n-gi>
+      </n-grid>
+    </n-card>
 
-    <div class="panel">
-      <div class="panel-label">actions</div>
-      <div class="flex gap-2">
-        <button class="btn btn-warn" @click="handleVacuum">vacuum</button>
-      </div>
-    </div>
+    <n-card v-if="cache.stats" title="Distribution">
+      <CacheChart :stats="cache.stats" />
+    </n-card>
+
+    <n-card title="Actions">
+      <n-button type="primary" @click="handleVacuum">Vacuum</n-button>
+    </n-card>
+
+    <n-modal v-model:show="confirm.visible" preset="dialog" title="Confirm" :content="confirm.message" positive-text="Yes" negative-text="No" @positive-click="confirm.onOk" @negative-click="confirm.onCancel" />
   </div>
 </template>

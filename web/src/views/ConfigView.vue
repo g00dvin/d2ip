@@ -1,183 +1,56 @@
 <script setup lang="ts">
-import { onMounted, computed, ref, watch } from 'vue'
-import { useToast } from '@/stores/toast'
-import { useConfigStore, enumFields, durationFields } from '@/stores/config'
+import { onMounted } from 'vue'
+import { useConfigStore } from '@/stores/config'
 
-const toast = useToast()
-const configStore = useConfigStore()
+const config = useConfigStore()
 
-onMounted(() => configStore.fetchSettings())
+onMounted(() => config.fetchSettings())
 
-const sections = computed(() => {
-  const order = ['source', 'resolver', 'cache', 'aggregation', 'export', 'routing', 'scheduler', 'logging', 'metrics']
-  return order.filter((s) => configStore.settings?.config[s] !== undefined)
-})
+const tabs = [
+  { name: 'General', keys: ['listen'] },
+  { name: 'Source', keys: ['source.url', 'source.cache_path', 'source.refresh_interval', 'source.http_timeout'] },
+  { name: 'Resolver', keys: ['resolver.upstream', 'resolver.network', 'resolver.concurrency', 'resolver.qps', 'resolver.timeout', 'resolver.retries', 'resolver.backoff_base', 'resolver.backoff_max', 'resolver.follow_cname', 'resolver.enable_v4', 'resolver.enable_v6'] },
+  { name: 'Cache', keys: ['cache.db_path', 'cache.ttl', 'cache.failed_ttl', 'cache.vacuum_after'] },
+  { name: 'Aggregation', keys: ['aggregation.enabled', 'aggregation.level', 'aggregation.v4_max_prefix', 'aggregation.v6_max_prefix'] },
+  { name: 'Export', keys: ['export.dir', 'export.ipv4_file', 'export.ipv6_file'] },
+  { name: 'Routing', keys: ['routing.enabled', 'routing.backend', 'routing.table_id', 'routing.iface', 'routing.nft_table', 'routing.nft_set_v4', 'routing.nft_set_v6', 'routing.state_path', 'routing.dry_run'] },
+  { name: 'Scheduler', keys: ['scheduler.dlc_refresh', 'scheduler.resolve_cycle'] },
+  { name: 'Logging', keys: ['logging.level', 'logging.format'] },
+  { name: 'Metrics', keys: ['metrics.enabled', 'metrics.path'] },
+]
 
-type FieldDef = { key: string; value: unknown; dottedKey: string; isOverride: boolean }
-
-function getFields(section: string): FieldDef[] {
-  const cfg = configStore.settings?.config as Record<string, unknown> | undefined
-  const secData = cfg?.[section] as Record<string, unknown> | undefined
-  if (!secData || typeof secData !== 'object') return []
-  const overrides = configStore.settings?.overrides ?? {}
-  return Object.entries(secData)
-    .filter(([, v]) => typeof v !== 'object' || Array.isArray(v))
-    .map(([key, value]) => {
-      const dottedKey = `${section}.${key}`
-      const isOverride = dottedKey in overrides
-      const displayValue = isOverride ? overrides[dottedKey] : value
-      return { key, value: displayValue, dottedKey, isOverride }
-    })
+function isOverridden(key: string): boolean {
+  return config.settings?.overrides?.[key] !== undefined
 }
 
-// Convert nanoseconds to human-readable duration string.
-function formatDuration(ns: number): string {
-  const seconds = Math.floor(ns / 1e9)
-  if (seconds % 3600 === 0 && seconds >= 3600) return `${seconds / 3600}h`
-  if (seconds % 60 === 0 && seconds >= 60) return `${seconds / 60}m`
-  return `${seconds}s`
+async function saveOverride(key: string, value: string) {
+  await config.updateOverride(key, value)
 }
 
-const formData = ref<Record<string, string>>({})
-
-// Build formData from config whenever settings load.
-watch(() => configStore.settings, (cfg) => {
-  if (!cfg || !cfg.config || !cfg.config.source) return
-  const result: Record<string, string> = {}
-  for (const section of sections.value) {
-    for (const field of getFields(section)) {
-      const dk = field.dottedKey
-      if (typeof field.value === 'boolean') {
-        result[dk] = field.value ? 'true' : 'false'
-      } else if (typeof field.value === 'number' && durationFields.has(dk)) {
-        result[dk] = formatDuration(field.value as number)
-      } else {
-        result[dk] = String(field.value ?? '')
-      }
-    }
-  }
-  formData.value = result
-}, { immediate: true })
-
-async function handleSave() {
-  // Only send fields that differ from current config values.
-  const toSend: Record<string, string> = {}
-  const overrides = configStore.settings?.overrides ?? {}
-  for (const section of sections.value) {
-    for (const field of getFields(section)) {
-      const dk = field.dottedKey
-      const original = field.isOverride
-        ? overrides[dk]
-        : (typeof field.value === 'number' && durationFields.has(dk))
-          ? formatDuration(field.value as number)
-          : String(field.value ?? '')
-      if (formData.value[dk] !== original) {
-        toSend[dk] = formData.value[dk]
-      }
-    }
-  }
-  if (Object.keys(toSend).length === 0) {
-    toast.success('no changes to save')
-    return
-  }
-  try {
-    await configStore.saveSettings(toSend)
-    toast.success('config saved')
-  } catch (e) {
-    toast.error('save failed: ' + (e as Error).message)
-  }
-}
-
-async function handleReset(key: string) {
-  try {
-    await configStore.deleteOverride(key)
-    toast.success('override removed: ' + key)
-  } catch (e) {
-    toast.error((e as Error).message)
-  }
-}
-
-function isEnum(dottedKey: string): boolean {
-  return dottedKey in enumFields
-}
-
-function isDuration(dottedKey: string): boolean {
-  return durationFields.has(dottedKey)
+async function removeOverride(key: string) {
+  await config.deleteOverride(key)
 }
 </script>
 
 <template>
-  <div>
-    <div class="panel">
-      <div class="panel-label">configuration</div>
-      <template v-if="!configStore.settings || !configStore.settings.config || !configStore.settings.config.source">
-        <span class="status-muted">loading...</span>
-      </template>
-      <template v-else>
-        <div v-for="section in sections" :key="section" class="panel">
-          <div class="panel-label">{{ section }}</div>
-          <div v-for="field in getFields(section)" :key="field.dottedKey" class="form-group">
-            <label class="form-label" :for="'field-' + field.dottedKey.replace(/\./g, '-')">
-              {{ field.key }}{{ field.isOverride ? ' *' : '' }}
-            </label>
-
-            <select
-              v-if="isEnum(field.dottedKey)"
-              :id="'field-' + field.dottedKey.replace(/\./g, '-')"
-              :data-key="field.dottedKey"
-              v-model="formData[field.dottedKey]"
-              class="form-select"
-            >
-              <option v-for="opt in enumFields[field.dottedKey]" :key="opt" :value="opt">{{ opt }}</option>
-            </select>
-
-            <label
-              v-else-if="typeof field.value === 'boolean'"
-              class="flex items-center gap-2 cursor-pointer"
-            >
-              <input
-                type="checkbox"
-                :data-key="field.dottedKey"
-                :checked="formData[field.dottedKey] === 'true'"
-                @change="formData[field.dottedKey] = ($event.target as HTMLInputElement).checked ? 'true' : 'false'"
-                class="accent-brand w-4 h-4 cursor-pointer"
+  <n-card title="Configuration">
+    <n-spin v-if="config.loading" />
+    <n-empty v-else-if="!config.settings" description="Failed to load settings" />
+    <n-tabs v-else type="line">
+      <n-tab-pane v-for="tab in tabs" :key="tab.name" :name="tab.name" :tab="tab.name">
+        <n-form label-placement="left" label-width="180">
+          <n-form-item v-for="key in tab.keys" :key="key" :label="key">
+            <n-input-group>
+              <n-input
+                :value="config.settings.overrides[key] ?? (config.settings.config as any)[key] ?? ''"
+                :placeholder="(config.settings.defaults as any)[key]?.toString() ?? ''"
+                @update:value="(v: string) => saveOverride(key, v)"
               />
-              {{ formData[field.dottedKey] === 'true' ? 'true' : 'false' }}
-            </label>
-
-            <input
-              v-else-if="typeof field.value === 'number'"
-              type="number"
-              :id="'field-' + field.dottedKey.replace(/\./g, '-')"
-              :data-key="field.dottedKey"
-              v-model="formData[field.dottedKey]"
-              class="form-input"
-            />
-
-            <div v-else>
-              <input
-                type="text"
-                :id="'field-' + field.dottedKey.replace(/\./g, '-')"
-                :data-key="field.dottedKey"
-                v-model="formData[field.dottedKey]"
-                class="form-input"
-              />
-              <div v-if="isDuration(field.dottedKey)" class="meta-text">format: number + s/m/h (e.g. 30s, 5m, 1h)</div>
-            </div>
-
-            <button
-              v-if="field.isOverride"
-              class="btn btn-danger text-2xs ml-2"
-              @click="handleReset(field.dottedKey)"
-            >
-              ✕ reset
-            </button>
-          </div>
-        </div>
-        <div class="flex gap-2">
-          <button class="btn btn-accent" @click="handleSave">save</button>
-        </div>
-      </template>
-    </div>
-  </div>
+              <n-button v-if="isOverridden(key)" type="warning" @click="removeOverride(key)">Reset</n-button>
+            </n-input-group>
+          </n-form-item>
+        </n-form>
+      </n-tab-pane>
+    </n-tabs>
+  </n-card>
 </template>

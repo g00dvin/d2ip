@@ -1,80 +1,70 @@
 <script setup lang="ts">
-import { onMounted } from 'vue'
-import { usePolling } from '@/composables/usePolling'
-import { useToast } from '@/stores/toast'
+import { ref } from 'vue'
 import { useRoutingStore } from '@/stores/routing'
-const routing = useRoutingStore()
-import StatusBadge from '@/components/StatusBadge.vue'
+import { usePolling } from '@/composables/usePolling'
 import { useConfirm } from '@/composables/useConfirm'
 
-const toast = useToast()
+const routing = useRoutingStore()
 const confirm = useConfirm()
 
-const poll = usePolling(() => routing.fetchSnapshot(), 30_000)
-onMounted(() => poll.start())
+const ipv4Input = ref('')
+const ipv6Input = ref('')
 
-function fmtDate(d: string | null | undefined) {
-  return d ? new Date(d).toLocaleString() : 'never'
-}
+usePolling(() => routing.fetchSnapshot(), 30_000)
 
 async function handleDryRun() {
-  try {
-    await routing.dryRun([], [])
-    toast.success('dry-run complete')
-  } catch (e) {
-    toast.error((e as Error).message)
-  }
+  const ipv4 = ipv4Input.value.split('\n').map(s => s.trim()).filter(Boolean)
+  const ipv6 = ipv6Input.value.split('\n').map(s => s.trim()).filter(Boolean)
+  await routing.dryRun(ipv4, ipv6)
 }
 
 async function handleRollback() {
-  if (!(await confirm.confirm('rollback routing changes?'))) return
-  try {
-    await routing.rollback()
-    toast.success('rollback complete')
-  } catch (e) {
-    toast.error((e as Error).message)
-  }
+  if (!(await confirm.confirm('Rollback routing changes?'))) return
+  await routing.rollback()
 }
 </script>
 
 <template>
-  <div>
-    <div class="panel">
-      <div class="panel-label">routing state</div>
-      <template v-if="routing.snapshot">
-        <div class="meta-text">backend: {{ routing.snapshot.backend || 'none' }}</div>
-        <div class="meta-text">ipv4: {{ routing.snapshot.v4?.length ?? 0 }} prefixes</div>
-        <div class="meta-text">ipv6: {{ routing.snapshot.v6?.length ?? 0 }} prefixes</div>
-        <div class="meta-text">applied: {{ fmtDate(routing.snapshot.applied_at) }}</div>
-      </template>
-      <template v-else>
-        <StatusBadge type="muted">routing disabled</StatusBadge>
-      </template>
-    </div>
+  <div class="space-y-4">
+    <n-card title="Routing State">
+      <n-empty v-if="!routing.snapshot" description="Routing disabled" />
+      <n-descriptions v-else label-placement="top" :columns="2">
+        <n-descriptions-item label="Backend">{{ routing.snapshot.backend }}</n-descriptions-item>
+        <n-descriptions-item label="Applied">{{ routing.snapshot.applied_at ? new Date(routing.snapshot.applied_at).toLocaleString() : 'never' }}</n-descriptions-item>
+        <n-descriptions-item label="IPv4">{{ routing.snapshot.v4?.length ?? 0 }} prefixes</n-descriptions-item>
+        <n-descriptions-item label="IPv6">{{ routing.snapshot.v6?.length ?? 0 }} prefixes</n-descriptions-item>
+      </n-descriptions>
+    </n-card>
 
-    <div v-if="routing.snapshot && (routing.snapshot.backend === 'none' || !routing.snapshot.backend)" class="warning-banner mb-3">
-      Routing is disabled. Enable it in Config → routing.enabled.
-    </div>
+    <n-card title="Dry Run">
+      <n-space vertical>
+        <n-input v-model:value="ipv4Input" type="textarea" placeholder="IPv4 prefixes (one per line)..." />
+        <n-input v-model:value="ipv6Input" type="textarea" placeholder="IPv6 prefixes (one per line)..." />
+        <n-button type="primary" @click="handleDryRun" :loading="routing.loading">Preview Changes</n-button>
+      </n-space>
+    </n-card>
 
-    <div v-if="routing.dryRunResult" class="panel">
-      <div class="panel-label">dry-run result</div>
-      <template v-if="routing.dryRunResult.message">
-        <div class="meta-text">{{ routing.dryRunResult.message }}</div>
-      </template>
-      <template v-else>
-        <div class="meta-text">v4 add: {{ routing.dryRunResult.v4_plan?.add?.length ?? 0 }} | remove: {{ routing.dryRunResult.v4_plan?.remove?.length ?? 0 }}</div>
-        <div class="meta-text">v6 add: {{ routing.dryRunResult.v6_plan?.add?.length ?? 0 }} | remove: {{ routing.dryRunResult.v6_plan?.remove?.length ?? 0 }}</div>
-        <pre v-if="routing.dryRunResult.v4_diff" class="bg-surface-code border border-border p-3 text-xs overflow-x-auto mt-2">{{ routing.dryRunResult.v4_diff }}</pre>
-        <pre v-if="routing.dryRunResult.v6_diff" class="bg-surface-code border border-border p-3 text-xs overflow-x-auto mt-2">{{ routing.dryRunResult.v6_diff }}</pre>
-      </template>
-    </div>
+    <n-card v-if="routing.dryRunResult" title="Preview Result">
+      <n-descriptions label-placement="top">
+        <n-descriptions-item label="v4 Add">{{ routing.dryRunResult.v4_plan.add.length }}</n-descriptions-item>
+        <n-descriptions-item label="v4 Remove">{{ routing.dryRunResult.v4_plan.remove.length }}</n-descriptions-item>
+        <n-descriptions-item label="v6 Add">{{ routing.dryRunResult.v6_plan.add.length }}</n-descriptions-item>
+        <n-descriptions-item label="v6 Remove">{{ routing.dryRunResult.v6_plan.remove.length }}</n-descriptions-item>
+      </n-descriptions>
+      <n-collapse>
+        <n-collapse-item title="v4 diff">
+          <pre>{{ routing.dryRunResult.v4_diff }}</pre>
+        </n-collapse-item>
+        <n-collapse-item title="v6 diff">
+          <pre>{{ routing.dryRunResult.v6_diff }}</pre>
+        </n-collapse-item>
+      </n-collapse>
+    </n-card>
 
-    <div class="panel">
-      <div class="panel-label">actions</div>
-      <div class="flex gap-2">
-        <button class="btn btn-accent" @click="handleDryRun" :disabled="routing.loading">🔍 dry run</button>
-        <button class="btn btn-danger" @click="handleRollback" :disabled="routing.loading">↩ rollback</button>
-      </div>
-    </div>
+    <n-card title="Actions">
+      <n-button type="error" @click="handleRollback">Rollback</n-button>
+    </n-card>
+
+    <n-modal v-model:show="confirm.visible" preset="dialog" title="Confirm" :content="confirm.message" positive-text="Yes" negative-text="No" @positive-click="confirm.onOk" @negative-click="confirm.onCancel" />
   </div>
 </template>
