@@ -76,9 +76,9 @@ type Orchestrator struct {
 	config     func() config.Config // returns current config snapshot
 
 	// Single-flight enforcement.
-	mu      sync.Mutex
-	running atomic.Bool
-	current RunStatus
+	mu       sync.Mutex
+	running  atomic.Bool
+	current  RunStatus
 	cancelFn context.CancelFunc
 
 	// Run history (last 10).
@@ -472,6 +472,17 @@ func (o *Orchestrator) Run(ctx context.Context, req PipelineRequest) (PipelineRe
 			}
 
 			log.Info().Msg("orchestrator: routing applied successfully")
+			if o.eventBus != nil {
+				o.eventBus.Publish("routing", events.Event{
+					Topic: "routing",
+					Type:  "routing.apply",
+					Data: map[string]any{
+						"backend": cfg.Routing.Backend,
+						"v4":      len(planV4.Add),
+						"v6":      len(planV6.Add),
+					},
+				})
+			}
 		} else {
 			log.Info().Msg("orchestrator: dry run, skipping routing apply")
 		}
