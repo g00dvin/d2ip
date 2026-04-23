@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { useConfirm } from '@/composables/useConfirm'
 
-const { open, message, accept, reject } = useConfirm()
+const { visible: open, message, onOk: accept, onCancel: reject } = useConfirm()
 </script>
 
 <template>

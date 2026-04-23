@@ -1,8 +1,9 @@
-import { ref, onUnmounted, watch } from 'vue'
+import { ref, onMounted, onUnmounted } from 'vue'
 
-export function usePolling(fn: () => Promise<void>, intervalMs: number | (() => number), opts?: { immediate?: boolean }) {
+export function usePolling(fn: () => Promise<void>, intervalMs: number | (() => number)) {
   let timer: ReturnType<typeof setInterval> | null = null
   const loading = ref(false)
+  const lastError = ref<Error | null>(null)
 
   function getInterval(): number {
     return typeof intervalMs === 'function' ? intervalMs() : intervalMs
@@ -12,6 +13,10 @@ export function usePolling(fn: () => Promise<void>, intervalMs: number | (() => 
     loading.value = true
     try {
       await fn()
+      lastError.value = null
+    } catch (e) {
+      lastError.value = e as Error
+      console.error('Polling error:', e)
     } finally {
       loading.value = false
     }
@@ -19,10 +24,8 @@ export function usePolling(fn: () => Promise<void>, intervalMs: number | (() => 
 
   function start() {
     stop()
-    if (opts?.immediate !== false) {
-      poll()
-    }
-    timer = setInterval(() => poll(), getInterval())
+    poll()
+    timer = setInterval(poll, getInterval())
   }
 
   function stop() {
@@ -32,16 +35,8 @@ export function usePolling(fn: () => Promise<void>, intervalMs: number | (() => 
     }
   }
 
-  if (typeof intervalMs === 'function') {
-    watch(intervalMs, () => {
-      stop()
-      start()
-    })
-  }
+  onMounted(start)
+  onUnmounted(stop)
 
-  onUnmounted(() => stop())
-
-  start()
-
-  return { loading, start, stop, poll }
+  return { loading, lastError, start, stop, poll }
 }

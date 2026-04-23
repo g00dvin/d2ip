@@ -1,29 +1,29 @@
 import { ref } from 'vue'
 
-const open = ref(false)
-const message = ref('')
-const queue = ref<((val: boolean) => void)[]>([])
-
 export function useConfirm() {
+  const visible = ref(false)
+  const message = ref('')
+  let resolveFn: ((value: boolean) => void) | null = null
+
   function confirm(msg: string): Promise<boolean> {
     message.value = msg
-    open.value = true
+    visible.value = true
     return new Promise((resolve) => {
-      queue.value.push(resolve)
+      resolveFn = resolve
     })
   }
 
-  function accept() {
-    open.value = false
-    const resolve = queue.value.shift()
-    resolve?.(true)
+  function onOk() {
+    visible.value = false
+    resolveFn?.(true)
+    resolveFn = null
   }
 
-  function reject() {
-    open.value = false
-    const resolve = queue.value.shift()
-    resolve?.(false)
+  function onCancel() {
+    visible.value = false
+    resolveFn?.(false)
+    resolveFn = null
   }
 
-  return { open, message, confirm, accept, reject }
+  return { visible, message, confirm, onOk, onCancel }
 }
