@@ -461,7 +461,7 @@ func TestApplyOverrides_InvalidValue(t *testing.T) {
 }
 
 func TestWatcher_PublishAndSubscribe(t *testing.T) {
-	w := NewWatcher(Defaults(), 1)
+	w := NewWatcher(Defaults(), 1, nil)
 	defer w.Close()
 
 	sub, cancel := w.Subscribe()
@@ -492,7 +492,7 @@ func TestWatcher_PublishAndSubscribe(t *testing.T) {
 }
 
 func TestWatcher_RejectsInvalid(t *testing.T) {
-	w := NewWatcher(Defaults(), 1)
+	w := NewWatcher(Defaults(), 1, nil)
 	defer w.Close()
 
 	bad := Defaults()
@@ -508,7 +508,7 @@ func TestWatcher_RejectsInvalid(t *testing.T) {
 
 func TestWatcher_MultipleSubscribersConcurrent(t *testing.T) {
 	// Use buffer=5 to ensure all 3 publishes can be queued without coalescing.
-	w := NewWatcher(Defaults(), 5)
+	w := NewWatcher(Defaults(), 5, nil)
 	defer w.Close()
 
 	const subs = 8
@@ -558,7 +558,7 @@ func TestWatcher_MultipleSubscribersConcurrent(t *testing.T) {
 }
 
 func TestWatcher_CancelStopsDelivery(t *testing.T) {
-	w := NewWatcher(Defaults(), 1)
+	w := NewWatcher(Defaults(), 1, nil)
 	defer w.Close()
 
 	sub, cancel := w.Subscribe()

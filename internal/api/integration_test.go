@@ -31,7 +31,7 @@ func (m *mockRouter) Plan(_ context.Context, desired []netip.Prefix, f routing.F
 	return routing.Plan{Family: f, Add: desired}, nil
 }
 func (m *mockRouter) Apply(_ context.Context, _ routing.Plan) error { return nil }
-func (m *mockRouter) Snapshot() routing.RouterState                    { return m.snapshot }
+func (m *mockRouter) Snapshot() routing.RouterState                 { return m.snapshot }
 func (m *mockRouter) Rollback(ctx context.Context) error {
 	if m.rollback != nil {
 		return m.rollback(ctx)
@@ -71,7 +71,7 @@ func (m *mockListProvider) Categories() []string { return m.categories }
 func newTestServer(t *testing.T, opts ...func(*Server)) *Server {
 	t.Helper()
 	cfg := config.Defaults()
-	watcher := config.NewWatcher(cfg, 1)
+	watcher := config.NewWatcher(cfg, 1, nil)
 	kv := &mockKVStore{data: make(map[string]string)}
 
 	s := &Server{
@@ -177,7 +177,7 @@ func TestPipelineHistory_NilOrchestrator_ReturnsEmptyList(t *testing.T) {
 func TestSettingsGet_WithOverrides(t *testing.T) {
 	kv := &mockKVStore{data: map[string]string{"cache.ttl": "12h0m0s"}}
 	cfg := config.Defaults()
-	watcher := config.NewWatcher(cfg, 1)
+	watcher := config.NewWatcher(cfg, 1, nil)
 
 	s := &Server{cfgWatcher: watcher, kvStore: kv}
 	srv := httptest.NewServer(s.Handler())
@@ -200,7 +200,7 @@ func TestSettingsGet_WithOverrides(t *testing.T) {
 
 func TestSettingsPut_AndDelete(t *testing.T) {
 	cfg := config.Defaults()
-	watcher := config.NewWatcher(cfg, 1)
+	watcher := config.NewWatcher(cfg, 1, nil)
 	kv := &mockKVStore{data: make(map[string]string)}
 
 	s := &Server{cfgWatcher: watcher, kvStore: kv}
@@ -230,7 +230,7 @@ func TestSettingsPut_AndDelete(t *testing.T) {
 
 func TestSettingsPut_NilKVStore_Returns500(t *testing.T) {
 	cfg := config.Defaults()
-	watcher := config.NewWatcher(cfg, 1)
+	watcher := config.NewWatcher(cfg, 1, nil)
 	s := &Server{cfgWatcher: watcher, kvStore: nil}
 	srv := httptest.NewServer(s.Handler())
 	defer srv.Close()
@@ -453,7 +453,7 @@ func TestRoutingRollback_DisabledRouter_Returns503(t *testing.T) {
 func TestCategoriesList_WithProvider(t *testing.T) {
 	cfg := config.Defaults()
 	cfg.Categories = []config.CategoryConfig{{Code: "geosite:ru"}}
-	watcher := config.NewWatcher(cfg, 1)
+	watcher := config.NewWatcher(cfg, 1, nil)
 
 	provider := &mockListProvider{
 		rules:      []domainlist.Rule{{Type: domainlist.RuleFull, Value: "example.ru"}},
@@ -485,7 +485,7 @@ func TestCategoriesList_WithProvider(t *testing.T) {
 
 func TestCategoriesAdd_AddsWithPrefix(t *testing.T) {
 	cfg := config.Defaults()
-	watcher := config.NewWatcher(cfg, 1)
+	watcher := config.NewWatcher(cfg, 1, nil)
 	kv := &mockKVStore{data: make(map[string]string)}
 
 	s := &Server{cfgWatcher: watcher, kvStore: kv, dlProvider: nil}
@@ -511,7 +511,7 @@ func TestCategoriesAdd_AddsWithPrefix(t *testing.T) {
 func TestCategoriesAdd_Duplicate_ReturnsConflict(t *testing.T) {
 	cfg := config.Defaults()
 	cfg.Categories = []config.CategoryConfig{{Code: "geosite:google"}}
-	watcher := config.NewWatcher(cfg, 1)
+	watcher := config.NewWatcher(cfg, 1, nil)
 	kv := &mockKVStore{data: make(map[string]string)}
 
 	s := &Server{cfgWatcher: watcher, kvStore: kv}
@@ -527,7 +527,7 @@ func TestCategoriesAdd_Duplicate_ReturnsConflict(t *testing.T) {
 
 func TestCategoriesAdd_EmptyCode_Returns400(t *testing.T) {
 	cfg := config.Defaults()
-	watcher := config.NewWatcher(cfg, 1)
+	watcher := config.NewWatcher(cfg, 1, nil)
 	kv := &mockKVStore{data: make(map[string]string)}
 
 	s := &Server{cfgWatcher: watcher, kvStore: kv}
@@ -544,7 +544,7 @@ func TestCategoriesAdd_EmptyCode_Returns400(t *testing.T) {
 func TestCategoriesDelete_RemovesCategory(t *testing.T) {
 	cfg := config.Defaults()
 	cfg.Categories = []config.CategoryConfig{{Code: "geosite:ru"}}
-	watcher := config.NewWatcher(cfg, 1)
+	watcher := config.NewWatcher(cfg, 1, nil)
 	kv := &mockKVStore{data: make(map[string]string)}
 
 	s := &Server{cfgWatcher: watcher, kvStore: kv}
@@ -565,7 +565,7 @@ func TestCategoriesDelete_RemovesCategory(t *testing.T) {
 
 func TestCategoriesDelete_NotFound_Returns404(t *testing.T) {
 	cfg := config.Defaults()
-	watcher := config.NewWatcher(cfg, 1)
+	watcher := config.NewWatcher(cfg, 1, nil)
 	kv := &mockKVStore{data: make(map[string]string)}
 
 	s := &Server{cfgWatcher: watcher, kvStore: kv}
@@ -586,7 +586,7 @@ func TestCategoryDomains_WithProvider(t *testing.T) {
 	}
 	provider := &mockListProvider{rules: rules, categories: []string{"ru"}}
 	cfg := config.Defaults()
-	watcher := config.NewWatcher(cfg, 1)
+	watcher := config.NewWatcher(cfg, 1, nil)
 
 	s := &Server{cfgWatcher: watcher, dlProvider: provider}
 	srv := httptest.NewServer(s.Handler())
@@ -606,7 +606,7 @@ func TestCategoryDomains_WithProvider(t *testing.T) {
 
 func TestCategoryDomains_NilProvider_Returns503(t *testing.T) {
 	cfg := config.Defaults()
-	watcher := config.NewWatcher(cfg, 1)
+	watcher := config.NewWatcher(cfg, 1, nil)
 	s := &Server{cfgWatcher: watcher, dlProvider: nil}
 	srv := httptest.NewServer(s.Handler())
 	defer srv.Close()

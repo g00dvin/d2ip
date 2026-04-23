@@ -3,6 +3,8 @@ package config
 import (
 	"errors"
 	"sync"
+
+	"github.com/goodvin/d2ip/internal/events"
 )
 
 // Snapshot is an immutable deep-copy of a Config. Subscribers receive
@@ -32,6 +34,7 @@ type Watcher struct {
 	nextSub  int
 	buffered int // per-subscriber channel buffer size
 	closed   bool
+	eventBus *events.Bus
 }
 
 // NewWatcher constructs a Watcher seeded with the given initial Config.
@@ -42,12 +45,13 @@ type Watcher struct {
 // <= 0 yields an unbuffered channel (strict back-pressure); the recommended
 // default is 1 so that a slow subscriber sees the *latest* update rather
 // than blocking the publisher.
-func NewWatcher(initial Config, buffered int) *Watcher {
+func NewWatcher(initial Config, buffered int, eventBus *events.Bus) *Watcher {
 	return &Watcher{
 		current:  Snapshot{Version: 1, Config: initial.Clone()},
 		version:  1,
 		subs:     make(map[int]chan Snapshot),
 		buffered: buffered,
+		eventBus: eventBus,
 	}
 }
 
@@ -93,6 +97,15 @@ func (w *Watcher) Publish(next Config) error {
 	for _, ch := range channels {
 		deliver(ch, snap)
 	}
+
+	if w.eventBus != nil {
+		w.eventBus.Publish("config", events.Event{
+			Topic: "config",
+			Type:  "config.reload",
+			Data:  map[string]any{"keys": []string{}},
+		})
+	}
+
 	return nil
 }
 

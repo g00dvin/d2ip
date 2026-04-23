@@ -41,7 +41,7 @@ func (m *mockKVStore) Delete(_ context.Context, key string) error {
 
 func TestHandleSettingsGet_ReturnsConfig(t *testing.T) {
 	cfg := config.Defaults()
-	watcher := config.NewWatcher(cfg, 1)
+	watcher := config.NewWatcher(cfg, 1, nil)
 
 	kv := &mockKVStore{data: map[string]string{"resolver.qps": "500"}}
 
@@ -84,7 +84,7 @@ func TestHandleSettingsGet_ReturnsConfig(t *testing.T) {
 
 func TestHandleSettingsPut_UpdatesOverride(t *testing.T) {
 	cfg := config.Defaults()
-	watcher := config.NewWatcher(cfg, 1)
+	watcher := config.NewWatcher(cfg, 1, nil)
 
 	s := &Server{cfgWatcher: watcher, kvStore: nil}
 	r := chi.NewRouter()
@@ -102,7 +102,7 @@ func TestHandleSettingsPut_UpdatesOverride(t *testing.T) {
 
 func TestHandleSettingsPut_WithMockKVStore(t *testing.T) {
 	cfg := config.Defaults()
-	watcher := config.NewWatcher(cfg, 1)
+	watcher := config.NewWatcher(cfg, 1, nil)
 
 	kv := &mockKVStore{data: make(map[string]string)}
 	s := &Server{cfgWatcher: watcher, kvStore: kv}
@@ -163,7 +163,7 @@ func TestHandleSettingsPut_WithMockKVStore(t *testing.T) {
 
 func TestHandleSettingsDelete_RemovesOverride(t *testing.T) {
 	cfg := config.Defaults()
-	watcher := config.NewWatcher(cfg, 1)
+	watcher := config.NewWatcher(cfg, 1, nil)
 
 	s := &Server{cfgWatcher: watcher, kvStore: nil}
 	r := chi.NewRouter()
@@ -194,7 +194,7 @@ func TestHandlePipelineHistory_ReturnsList(t *testing.T) {
 
 func TestHandleCategoriesList_ReturnsCategories(t *testing.T) {
 	cfg := config.Defaults()
-	watcher := config.NewWatcher(cfg, 1)
+	watcher := config.NewWatcher(cfg, 1, nil)
 
 	s := &Server{cfgWatcher: watcher, dlProvider: nil}
 	r := chi.NewRouter()
@@ -223,7 +223,7 @@ func TestHandleCategoriesList_ReturnsCategories(t *testing.T) {
 
 func TestHandleCategoriesList_ReturnsConfiguredAndAvailable(t *testing.T) {
 	cfg := config.Defaults()
-	watcher := config.NewWatcher(cfg, 1)
+	watcher := config.NewWatcher(cfg, 1, nil)
 
 	s := &Server{cfgWatcher: watcher, dlProvider: nil}
 	r := chi.NewRouter()
