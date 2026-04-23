@@ -21,6 +21,7 @@ import (
 	"github.com/goodvin/d2ip/internal/cache"
 	"github.com/goodvin/d2ip/internal/config"
 	"github.com/goodvin/d2ip/internal/domainlist"
+	"github.com/goodvin/d2ip/internal/events"
 	"github.com/goodvin/d2ip/internal/logging"
 	"github.com/goodvin/d2ip/internal/metrics"
 	"github.com/goodvin/d2ip/internal/orchestrator"
@@ -40,6 +41,7 @@ type Server struct {
 	dlProvider  domainlist.ListProvider
 	sourceStore source.DLCStore
 	cacheAgent  cache.Cache
+	eventBus    *events.Bus
 }
 
 // New creates an API server with dependencies.
@@ -51,6 +53,7 @@ func New(
 	dlProvider domainlist.ListProvider,
 	sourceStore source.DLCStore,
 	cacheAgent cache.Cache,
+	eventBus *events.Bus,
 ) *Server {
 	return &Server{
 		orch:        orch,
@@ -60,6 +63,7 @@ func New(
 		dlProvider:  dlProvider,
 		sourceStore: sourceStore,
 		cacheAgent:  cacheAgent,
+		eventBus:    eventBus,
 	}
 }
 
@@ -83,6 +87,7 @@ func (s *Server) Handler() http.Handler {
 	r.Post("/routing/rollback", s.handleRoutingRollback)
 	r.Get("/routing/snapshot", s.handleRoutingSnapshot)
 	r.Get("/metrics", s.handleMetrics)
+	r.Get("/events", s.handleEvents)
 	r.Get("/api/settings", s.handleSettingsGet)
 	r.Put("/api/settings", s.handleSettingsPut)
 	r.Delete("/api/settings/{key}", s.handleSettingsDelete)

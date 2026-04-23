@@ -15,6 +15,7 @@ import (
 	"github.com/goodvin/d2ip/internal/cache"
 	"github.com/goodvin/d2ip/internal/config"
 	"github.com/goodvin/d2ip/internal/domainlist"
+	"github.com/goodvin/d2ip/internal/events"
 	"github.com/goodvin/d2ip/internal/exporter"
 	"github.com/goodvin/d2ip/internal/logging"
 	"github.com/goodvin/d2ip/internal/metrics"
@@ -238,8 +239,11 @@ func serveCmd() {
 	// Create config watcher with initial config
 	cfgWatcher := config.NewWatcher(*cfg, 1)
 
+	// Create event bus
+	eventBus := events.NewBus()
+
 	// Create API server
-	apiServer := api.New(orch, routerAgent, cfgWatcher, cacheDB, domainProvider, sourceStore, cacheDB)
+	apiServer := api.New(orch, routerAgent, cfgWatcher, cacheDB, domainProvider, sourceStore, cacheDB, eventBus)
 	httpServer := &http.Server{
 		Addr:         cfg.Listen,
 		Handler:      apiServer.Handler(),
