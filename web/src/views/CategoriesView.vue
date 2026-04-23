@@ -1,129 +1,84 @@
 <script setup lang="ts">
+import { h } from 'vue'
+import { NButton } from 'naive-ui'
 import { onMounted, ref, computed } from 'vue'
-import { useToast } from '@/stores/toast'
 import { useCategoriesStore } from '@/stores/categories'
-import StatusBadge from '@/components/StatusBadge.vue'
 import { useConfirm } from '@/composables/useConfirm'
+import CategoryBrowser from '@/components/CategoryBrowser.vue'
 
-const toast = useToast()
-const confirm = useConfirm()
 const categories = useCategoriesStore()
+const confirm = useConfirm()
 
 const searchTerm = ref('')
-const domainFilter = ref('')
 
 onMounted(() => categories.fetchCategories())
 
 const filteredAvailable = computed(() => {
   const q = searchTerm.value.toLowerCase()
   if (!q) return categories.available
-  return categories.available.filter((c: string) => c.toLowerCase().includes(q))
-})
-
-const filteredDomains = computed(() => {
-  const q = domainFilter.value.toLowerCase()
-  const list = categories.browserData?.domains ?? []
-  if (!q) return list.slice(0, 100)
-  return list.filter((d: string) => d.toLowerCase().includes(q)).slice(0, 100)
+  return categories.available.filter(c => c.toLowerCase().includes(q))
 })
 
 async function handleAdd(code: string) {
-  try {
-    await categories.addCategory(code)
-    toast.success('added: ' + code)
-  } catch (e) {
-    toast.error((e as Error).message)
-  }
+  await categories.addCategory(code)
 }
 
 async function handleRemove(code: string) {
-  if (!(await confirm.confirm('remove ' + code + '?'))) return
-  try {
-    await categories.removeCategory(code)
-    toast.success('removed: ' + code)
-  } catch (e) {
-    toast.error((e as Error).message)
-  }
+  if (!(await confirm.confirm(`Remove ${code}?`))) return
+  await categories.removeCategory(code)
 }
 
 async function handleBrowse(code: string) {
-  try {
-    await categories.browseCategory(code)
-  } catch (e) {
-    toast.error((e as Error).message)
-  }
+  await categories.browseCategory(code)
 }
 </script>
 
 <template>
-  <div>
-    <div class="panel">
-      <div class="panel-label">configured categories</div>
-      <template v-if="categories.configured.length === 0">
-        <StatusBadge type="muted">none</StatusBadge>
-        <div class="warning-banner mt-3">
-          No categories configured. Search below and click 'add' to start.
-        </div>
-      </template>
-      <template v-else>
-        <table class="table-auto">
-          <thead>
-            <tr><th>code</th><th>domains</th><th>actions</th></tr>
-          </thead>
-          <tbody>
-            <tr v-for="c in categories.configured" :key="c.code">
-              <td>{{ c.code }}</td>
-              <td>{{ c.domain_count ?? '?' }}</td>
-              <td>
-                <button class="btn btn-accent text-2xs" @click="handleBrowse(c.code)">browse</button>
-                <button class="btn btn-danger text-2xs ml-1" @click="handleRemove(c.code)">✕</button>
-              </td>
-            </tr>
-          </tbody>
-        </table>
-      </template>
-    </div>
+  <div class="space-y-4">
+    <n-grid cols="1 m:2" :x-gap="16" :y-gap="16">
+      <!-- Configured -->
+      <n-gi>
+        <n-card title="Configured Categories">
+          <n-empty v-if="!categories.hasCategories" description="No categories configured" />
+          <n-data-table
+            v-else
+            :columns="[
+              { title: 'Code', key: 'code' },
+              { title: 'Domains', key: 'domain_count' },
+              { title: 'Actions', key: 'actions', render: (row: any) => h('div', [
+                h(NButton, { size: 'tiny', type: 'info', onClick: () => handleBrowse(row.code) }, { default: () => 'Browse' }),
+                h(NButton, { size: 'tiny', type: 'error', class: 'ml-2', onClick: () => handleRemove(row.code) }, { default: () => 'Remove' }),
+              ]) },
+            ]"
+            :data="categories.configured"
+            :pagination="false"
+          />
+        </n-card>
+      </n-gi>
 
-    <div class="panel">
-      <div class="panel-label">available categories</div>
-      <input
-        v-model="searchTerm"
-        type="text"
-        class="form-input"
-        placeholder="filter categories..."
-      />
-      <div class="mt-3">
-        <template v-if="filteredAvailable.length === 0">
-          <StatusBadge type="muted">all categories configured</StatusBadge>
-        </template>
-        <template v-else>
-          <div
-            v-for="cat in filteredAvailable.slice(0, 50)"
-            :key="cat"
-            class="flex justify-between items-center py-1 border-b border-border"
-          >
-            <span>{{ cat }}</span>
-            <button class="btn btn-accent text-2xs" @click="handleAdd(cat)">add</button>
-          </div>
-          <div v-if="filteredAvailable.length > 50" class="meta-text">
-            ... and {{ filteredAvailable.length - 50 }} more (use search to filter)
-          </div>
-        </template>
-      </div>
-    </div>
+      <!-- Available -->
+      <n-gi>
+        <n-card title="Available Categories">
+          <n-input v-model:value="searchTerm" placeholder="Filter categories..." clearable class="mb-3" />
+          <n-list hoverable clickable>
+            <n-list-item v-for="cat in filteredAvailable.slice(0, 50)" :key="cat">
+              <template #suffix>
+                <n-button size="tiny" type="primary" @click="handleAdd(cat)">Add</n-button>
+              </template>
+              {{ cat }}
+            </n-list-item>
+          </n-list>
+          <n-text v-if="filteredAvailable.length > 50" type="info">
+            ... and {{ filteredAvailable.length - 50 }} more
+          </n-text>
+        </n-card>
+      </n-gi>
+    </n-grid>
 
-    <div v-if="categories.browserOpen && categories.browserData" class="panel">
-      <div class="panel-label">domains: {{ categories.browserData.code }}</div>
-      <input
-        v-model="domainFilter"
-        type="text"
-        class="form-input mb-3"
-        placeholder="filter domains..."
-      />
-      <div v-for="d in filteredDomains" :key="d" class="text-xs">{{ d }}</div>
-      <div v-if="categories.browserData.domains.length > 100 || (domainFilter === '' && categories.browserData.total > 100)" class="meta-text">
-        ... and {{ categories.browserData.total - 100 }} more (use filter)
-      </div>
-    </div>
+    <!-- Browser Drawer -->
+    <CategoryBrowser :data="categories.browserData" @close="categories.closeBrowser" />
+
+    <!-- Confirm -->
+    <n-modal v-model:show="confirm.visible" preset="dialog" title="Confirm" :content="confirm.message" positive-text="Yes" negative-text="No" @positive-click="confirm.onOk" @negative-click="confirm.onCancel" />
   </div>
 </template>
