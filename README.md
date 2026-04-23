@@ -70,7 +70,7 @@ d2ip includes a terminal-inspired web interface with sidebar navigation:
   - **Cache** — statistics, SQLite vacuum
   - **Source** — dlc.dat metadata (SHA256, size, ETag)
   - **Routing** — dry-run, rollback, snapshot view
-- **Tech:** HTMX + vanilla CSS, embedded in binary (~14KB)
+- **Tech:** Vue 3 + Tailwind CSS SPA, embedded in binary (~174KB)
 
 ## Configuration
 

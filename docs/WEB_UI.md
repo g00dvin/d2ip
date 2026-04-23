@@ -2,191 +2,151 @@
 
 ## Overview
 
-The d2ip web UI is a minimal, mobile-friendly interface built with HTMX for controlling and monitoring the pipeline.
+The d2ip web UI is a modern, responsive single-page application (SPA) built with Vue 3 and Tailwind CSS.
 
 **Access:** http://localhost:9099/
 
 **Technology Stack:**
-- HTMX 1.9.10 (from CDN)
-- Vanilla CSS (no frameworks)
+- Vue 3 (Composition API with `<script setup>`)
+- Tailwind CSS v3
+- Vue Router (hash mode)
+- Pinia (state management)
+- Axios (HTTP client)
 - Embedded in binary via Go `embed` package
-- Total size: ~17KB
+- Total size: ~174KB
 
 ## Features
 
-### 1. Header with Health Status
+### 1. Dashboard
 
-**Location:** Top of page
+**Location:** Default landing page
 
 **Components:**
-- **Logo:** "d2ip" branding with subtitle "Domain to IP Resolver"
-- **Status Indicator:** Real-time health check
+- **Health Status:** Real-time health check indicator
   - Green (● Healthy) when /healthz returns 200
   - Red (● Unhealthy) when /healthz fails
   - Auto-refreshes every 10 seconds
+- **Quick Actions:** Run pipeline, force resolve buttons
+- **Last Run Summary:** Shows most recent pipeline results
+- **Routing State:** Backend type, prefix counts, last applied timestamp
+- **Warning Banner:** Appears when no categories are configured
 
-### 2. Pipeline Control Section
+### 2. Pipeline
 
 **Purpose:** Trigger and monitor pipeline runs
 
 **Components:**
-- **Trigger Button:** "▶ Trigger Pipeline" button (blue, primary)
-  - POST to /pipeline/run
-  - Immediately refreshes status display
-- **Status Display:** Shows current or last run status
-  - **While Running:** Blue box with Run ID and start time
-  - **After Completion:** Green box (success) or Yellow box (warnings)
-    - Run ID
-    - Start time
-    - Duration (seconds)
-    - Domains processed
-    - Resolved count
-    - Failed count
-    - IPv4/IPv6 output counts
-  - Auto-refreshes every 5 seconds
+- **Run Button:** Triggers pipeline execution (POST /pipeline/run)
+- **Force Resolve Button:** Re-runs resolution even for fresh domains
+- **Cancel Button:** Cancels running pipeline (with confirmation)
+- **Status Display:** Live status with adaptive polling (2s when running, 10s idle)
+- **Run History:** Table of past runs with metrics
 
-### 3. Routing Control Section
+### 3. Config
+
+**Purpose:** View and edit configuration at runtime
+
+**Components:**
+- Dynamic form for all config sections
+- Shows current values, defaults, and active overrides
+- Save applies overrides via KV store with hot-reload
+
+### 4. Categories
+
+**Purpose:** Manage geosite categories
+
+**Components:**
+- **Configured Categories:** Table with domain counts, browse/remove actions
+- **Available Categories:** Searchable list with add button
+- **Domain Browser:** Expandable panel showing up to 500 domains per category
+
+### 5. Cache
+
+**Purpose:** Monitor cache health
+
+**Components:**
+- Statistics: domains, records (total/v4/v6), valid/failed counts
+- Oldest/newest updated timestamps
+- Vacuum action (with confirmation)
+
+### 6. Source
+
+**Purpose:** View dlc.dat metadata
+
+**Components:**
+- SHA256 hash (truncated)
+- Fetched timestamp
+- File size
+- ETag
+
+### 7. Routing
 
 **Purpose:** Preview and manage routing table changes
 
 **Components:**
-- **Dry Run Button:** "🔍 Dry Run" (gray, secondary)
-  - POST to /routing/dry-run with empty prefixes
-  - Shows planned changes (add/remove counts)
-  - Does not apply changes
-- **Rollback Button:** "↩ Rollback" (red, danger)
-  - POST to /routing/rollback
-  - Confirmation dialog before execution
-  - Restores previous routing state
-- **Result Display:** Shows dry-run or rollback outcomes
-  - IPv4/IPv6 prefix add/remove counts
-  - Success/error messages
-- **Current Snapshot:** Auto-refreshing display (every 30s)
-  - Backend type (nftables/iproute2/none)
-  - Last applied timestamp
-  - IPv4 prefix count
-  - IPv6 prefix count
-
-### 4. Configuration Section (Placeholder)
-
-**Status:** Coming soon
-
-**Purpose:** Will integrate with kv_settings for runtime config management
-
-### 5. Footer Links
-
-**Links:**
-- **Prometheus Metrics:** Opens /metrics in new tab
-- **Documentation:** Links to GitHub repository
+- **Dry Run Button:** Shows planned changes without applying
+- **Rollback Button:** Restores previous routing state (with confirmation)
+- **Current Snapshot:** Backend type, IPv4/IPv6 prefix counts, applied timestamp
 
 ## Auto-Refresh Behavior
 
-The UI uses HTMX polling for real-time updates:
+The UI uses auto-polling via `usePolling` composable:
 
-| Element | Endpoint | Interval | Trigger |
-|---------|----------|----------|---------|
-| Health status | /healthz | 10s | load, timer |
-| Pipeline status | /pipeline/status | 5s | load, timer, manual |
-| Routing snapshot | /routing/snapshot | 30s | load, timer |
+| Element | Endpoint | Interval |
+|---------|----------|----------|
+| Health status | /healthz | 10s |
+| Pipeline status (dashboard) | /pipeline/status | 10s |
+| Pipeline status (pipeline page) | /pipeline/status | 2s (running) / 10s (idle) |
+| Cache stats | /api/cache/stats | 30s |
+| Routing snapshot | /routing/snapshot | 30s |
 
 **Manual triggers:**
-- Clicking "Trigger Pipeline" refreshes pipeline status immediately
-- Successful rollback refreshes routing snapshot immediately
+- Clicking "Run Pipeline" refreshes status immediately
+- After save/rollback/vacuum, relevant sections refresh
 
 ## Responsive Design
 
 **Desktop (>768px):**
-- Two-column grid layouts for status displays
-- Side-by-side button groups
-- Max width: 1200px, centered
+- Fixed sidebar (180px) with navigation
+- Main content area scrolls independently
+- Card-based layout
 
 **Mobile (≤768px):**
-- Single-column layouts
-- Stacked buttons
+- Collapsible hamburger menu
+- Overlay backdrop when sidebar open
 - Full-width cards
-- Header logo and status indicator stack vertically
+- Single-column layout
 
-## Color Scheme
+## Themes
 
-**Status Colors:**
-- Green (#10b981): Success, healthy
-- Blue (#3b82f6): Running, info
-- Yellow (#f59e0b): Warning
-- Red (#ef4444): Error, danger
-- Gray (#6b7280): Secondary, muted
-
-**UI Theme:**
-- Background: Light gray (#f9fafb)
-- Cards: White (#ffffff)
-- Text: Dark gray (#111827)
-- Borders: Light gray (#e5e7eb)
-- Shadows: Subtle drop shadows for depth
-
-## API Response Handling
-
-The UI uses HTMX's `htmx:beforeSwap` event to transform JSON responses into formatted HTML:
-
-### Pipeline Status Response
-```json
-{
-  "running": false,
-  "run_id": 123,
-  "started": "2026-04-16T23:30:00Z",
-  "report": {
-    "run_id": 123,
-    "domains": 1000,
-    "stale": 50,
-    "resolved": 950,
-    "failed": 50,
-    "ipv4_out": 500,
-    "ipv6_out": 300,
-    "duration": 45000000000
-  }
-}
-```
-
-Transformed into:
-- Status box with color coding
-- Grid layout of key metrics
-- Duration converted to seconds
-
-### Routing Snapshot Response
-```json
-{
-  "backend": "nftables",
-  "applied_at": "2026-04-16T23:35:00Z",
-  "v4": ["10.0.0.0/8", "192.168.0.0/16"],
-  "v6": ["2001:db8::/32"]
-}
-```
-
-Transformed into:
-- Backend and timestamp display
-- Prefix counts (not full lists for performance)
+- **Dark theme:** Default (terminal-inspired dark blue-grey)
+- **Light theme:** Toggle available
+- Tailwind CSS `dark:` variants handle all theme switching
 
 ## Error Handling
 
 **API Errors:**
-- Network failures: HTMX retries (built-in)
-- HTTP 4xx/5xx: Red error alerts with message
+- Network failures: Toast notification with error message
+- HTTP 4xx/5xx: Toast with server error message
 - Routing disabled (503): "routing disabled" message
 
 **Confirmation Dialogs:**
-- Rollback button: `hx-confirm` attribute shows browser confirmation
+- Cancel pipeline
+- Vacuum cache
+- Rollback routing
+- Remove category
 
 ## Performance
 
-**Size:** 17KB total (HTML + CSS)
-- index.html: ~10KB
-- styles.css: ~7KB
-
-**External Dependencies:** 1
-- HTMX 1.9.10 from unpkg.com CDN
+**Size:** ~174KB total (JS + CSS)
+- Vue 3 runtime + router + pinia: ~58KB gzipped
+- Tailwind CSS: ~12KB gzipped
+- Application code: ~20KB gzipped
 
 **Network Usage:**
-- Initial page load: 17KB + HTMX (~14KB gzipped)
+- Initial page load: 174KB (all assets embedded)
 - Polling: Small JSON responses (< 1KB each)
-- No images, no fonts, no JavaScript frameworks
+- No external CDN dependencies
 
 ## Browser Compatibility
 
@@ -197,17 +157,32 @@ Transformed into:
 - Mobile browsers (iOS Safari, Chrome Mobile)
 
 **Requirements:**
-- JavaScript enabled (for HTMX)
-- CSS Grid support (all modern browsers)
-- Fetch API support (for HTMX)
+- JavaScript enabled
+- CSS Grid support
+- Fetch API support
 
 ## Development
 
-**Files:**
-- `/internal/api/web/index.html` - Main UI structure
-- `/internal/api/web/styles.css` - Styling
-- `/internal/api/api.go` - Static file serving (embed directive)
-- `/internal/api/web_test.go` - Tests for embedded files
+**Project Location:** `/web/`
+
+**Key Files:**
+- `web/src/main.ts` — App entry point
+- `web/src/App.vue` — Root component
+- `web/src/router/index.ts` — Route definitions
+- `web/src/stores/` — Pinia stores
+- `web/src/views/` — Page components
+- `web/src/components/` — Reusable components
+- `web/src/composables/` — Shared logic (polling, confirm)
+- `web/src/api/index.ts` — API client with TypeScript types
+
+**Build:**
+```bash
+cd web
+npm ci
+npm run build
+```
+
+**Output:** `web/dist/` → copied to `internal/api/web/`
 
 **Embedding:**
 ```go
@@ -216,6 +191,45 @@ var webFS embed.FS
 ```
 
 **Serving:**
-- Root path `/` redirects to `/index.html`
-- All web files served from `/web/*`
+- Root path `/` serves `index.html`
+- `/web/*` serves static assets
 - API routes take precedence over static files
+- SPA fallback handled by client-side router
+
+## API Response Types
+
+All API responses are typed in `web/src/api/index.ts`:
+
+### Pipeline Status
+```typescript
+interface PipelineStatus {
+  Running: boolean
+  RunID: number
+  Started: string
+  Report: PipelineReport | null
+}
+```
+
+### Routing Snapshot
+```typescript
+interface RoutingSnapshot {
+  backend: string
+  applied_at: string
+  v4: string[]
+  v6: string[]
+}
+```
+
+### Cache Stats
+```typescript
+interface CacheStats {
+  domains: number
+  records_total: number
+  records_v4: number
+  records_v6: number
+  records_valid: number
+  records_failed: number
+  oldest_updated: number
+  newest_updated: number
+}
+```
