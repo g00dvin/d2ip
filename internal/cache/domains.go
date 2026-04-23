@@ -2,20 +2,23 @@ package cache
 
 import (
 	"context"
-	"database/sql"
 	"fmt"
 	"strings"
 )
 
-// ensureDomains bulk-inserts domain names (idempotent) and returns a map of
-// name → domain_id. This is the first step of UpsertBatch: we must have an
-// id before inserting records.
-func (c *SQLiteCache) ensureDomains(ctx context.Context, tx *sql.Tx, domains []string) (map[string]int64, error) {
+// ensureAllDomainsWithStatus inserts/updates all domain rows with their
+// resolve_status and last_resolved_at. It returns a map of domain name → id.
+func (c *SQLiteCache) ensureAllDomainsWithStatus(ctx context.Context, domains []string, statuses []domainStatus) (map[string]int64, error) {
 	if len(domains) == 0 {
 		return make(map[string]int64), nil
 	}
 
-	// Step 1: INSERT OR IGNORE in batches (SQLite param limit ~999).
+	tx, err := c.db.BeginTx(ctx, nil)
+	if err != nil {
+		return nil, fmt.Errorf("begin tx for domains: %w", err)
+	}
+	defer func() { _ = tx.Rollback() }()
+
 	for i := 0; i < len(domains); i += maxParamsPerStmt {
 		end := i + maxParamsPerStmt
 		if end > len(domains) {
@@ -36,7 +39,15 @@ func (c *SQLiteCache) ensureDomains(ctx context.Context, tx *sql.Tx, domains []s
 		}
 	}
 
-	// Step 2: SELECT all ids in batches.
+	for _, ds := range statuses {
+		_, err := tx.ExecContext(ctx,
+			`UPDATE domains SET resolve_status=?, last_resolved_at=? WHERE name=?`,
+			ds.resolveStatus, ds.lastResolvedAt, ds.name)
+		if err != nil {
+			return nil, fmt.Errorf("update domain status %q: %w", ds.name, err)
+		}
+	}
+
 	idMap := make(map[string]int64, len(domains))
 	for i := 0; i < len(domains); i += maxParamsPerStmt {
 		end := i + maxParamsPerStmt
@@ -72,6 +83,10 @@ func (c *SQLiteCache) ensureDomains(ctx context.Context, tx *sql.Tx, domains []s
 			return nil, fmt.Errorf("iterate domain rows: %w", err)
 		}
 		rows.Close()
+	}
+
+	if err := tx.Commit(); err != nil {
+		return nil, fmt.Errorf("commit domains tx: %w", err)
 	}
 
 	return idMap, nil
