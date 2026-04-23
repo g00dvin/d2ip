@@ -141,6 +141,17 @@ func serveEmbeddedFile(w http.ResponseWriter, r *http.Request, fs fs.FS, name st
 		w.Header().Set("Content-Type", "application/octet-stream")
 	}
 
+	// Cache control: never cache index.html (SPA entry point), but cache
+	// hashed assets aggressively since their filenames change on every build.
+	if name == "index.html" {
+		w.Header().Set("Cache-Control", "no-cache, no-store, must-revalidate")
+		w.Header().Set("Pragma", "no-cache")
+		w.Header().Set("Expires", "0")
+	} else if strings.Contains(name, ".") {
+		// Hashed assets like index.abc123.js — cache for 1 year.
+		w.Header().Set("Cache-Control", "public, max-age=31536000, immutable")
+	}
+
 	f, err := fs.Open(name)
 	if err != nil {
 		http.Error(w, "not found", http.StatusNotFound)

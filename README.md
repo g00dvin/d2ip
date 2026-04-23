@@ -29,14 +29,33 @@ docker run --rm -p 9099:9099 \
     -e D2IP_RESOLVER_UPSTREAM=1.1.1.1:53 \
     ghcr.io/g00dvin/d2ip:latest
 
+# Run with iproute2 routing (host routing table)
+# NOTE: --network=host and --cap-add=NET_ADMIN are REQUIRED for routing
+docker run --rm -d --name d2ip \
+    --network=host \
+    --cap-add=NET_ADMIN \
+    --cap-add=NET_RAW \
+    -v d2ip-data:/var/lib/d2ip \
+    -v d2ip-data/config.yaml:/app/config.yaml \
+    -e D2IP_ROUTING_ENABLED=true \
+    -e D2IP_ROUTING_BACKEND=iproute2 \
+    ghcr.io/g00dvin/d2ip:latest
+
 # Run with nftables routing (preferred, namespaced set)
 docker run --rm -d --name d2ip \
-    --cap-add=NET_ADMIN --network=host \
+    --network=host \
+    --cap-add=NET_ADMIN \
+    --cap-add=NET_RAW \
     -v d2ip-data:/var/lib/d2ip \
     -e D2IP_ROUTING_ENABLED=true \
     -e D2IP_ROUTING_BACKEND=nftables \
     ghcr.io/g00dvin/d2ip:latest
 ```
+
+> **Important:** If `routing.enabled: true` in your config, you MUST use `--network=host`
+> so the container can see the host's network interfaces (e.g. `enp2s0`). Without this,
+> routing will fail with "Cannot find device" and the pipeline will return HTTP 500.
+> `--cap-add=NET_ADMIN` is required for modifying routing tables / nftables sets.
 
 ### Build from source
 
@@ -88,6 +107,51 @@ See [docs/CONFIG.md](docs/CONFIG.md) for the full reference.
 | [docs/CONFIG.md](docs/CONFIG.md) | Full configuration reference + precedence |
 | [docs/API.md](docs/API.md) | HTTP API surface |
 | [docs/WEB_UI.md](docs/WEB_UI.md) | Web UI documentation |
+
+## Troubleshooting
+
+### Pipeline returns HTTP 500
+
+**Symptom:** `POST /pipeline/run` returns 500 with "routing apply v4: Cannot find device"
+
+**Cause:** The container cannot see the host network interface (e.g. `enp2s0`).
+
+**Fix:** Run with `--network=host --cap-add=NET_ADMIN`:
+```bash
+docker run -d --name d2ip \
+    --network=host --cap-add=NET_ADMIN \
+    -v d2ip-data:/var/lib/d2ip \
+    -v d2ip-data/config.yaml:/app/config.yaml \
+    ghcr.io/g00dvin/d2ip:latest
+```
+
+### Category browse returns 404
+
+**Symptom:** `GET /api/categories/geosite:google/domains` returns 404
+
+**Cause:** Using an older image before the domain status migration was added.
+
+**Fix:** Pull the latest image and delete the old cache.db:
+```bash
+docker pull ghcr.io/g00dvin/d2ip:latest
+sudo rm -f d2ip-data/cache.db
+```
+
+### Config save fails with negative duration
+
+**Symptom:** "config reload failed: cache.ttl: must be >= 1m, got -315919h..."
+
+**Cause:** A bug in older versions where the web UI sent raw nanoseconds.
+
+**Fix:** Update to v0.1.13+ where durations are formatted as human-readable strings.
+
+### No routes in routing table
+
+**Symptom:** `ip route show table 101` is empty after pipeline run
+
+**Cause:** Container lacks network access to host interfaces.
+
+**Fix:** Use `--network=host` so the container shares the host's network namespace.
 
 ## Status
 
