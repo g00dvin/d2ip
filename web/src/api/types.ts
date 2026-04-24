@@ -74,8 +74,8 @@ export interface CacheStats {
   records_valid: number
   records_failed: number
   records_nxdomain: number
-  oldest_updated: string
-  newest_updated: string
+  oldest_updated: number
+  newest_updated: number
 }
 
 export interface SourceInfo {

@@ -2,13 +2,14 @@
 
 ## Overview
 
-The d2ip web UI is a modern, responsive single-page application (SPA) built with Vue 3 and Tailwind CSS.
+The d2ip web UI is a modern, responsive single-page application (SPA) built with Vue 3 and Naive UI.
 
 **Access:** http://localhost:9099/
 
 **Technology Stack:**
 - Vue 3 (Composition API with `<script setup>`)
-- Tailwind CSS v3
+- Naive UI (component library)
+- Tailwind CSS v3 (utility classes for layout)
 - Vue Router (hash mode)
 - Pinia (state management)
 - Axios (HTTP client)
@@ -244,6 +245,7 @@ interface CacheStats {
   records_v6: number
   records_valid: number
   records_failed: number
+  records_nxdomain: number
   oldest_updated: number
   newest_updated: number
 }

@@ -151,8 +151,9 @@ Return cache statistics.
   "records_v6": 14203,
   "records_valid": 28000,
   "records_failed": 406,
-  "oldest_updated": "2026-04-19T20:27:09Z",
-  "newest_updated": "2026-04-20T14:32:01Z"
+  "records_nxdomain": 200,
+  "oldest_updated": 1713562029,
+  "newest_updated": 1713623521
 }
 ```
 
