@@ -82,57 +82,60 @@ func (s *Server) Handler() http.Handler {
 	// and breaks the streaming protocol (flusher.Flush() has no effect).
 	r.Get("/events", s.handleEvents)
 
-	r.Use(middleware.Compress(5))
+	// All other routes get compression.
+	r.Group(func(cr chi.Router) {
+		cr.Use(middleware.Compress(5))
 
-	// API Routes (registered first to take precedence).
-	r.Get("/healthz", s.handleHealth)
-	r.Get("/readyz", s.handleReady)
-	r.Post("/pipeline/run", s.handlePipelineRun)
-	r.Get("/pipeline/status", s.handlePipelineStatus)
-	r.Post("/routing/dry-run", s.handleRoutingDryRun)
-	r.Post("/routing/rollback", s.handleRoutingRollback)
-	r.Get("/routing/snapshot", s.handleRoutingSnapshot)
-	r.Get("/metrics", s.handleMetrics)
-	r.Get("/api/settings", s.handleSettingsGet)
-	r.Put("/api/settings", s.handleSettingsPut)
-	r.Delete("/api/settings/{key}", s.handleSettingsDelete)
-	r.Get("/api/pipeline/history", s.handlePipelineHistory)
-	r.Post("/pipeline/cancel", s.handlePipelineCancel)
+		// API Routes.
+		cr.Get("/healthz", s.handleHealth)
+		cr.Get("/readyz", s.handleReady)
+		cr.Post("/pipeline/run", s.handlePipelineRun)
+		cr.Get("/pipeline/status", s.handlePipelineStatus)
+		cr.Post("/routing/dry-run", s.handleRoutingDryRun)
+		cr.Post("/routing/rollback", s.handleRoutingRollback)
+		cr.Get("/routing/snapshot", s.handleRoutingSnapshot)
+		cr.Get("/metrics", s.handleMetrics)
+		cr.Get("/api/settings", s.handleSettingsGet)
+		cr.Put("/api/settings", s.handleSettingsPut)
+		cr.Delete("/api/settings/{key}", s.handleSettingsDelete)
+		cr.Get("/api/pipeline/history", s.handlePipelineHistory)
+		cr.Post("/pipeline/cancel", s.handlePipelineCancel)
 
-	// Categories API.
-	r.Get("/api/categories", s.handleCategoriesList)
-	r.Get("/api/categories/{code}/domains", s.handleCategoryDomains)
-	r.Post("/api/categories", s.handleCategoriesAdd)
-	r.Delete("/api/categories/{code}", s.handleCategoriesDelete)
+		// Categories API.
+		cr.Get("/api/categories", s.handleCategoriesList)
+		cr.Get("/api/categories/{code}/domains", s.handleCategoryDomains)
+		cr.Post("/api/categories", s.handleCategoriesAdd)
+		cr.Delete("/api/categories/{code}", s.handleCategoriesDelete)
 
-	// Cache API.
-	r.Get("/api/cache/stats", s.handleCacheStats)
-	r.Post("/api/cache/purge", s.handleCachePurge)
-	r.Post("/api/cache/vacuum", s.handleCacheVacuum)
-	r.Get("/api/cache/entries", s.handleCacheEntries)
+		// Cache API.
+		cr.Get("/api/cache/stats", s.handleCacheStats)
+		cr.Post("/api/cache/purge", s.handleCachePurge)
+		cr.Post("/api/cache/vacuum", s.handleCacheVacuum)
+		cr.Get("/api/cache/entries", s.handleCacheEntries)
 
-	// Source API.
-	r.Get("/api/source/info", s.handleSourceInfo)
+		// Source API.
+		cr.Get("/api/source/info", s.handleSourceInfo)
 
-	// Static web UI (serve at root and /web/*).
-	webRoot, err := fs.Sub(webFS, "web")
-	if err != nil {
-		log.Warn().Err(err).Msg("api: failed to embed web files")
-	} else {
-		r.Get("/*", func(w http.ResponseWriter, r *http.Request) {
-			// Serve index.html for root path
-			if r.URL.Path == "/" {
-				serveEmbeddedFile(w, r, webRoot, "index.html")
-				return
-			}
-			// Strip /web/ prefix to get the file path within the embedded FS
-			name := strings.TrimPrefix(r.URL.Path, "/web/")
-			if name == "" {
-				name = "index.html"
-			}
-			serveEmbeddedFile(w, r, webRoot, name)
-		})
-	}
+		// Static web UI (serve at root and /web/*).
+		webRoot, err := fs.Sub(webFS, "web")
+		if err != nil {
+			log.Warn().Err(err).Msg("api: failed to embed web files")
+		} else {
+			cr.Get("/*", func(w http.ResponseWriter, r *http.Request) {
+				// Serve index.html for root path
+				if r.URL.Path == "/" {
+					serveEmbeddedFile(w, r, webRoot, "index.html")
+					return
+				}
+				// Strip /web/ prefix to get the file path within the embedded FS
+				name := strings.TrimPrefix(r.URL.Path, "/web/")
+				if name == "" {
+					name = "index.html"
+				}
+				serveEmbeddedFile(w, r, webRoot, name)
+			})
+		}
+	})
 
 	return r
 }
