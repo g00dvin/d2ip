@@ -179,7 +179,9 @@ func serveEmbeddedFile(w http.ResponseWriter, r *http.Request, embedFS fs.FS, na
 		w.Header().Set("Content-Encoding", "gzip")
 		w.Header().Set("Vary", "Accept-Encoding")
 		w.Header().Set("Content-Length", strconv.FormatInt(stat.Size(), 10))
-		io.Copy(w, f)
+		if _, err := io.Copy(w, f); err != nil {
+			log.Warn().Err(err).Str("file", name).Msg("api: failed to serve gzipped asset")
+		}
 	} else {
 		gr, err := gzip.NewReader(f)
 		if err != nil {
@@ -187,7 +189,9 @@ func serveEmbeddedFile(w http.ResponseWriter, r *http.Request, embedFS fs.FS, na
 			return
 		}
 		defer gr.Close()
-		io.Copy(w, gr)
+		if _, err := io.Copy(w, gr); err != nil {
+			log.Warn().Err(err).Str("file", name).Msg("api: failed to serve decompressed asset")
+		}
 	}
 }
 
