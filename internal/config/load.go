@@ -228,6 +228,7 @@ func applyDefaultsToViper(v *viper.Viper, d Config) {
 	v.SetDefault("routing.enabled", d.Routing.Enabled)
 	v.SetDefault("routing.backend", string(d.Routing.Backend))
 	v.SetDefault("routing.table_id", d.Routing.TableID)
+	v.SetDefault("routing.iface", d.Routing.Iface)
 	v.SetDefault("routing.nft_table", d.Routing.NFTTable)
 	v.SetDefault("routing.nft_set_v4", d.Routing.NFTSetV4)
 	v.SetDefault("routing.nft_set_v6", d.Routing.NFTSetV6)

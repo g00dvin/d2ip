@@ -7,8 +7,8 @@ trigger (API/cron)│ Orchestrator │
                   └──────┬───────┘          │
                          ▼                  ▼
                    ┌────────────┐    ┌──────────┐
-                   │ singleflight│   │  runs DB │
-                   └─────┬──────┘    │  insert  │
+                   │ singleflight│   │  history │
+                   └─────┬──────┘    │  (mem)   │
                          ▼           └──────────┘
               ┌──────────────────────┐
               │ 1. Source.Get        │  → dlcPath, version
@@ -20,44 +20,48 @@ trigger (API/cron)│ Orchestrator │
               └──────────┬───────────┘
                          ▼
               ┌──────────────────────┐
-              │ 3. normalize+dedup   │  → []string domains (Full+RootDomain only*)
+              │ 3. normalize+dedup   │  → []string domains
               └──────────┬───────────┘
                          ▼
               ┌──────────────────────┐
-              │ 4. Cache.NeedsRefresh│  → []string stale
+              │ 4. filter resolvable │  → []string (Full+RootDomain only*)
               └──────────┬───────────┘
                          ▼
               ┌──────────────────────┐
-              │ 5. Resolver.Resolve  │  fan‑out N workers → chan ResolveResult
+              │ 5. Cache.NeedsRefresh│  → []string stale
               └──────────┬───────────┘
                          ▼
               ┌──────────────────────┐
-              │ 6. Cache.UpsertBatch │  drained in 1k‑row tx
+              │ 6. Resolver.Resolve  │  fan‑out N workers → chan ResolveResult
               └──────────┬───────────┘
                          ▼
               ┌──────────────────────┐
-              │ 7. Cache.Snapshot    │  → []netip.Addr per family
+              │ 7. Cache.UpsertBatch │  drained in 1k‑row tx
               └──────────┬───────────┘
                          ▼
               ┌──────────────────────┐
-              │ 8. Aggregator        │  → []netip.Prefix per family
+              │ 8. Cache.Snapshot    │  → []netip.Addr per family
               └──────────┬───────────┘
                          ▼
               ┌──────────────────────┐
-              │ 9. Exporter.Write    │  ipv4.txt + ipv6.txt (atomic)
+              │ 9. Aggregator        │  → []netip.Prefix per family
               └──────────┬───────────┘
                          ▼
               ┌──────────────────────┐
-              │10. Router.Plan/Apply │  nft set diff or table 100
+              │10. Exporter.Write    │  ipv4.txt + ipv6.txt (atomic)
               └──────────┬───────────┘
                          ▼
-                    runs.update(ok)
+              ┌──────────────────────┐
+              │11. Router            │  cap check → plan v4 → plan v6
+              │   (Plan/Apply)       │  → apply v4 → apply v6 (unless dry-run)
+              └──────────┬───────────┘
+                         ▼
+                    history.append
 ```
 
 \* `Plain` (keyword) and `Regex` rule types do **not** map to a single domain you can
-resolve — they are recorded in cache metadata but skipped at the resolve stage with
-a `pipeline_skipped_total{reason="unresolvable_rule"}` counter increment. The
-operator decides whether to expose them via a separate "wildcard" backend later.
+resolve — they are skipped at the resolve stage. The operator decides whether to
+expose them via a separate "wildcard" backend later.
 
 ## Pipeline guarantees
 
@@ -68,3 +72,11 @@ operator decides whether to expose them via a separate "wildcard" backend later.
    no-op, exporter detects unchanged digest, router computes empty diff).
 4. **Crash-safe**: state file written *after* router apply succeeds; if process
    dies mid-apply, next start computes diff from on-disk reality vs desired.
+
+## PipelineRequest fields
+
+| Field          | Type | Default | Description                                      |
+|----------------|------|---------|--------------------------------------------------|
+| `dry_run`      | bool | false   | Stop before export/routing apply                 |
+| `force_resolve`| bool | false   | Ignore cache TTL, re-resolve all domains         |
+| `skip_routing` | bool | false   | Stop after export, skip routing step entirely    |

@@ -23,11 +23,14 @@ resolver:
   backoff_base: 100ms
   backoff_max: 5s
   follow_cname: true
+  enable_v4: true
+  enable_v6: true
 
 cache:
   db_path: "./d2ip.db"
   ttl: 24h
   failed_ttl: 1h
+  vacuum_after: 720h
 
 aggregation:
   enabled: true
@@ -53,7 +56,7 @@ routing:
 
 scheduler:
   dlc_refresh: 24h
-  resolve_cycle: 0  # Disabled by default
+  resolve_cycle: 1h  # Must be >= 1m, or 0 to disable scheduled resolves
 
 logging:
   level: "info"

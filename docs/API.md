@@ -1,6 +1,6 @@
 # d2ip — HTTP API
 
-Base: `http://<host>:9099`. JSON in/out. Errors: `{"error":"...","code":"..."}`.
+Base: `http://<host>:9099`. JSON in/out. Errors: `{"error":"..."}`.
 
 ## Pipeline
 
@@ -10,31 +10,29 @@ Trigger a full pipeline run (single-flight).
 
 **Request:**
 ```json
-{}
+{ "dry_run": false, "force_resolve": false, "skip_routing": false }
 ```
+
+All fields are optional. `dry_run=true` stops before export/routing apply. `force_resolve=true` ignores cache TTL. `skip_routing=true` stops after export.
 
 **Response (200):**
 ```json
-{ "run_id": 1, "domains": 100, "resolved": 95, "failed": 5, "ipv4_out": 1847, "ipv6_out": 3201, "duration": 12400000000 }
+{ "run_id": 1, "domains": 100, "stale": 50, "resolved": 45, "failed": 5, "ipv4_out": 1847, "ipv6_out": 3201, "duration": 12400000000 }
 ```
 
 **Error (409):**
 ```json
-{ "error": "pipeline already running" }
-```
-
-### POST /pipeline/dry-run
-
-Run pipeline up to `route` step, no apply.
-
-**Request:**
-```json
-{}
+{ "error": "orchestrator: pipeline already running: run_id=1234567890" }
 ```
 
 ### GET /pipeline/status
 
-Returns current run status and last 10 runs.
+Returns current run status.
+
+**Response:**
+```json
+{ "running": false, "run_id": 1, "started": "2026-04-20T14:32:01Z", "report": { ... } }
+```
 
 ### GET /api/pipeline/history
 
@@ -42,32 +40,35 @@ Returns last 10 pipeline runs.
 
 **Response:**
 ```json
-{ "history": [{ "run_id": 1, "domains": 100, "resolved": 95, "failed": 5, "ipv4_out": 1847, "ipv6_out": 3201, "duration": 12400000000 }] }
+{ "history": [{ "run_id": 1, "domains": 100, "stale": 50, "resolved": 45, "failed": 5, "ipv4_out": 1847, "ipv6_out": 3201, "duration": 12400000000 }] }
 ```
 
 ### POST /pipeline/cancel
 
 Cancel the currently running pipeline.
 
-**Response:**
+**Response (200):**
 ```json
 { "status": "cancelled" }
 ```
 
-**Error (409):**
+**Response (200, idempotent):**
 ```json
-{ "error": "no pipeline running" }
+{ "status": "not running" }
 ```
 
 ## Categories
 
 ### GET /api/categories
 
-List all available geosite categories with domain counts.
+List configured and available geosite categories.
 
 **Response:**
 ```json
-{ "categories": [{ "code": "geosite:cn", "domain_count": 14203, "attrs": [] }] }
+{
+  "configured": [{ "code": "geosite:cn", "attrs": [], "domain_count": 14203 }],
+  "available": ["geosite:google", "geosite:facebook"]
+}
 ```
 
 ### GET /api/categories/{code}/domains
@@ -81,11 +82,11 @@ Get paginated domains for a category. Query params: `page` (default 1), `per_pag
 
 ### POST /api/categories
 
-Add a new category.
+Add a new category. Code is auto-prefixed with `geosite:` if missing.
 
 **Request:**
 ```json
-{ "code": "geosite:example", "attrs": ["@cn"] }
+{ "code": "example", "attrs": ["@cn"] }
 ```
 
 **Response:**
@@ -100,29 +101,17 @@ Add a new category.
 
 ### DELETE /api/categories/{code}
 
-Remove a category.
+Remove a category. Code is auto-prefixed with `geosite:` if missing.
 
 **Response:**
 ```json
 { "status": "ok" }
 ```
 
-### GET /categories
-
-List all categories (legacy).
-
-### PUT /categories
-
-Replace all categories (legacy).
-
-**Request:**
+**Error (404):**
 ```json
-[{"code":"geosite:ru","attrs":["@cn"]}]
+{ "error": "category not found: geosite:example" }
 ```
-
-### DELETE /categories/{code}
-
-Remove a category (legacy).
 
 ## Source
 
@@ -147,14 +136,6 @@ Return dlc.dat metadata (SHA256, size, ETag, fetch time).
 { "available": false }
 ```
 
-### GET /source/info
-
-Return local path, sha256, fetched_at, version (legacy).
-
-### POST /source/refresh
-
-Force re-download dlc.dat (legacy).
-
 ## Cache
 
 ### GET /api/cache/stats
@@ -177,7 +158,7 @@ Return cache statistics.
 
 ### POST /api/cache/purge
 
-Purge cache entries.
+Purge cache entries (placeholder — not yet implemented).
 
 **Request:**
 ```json
@@ -191,33 +172,21 @@ Purge cache entries.
 
 ### POST /api/cache/vacuum
 
-Run SQLite VACUUM.
+Run SQLite VACUUM and delete stale records.
 
 **Response:**
 ```json
-{ "status": "ok" }
+{ "status": "ok", "deleted": 42 }
 ```
 
 ### GET /api/cache/entries?domain=example.com
 
-Search cached entries by domain.
+Search cached entries by domain (not yet implemented).
 
-**Response:**
+**Error (503):**
 ```json
-{ "domain": "example.com", "ipv4_count": 1847, "ipv6_count": 3201, "note": "domain-level lookup requires cache.GetByDomain — showing totals" }
+{ "error": "domain-level lookup not yet implemented" }
 ```
-
-### GET /cache/stats
-
-Return counts by type/status (legacy).
-
-### POST /cache/purge
-
-Wipe all records, keeps domains (legacy).
-
-### POST /cache/vacuum
-
-Drop entries older than threshold (legacy).
 
 ## Settings
 
@@ -257,28 +226,11 @@ Remove a config override, reverting to default.
 { "status": "ok" }
 ```
 
-### GET /settings
-
-Return current settings (legacy).
-
-### PATCH /settings
-
-Update settings (legacy).
-
-**Request:**
-```json
-{"cache.ttl":"4h"}
-```
-
 ## Routing
-
-### GET /routing/state
-
-Return last applied state.json.
 
 ### POST /routing/dry-run
 
-Preview diff vs current desired.
+Preview diff vs current desired without applying.
 
 **Request:**
 ```json
@@ -290,14 +242,15 @@ Preview diff vs current desired.
 {
   "v4_plan": { "add": [...], "remove": [...] },
   "v6_plan": { "add": [...], "remove": [...] },
-  "v4_diff": {},
-  "v6_diff": {}
+  "v4_diff": "+ 1.0.0.0/24\n",
+  "v6_diff": "+ 2001:db8::/32\n"
 }
 ```
 
-### POST /routing/apply
-
-Apply pending plan.
+**Error (503, routing disabled):**
+```json
+{ "error": "routing disabled" }
+```
 
 ### POST /routing/rollback
 
@@ -306,6 +259,11 @@ Remove only entries we own.
 **Response:**
 ```json
 { "status": "ok" }
+```
+
+**Error (503, routing disabled):**
+```json
+{ "error": "routing disabled" }
 ```
 
 ### GET /routing/snapshot
@@ -324,6 +282,24 @@ Show current applied routing state.
 
 ## Health & metrics
 
-* `GET /healthz` → `200 OK` if process up
-* `GET /readyz`  → `200 OK` if DB open and last run < 2× resolve_cycle
-* `GET /metrics` → Prometheus exposition
+### GET /healthz
+
+Returns `200 OK` if process is alive.
+
+**Response:**
+```json
+{ "status": "ok" }
+```
+
+### GET /readyz
+
+Returns `200 OK` (stub — DB check TODO).
+
+**Response:**
+```json
+{ "status": "ready" }
+```
+
+### GET /metrics
+
+Prometheus exposition format.

@@ -213,8 +213,9 @@ func validateScheduler(s SchedulerConfig) []error {
 	if s.DLCRefresh < time.Minute {
 		errs = append(errs, fmt.Errorf("scheduler.dlc_refresh: must be >= 1m, got %s", s.DLCRefresh))
 	}
-	if s.ResolveCycle < time.Minute {
-		errs = append(errs, fmt.Errorf("scheduler.resolve_cycle: must be >= 1m, got %s", s.ResolveCycle))
+	// ResolveCycle == 0 means "disabled" (no scheduled resolves).
+	if s.ResolveCycle != 0 && s.ResolveCycle < time.Minute {
+		errs = append(errs, fmt.Errorf("scheduler.resolve_cycle: must be >= 1m or 0 (disabled), got %s", s.ResolveCycle))
 	}
 	return errs
 }
@@ -224,12 +225,12 @@ func validateLogging(l LoggingConfig) []error {
 	switch strings.ToLower(l.Level) {
 	case "debug", "info", "warn", "error", "fatal", "panic":
 	default:
-		errs = append(errs, fmt.Errorf("logging.level: must be debug|info|warn|error, got %q", l.Level))
+		errs = append(errs, fmt.Errorf("logging.level: must be debug|info|warn|error|fatal|panic, got %q", l.Level))
 	}
 	switch strings.ToLower(l.Format) {
 	case "json", "console", "text":
 	default:
-		errs = append(errs, fmt.Errorf("logging.format: must be json|console, got %q", l.Format))
+		errs = append(errs, fmt.Errorf("logging.format: must be json|console|text, got %q", l.Format))
 	}
 	return errs
 }

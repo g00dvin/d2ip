@@ -35,7 +35,7 @@ resolver:
 cache:
   db_path: /var/lib/d2ip/cache.db
   ttl: 6h                        # internal TTL — DNS TTL is IGNORED
-  failed_ttl: 30m                # short retry for failed lookups
+  failed_ttl: 30m                # short retry for failures
   vacuum_after: 720h             # 30d
 
 aggregation:
@@ -51,8 +51,9 @@ export:
 
 routing:
   enabled: false                 # SAFE default
-  backend: nftables              # nftables|iproute2|none
+  backend: nftables              # none|nftables|iproute2
   table_id: 100                  # iproute2 only
+  iface: ""                      # REQUIRED for iproute2 (e.g. "eth0")
   nft_table: inet d2ip
   nft_set_v4: d2ip_v4
   nft_set_v6: d2ip_v6
@@ -64,8 +65,8 @@ scheduler:
   resolve_cycle: 1h
 
 logging:
-  level: info                    # debug|info|warn|error
-  format: json
+  level: info                    # debug|info|warn|error|fatal|panic
+  format: json                   # json|console|text
 
 metrics:
   enabled: true
@@ -83,10 +84,37 @@ metrics:
 
 ## Validation rules
 
+* `listen` — non-empty, valid `host:port`
+* `source.url` — non-empty, must start with `http://` or `https://`
+* `source.cache_path` — non-empty
+* `source.refresh_interval` ≥ 1m
+* `source.http_timeout` ≥ 1s
+* `categories[*].code` — non-empty, must contain `:`, must be unique
+* `resolver.upstream` — valid `host:port`, port in [1,65535]
+* `resolver.network` — `udp`, `tcp`, or `tcp-tls`
 * `resolver.concurrency` ∈ [1, 4096]
-* `resolver.qps`         ∈ [1, 100000]
-* `cache.ttl`            ≥ 1m
-* `aggregation.v4_max_prefix` ∈ [8, 32]; v6 ∈ [16, 128]
-* `routing.enabled=true` requires `routing.backend != none` and one of
-  `cap NET_ADMIN` / `--network=host`. The Routing Agent self‑checks at startup
-  and refuses to apply if capabilities are missing.
+* `resolver.qps` ∈ [1, 100000]
+* `resolver.timeout` ≥ 100ms
+* `resolver.retries` ∈ [0, 10]
+* `resolver.backoff_base` > 0
+* `resolver.backoff_max` ≥ `backoff_base`
+* At least one of `resolver.enable_v4` or `resolver.enable_v6` must be `true`
+* `cache.db_path` — non-empty
+* `cache.ttl` ≥ 1m
+* `cache.failed_ttl` ≥ 1s
+* `cache.vacuum_after` ≥ 1h
+* `aggregation.v4_max_prefix` ∈ [8, 32]
+* `aggregation.v6_max_prefix` ∈ [16, 128]
+* `export.dir`, `export.ipv4_file`, `export.ipv6_file` — non-empty
+* `export.ipv4_file` and `export.ipv6_file` must differ
+* `routing.backend` — `none`, `nftables`, or `iproute2`
+* `routing.enabled=true` requires `routing.backend != none`
+* `routing.table_id` ∈ [1, 252] for iproute2
+* `routing.iface` — required when `backend=iproute2`
+* `routing.nft_table`, `routing.nft_set_v4`, `routing.nft_set_v6` — required when `backend=nftables`
+* `routing.state_path` — required when `routing.enabled=true`
+* `scheduler.dlc_refresh` ≥ 1m
+* `scheduler.resolve_cycle` ≥ 1m or 0 (disabled)
+* `logging.level` — `debug|info|warn|error|fatal|panic`
+* `logging.format` — `json|console|text`
+* `metrics.path` — must start with `/` when enabled

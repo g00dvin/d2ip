@@ -7,36 +7,36 @@ schedule, with a controllable HTTP API.
 ## 1. High‑level component diagram
 
 ```
-                                 ┌───────────────────────────────┐
-                                 │           HTTP API            │
-                                 │      (chi, internal/api)      │
-                                 └───────────────┬───────────────┘
-                                                 │ commands / status
-                                                 ▼
+                                  ┌───────────────────────────────┐
+                                  │           HTTP API            │
+                                  │      (chi, internal/api)      │
+                                  └───────────────┬───────────────┘
+                                                  │ commands / status
+                                                  ▼
 ┌───────────────────┐  schedule  ┌─────────────────────────────────────┐
 │    Scheduler      ├───────────►│            Orchestrator             │
 │  (cron-like)      │            │  pipeline:                          │
 └───────────────────┘            │   fetch→parse→normalize→resolve→    │
-                                 │   cache→aggregate→export→route      │
-                                 └──┬──────┬────┬──────┬─────┬─────┬──┘
-                                    │      │    │      │     │     │
-                                    ▼      ▼    ▼      ▼     ▼     ▼
-                              ┌──────┐ ┌─────┐┌────┐┌─────┐┌────┐┌─────┐
-                              │Source│ │Domn ││Resv││Cache││Aggr││Expt │
-                              │Agent │ │List ││lver││ DB  ││ IP ││File │
-                              └──┬───┘ └──┬──┘└─┬──┘└──┬──┘└──┬─┘└──┬──┘
-                                 │        │     │      │      │     │
-                              dlc.dat   GeoSite worker  SQLite radix ipv4/6.txt
-                                                pool            tree    (atomic)
-                                                                       │
-                                                                       ▼
-                                                              ┌─────────────────┐
-                                                              │  Routing Agent  │
-                                                              │ nft set / iproute2
-                                                              │  table 100      │
-                                                              └─────────────────┘
+                                  │   cache→aggregate→export→route      │
+                                  └──┬──────┬────┬──────┬─────┬─────┬──┘
+                                     │      │    │      │     │     │
+                                     ▼      ▼    ▼      ▼     ▼     ▼
+                               ┌──────┐ ┌─────┐┌────┐┌─────┐┌────┐┌─────┐
+                               │Source│ │Domn ││Resv││Cache││Aggr││Expt │
+                               │Agent │ │List ││lver││ DB  ││ IP ││File │
+                               └──┬───┘ └──┬──┘└─┬──┘└──┬──┘└──┬─┘└──┬──┘
+                                  │        │     │      │      │     │
+                               dlc.dat   GeoSite worker  SQLite radix ipv4/6.txt
+                                                 pool            tree    (atomic)
+                                                                        │
+                                                                        ▼
+                                                               ┌─────────────────┐
+                                                               │  Routing Agent  │
+                                                               │ nft set / iproute2
+                                                               │  table 100      │
+                                                               └─────────────────┘
 
-                  cross‑cutting:  Config Agent · Logging · Metrics · Health
+                   cross‑cutting:  Config Agent · Logging · Metrics · Health
 ```
 
 ## 2. Module responsibilities
@@ -58,16 +58,16 @@ schedule, with a controllable HTTP API.
 
 ## 3. Inter‑agent contracts (Go interfaces)
 
-All cross‑module communication goes through small interfaces — modules never import each
-other's concrete types. Concrete types live behind `Provider`/`Sink` boundaries so the
-orchestrator can wire mocks in tests.
+Most cross‑module communication goes through small interfaces. The orchestrator imports
+concrete types for `aggregator` and `exporter` because their APIs are stable and there
+is no need for runtime polymorphism.
 
 ```go
 // internal/source
 type DLCStore interface {
-    // Returns the current local path to dlc.dat. Refreshes if older than maxAge.
     Get(ctx context.Context, maxAge time.Duration) (path string, version Version, err error)
     ForceRefresh(ctx context.Context) (path string, version Version, err error)
+    Info() Version
 }
 
 // internal/domainlist
@@ -75,58 +75,64 @@ type Rule struct {
     Type  RuleType // Full | RootDomain | Plain | Regex
     Value string
     Attrs map[string]any
+    Cat   string // origin category (diagnostics)
 }
 type CategorySelector struct {
-    Code     string   // e.g. "ru"
-    Attrs    []string // optional @attrs filter (AND)
+    Code  string   // e.g. "ru" or "geosite:ru"
+    Attrs []string // optional @attrs filter (AND)
 }
 type ListProvider interface {
-    Load(ctx context.Context, dlcPath string) error
+    Load(dlcPath string) error
     Select(sel []CategorySelector) ([]Rule, error)
+    Categories() []string
 }
 
 // internal/resolver
 type ResolveResult struct {
-    Domain    string
-    IPv4      []netip.Addr
-    IPv6      []netip.Addr
-    Status    Status // Valid | Failed | NXDOMAIN
+    Domain     string
+    IPv4       []netip.Addr
+    IPv6       []netip.Addr
+    Status     Status // Valid | Failed | NXDomain
     ResolvedAt time.Time
-    Err       error
+    Err        error
 }
 type Resolver interface {
     ResolveBatch(ctx context.Context, domains []string) <-chan ResolveResult
+    Close() error
 }
 
 // internal/cache
 type Cache interface {
-    NeedsRefresh(ctx context.Context, domains []string, ttl time.Duration) ([]string, error)
+    NeedsRefresh(ctx context.Context, domains []string, ttl, failedTTL time.Duration) ([]string, error)
     UpsertBatch(ctx context.Context, results []ResolveResult) error
     Snapshot(ctx context.Context) (ipv4 []netip.Addr, ipv6 []netip.Addr, err error)
-    Vacuum(ctx context.Context, olderThan time.Duration) error
+    Stats(ctx context.Context) (Stats, error)
+    Vacuum(ctx context.Context, olderThan time.Duration) (deleted int, err error)
+    Close() error
 }
 
-// internal/aggregator
-type Aggregator interface {
-    AggregateV4(in []netip.Addr, level Aggressiveness) []netip.Prefix
-    AggregateV6(in []netip.Addr, level Aggressiveness) []netip.Prefix
-}
+// internal/aggregator — concrete type (no interface)
+type Aggregator struct{}
+func (a *Aggregator) AggregateV4(in []netip.Addr, level Aggressiveness, maxPrefix int) []netip.Prefix
+func (a *Aggregator) AggregateV6(in []netip.Addr, level Aggressiveness, maxPrefix int) []netip.Prefix
 
-// internal/exporter
-type Exporter interface {
-    Write(ctx context.Context, ipv4 []netip.Prefix, ipv6 []netip.Prefix) (ExportReport, error)
-}
+// internal/exporter — concrete type (no interface)
+type FileExporter struct{ ... }
+func (e *FileExporter) Write(ctx context.Context, ipv4 []netip.Prefix, ipv6 []netip.Prefix) (ExportReport, error)
 
 // internal/routing
 type Plan struct {
+    Family Family
     Add    []netip.Prefix
     Remove []netip.Prefix
 }
 type Router interface {
+    Caps() error
     Plan(ctx context.Context, desired []netip.Prefix, family Family) (Plan, error)
-    Apply(ctx context.Context, p Plan, family Family) error
+    Apply(ctx context.Context, p Plan) error
     Snapshot() RouterState
     Rollback(ctx context.Context) error
+    DryRun(ctx context.Context, desired []netip.Prefix, f Family) (Plan, string, error)
 }
 ```
 
@@ -136,6 +142,8 @@ The orchestrator's pipeline shape:
 func (o *Orchestrator) Run(ctx context.Context, req PipelineRequest) (PipelineReport, error)
 ```
 
+`PipelineRequest` fields: `DryRun bool`, `ForceResolve bool`, `SkipRouting bool`.
+
 Channels carry `ResolveResult` between Resolver → Cache writer; everything else is
 slice‑based for simpler back‑pressure semantics.
 
@@ -143,7 +151,7 @@ slice‑based for simpler back‑pressure semantics.
 
 See [SCHEMA.md](SCHEMA.md). Highlights:
 
-* `domains` (id, name UNIQUE) — canonical punycode form.
+* `domains` (id, name UNIQUE, last_resolved_at, resolve_status) — canonical punycode form.
 * `records` (id, domain_id, ip, type, updated_at, status) — 1:N with `domains`.
 * Composite uniqueness `(domain_id, ip, type)` to make upserts idempotent.
 * PRAGMA: `journal_mode=WAL`, `synchronous=NORMAL`, `foreign_keys=ON`, `busy_timeout=5000`.
@@ -154,16 +162,17 @@ See [SCHEMA.md](SCHEMA.md). Highlights:
 ```
 fetch(dlc.dat) → parse(protobuf) → expand(include) → filter(category, @attrs)
 → normalize(lowercase, punycode, dedup)
+→ filter resolvable (Full + RootDomain only; Plain/Regex skipped)
 → resolve(worker pool, A+AAAA+CNAME, retry/backoff, rate‑limited)
 → cache(SQLite upsert, internal TTL only — DNS TTL ignored)
 → snapshot(SELECT all valid IPs, by family)
 → aggregate(radix tree CIDR merge per family + aggressiveness)
 → export(ipv4.txt, ipv6.txt — atomic)
-→ route(nft set / table 100 — diff‑apply, dry‑run capable)
+→ route(cap check → plan v4 → plan v6 → apply v4 → apply v6)
 ```
 
 A run is single‑flight; a second trigger while one is in flight returns `409 Busy`
-with the current run's id.
+with the in-flight `run_id`.
 
 ## 6. Concurrency model
 
@@ -173,7 +182,7 @@ with the current run's id.
   shared `golang.org/x/time/rate.Limiter` (`config.resolver.qps`).
 * Results pushed onto a single `chan ResolveResult`; one writer goroutine drains it
   into batched SQLite transactions (≤1k rows per tx).
-* `errgroup` scopes the whole pipeline; ctx cancel propagates everywhere.
+* Context cancel propagates everywhere.
 
 ## 7. Routing isolation
 
@@ -184,7 +193,8 @@ with the current run's id.
   carry our table id; we never touch `main`.
 * Marker: every managed object encodes `d2ip` in its name/comment.
 * State file: `/var/lib/d2ip/state.json` — last applied prefixes per family + backend.
-* `--dry-run` (and `POST /pipeline/dry-run`) prints the diff without applying.
+* `DryRun` field on `PipelineRequest` (and `routing.dry_run` in config) computes the
+  plan and diff without applying.
 * Rollback removes only entries we previously applied (set difference with state).
 
 ## 8. Configuration
@@ -200,7 +210,7 @@ ENV > Web overrides (persisted in SQLite `kv_settings`) > defaults. See
 * SQLite is the source of truth for *what to export*; aggregation/export are pure
   functions over its snapshot.
 * Routing is the only step with external side effects — gated behind `routing.enabled`
-  and always preceded by a recorded plan.
+  and always preceded by a capability check and recorded plan.
 
 ## 10. Observability
 
@@ -209,4 +219,4 @@ ENV > Web overrides (persisted in SQLite `kv_settings`) > defaults. See
   `d2ip_pipeline_duration_seconds`, `d2ip_resolve_total{status}`,
   `d2ip_cache_hits_total`, `d2ip_aggregate_input/output`,
   `d2ip_route_apply_total{op}`.
-* `/healthz` (process), `/readyz` (DB + last successful run age).
+* `/healthz` (process), `/readyz` (DB + last successful run age — stubbed).

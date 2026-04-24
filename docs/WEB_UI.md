@@ -13,7 +13,7 @@ The d2ip web UI is a modern, responsive single-page application (SPA) built with
 - Pinia (state management)
 - Axios (HTTP client)
 - Embedded in binary via Go `embed` package
-- Total size: ~174KB
+- Total size: ~468KB (gzipped embedded assets)
 
 ## Features
 
@@ -88,9 +88,21 @@ The d2ip web UI is a modern, responsive single-page application (SPA) built with
 - **Rollback Button:** Restores previous routing state (with confirmation)
 - **Current Snapshot:** Backend type, IPv4/IPv6 prefix counts, applied timestamp
 
+## Real-Time Updates
+
+The UI uses **Server-Sent Events (SSE)** via `/events` endpoint for real-time updates:
+- `pipeline.start` — Pipeline started
+- `pipeline.progress` — Resolution progress (resolved/failed/total)
+- `pipeline.complete` — Pipeline finished successfully
+- `pipeline.failed` — Pipeline failed
+- `config.reload` — Configuration changed
+- `routing.apply` — Routing state applied
+
+SSE connection shows a status indicator in the header. Falls back to polling if SSE disconnects.
+
 ## Auto-Refresh Behavior
 
-The UI uses auto-polling via `usePolling` composable:
+Adaptive polling via `usePolling` composable (SSE primary, polling fallback):
 
 | Element | Endpoint | Interval |
 |---------|----------|----------|
@@ -138,10 +150,11 @@ The UI uses auto-polling via `usePolling` composable:
 
 ## Performance
 
-**Size:** ~174KB total (JS + CSS)
-- Vue 3 runtime + router + pinia: ~58KB gzipped
-- Tailwind CSS: ~12KB gzipped
-- Application code: ~20KB gzipped
+**Size:** ~468KB total gzipped embedded assets (JS + CSS)
+- Naive UI component library: ~425KB gzipped
+- Tailwind CSS: ~3KB gzipped
+- Application code: ~15KB gzipped
+- Charts: ~25KB gzipped
 
 **Network Usage:**
 - Initial page load: 174KB (all assets embedded)
@@ -173,7 +186,9 @@ The UI uses auto-polling via `usePolling` composable:
 - `web/src/views/` — Page components
 - `web/src/components/` — Reusable components
 - `web/src/composables/` — Shared logic (polling, confirm)
-- `web/src/api/index.ts` — API client with TypeScript types
+- `web/src/api/rest.ts` — Typed REST API functions
+- `web/src/api/types.ts` — API response interfaces
+- `web/src/api/client.ts` — Axios instance with interceptors
 
 **Build:**
 ```bash
