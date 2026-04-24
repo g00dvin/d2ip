@@ -103,15 +103,25 @@ const (
 
 // RoutingConfig controls kernel routing integration (SAFE default: disabled).
 type RoutingConfig struct {
-	Enabled   bool           `mapstructure:"enabled" json:"enabled" yaml:"enabled"`
-	Backend   RoutingBackend `mapstructure:"backend" json:"backend" yaml:"backend"`
-	TableID   int            `mapstructure:"table_id" json:"table_id" yaml:"table_id"`
-	Iface     string         `mapstructure:"iface" json:"iface" yaml:"iface"` // Required for iproute2 backend
-	NFTTable  string         `mapstructure:"nft_table" json:"nft_table" yaml:"nft_table"`
-	NFTSetV4  string         `mapstructure:"nft_set_v4" json:"nft_set_v4" yaml:"nft_set_v4"`
-	NFTSetV6  string         `mapstructure:"nft_set_v6" json:"nft_set_v6" yaml:"nft_set_v6"`
-	StatePath string         `mapstructure:"state_path" json:"state_path" yaml:"state_path"`
-	DryRun    bool           `mapstructure:"dry_run" json:"dry_run" yaml:"dry_run"`
+	Enabled  bool           `mapstructure:"enabled" json:"enabled" yaml:"enabled"`
+	StateDir string         `mapstructure:"state_dir" json:"state_dir" yaml:"state_dir"`
+	Policies []PolicyConfig `mapstructure:"policies" json:"policies" yaml:"policies"`
+}
+
+// PolicyConfig defines a single routing policy.
+type PolicyConfig struct {
+	Name         string             `mapstructure:"name" json:"name" yaml:"name"`
+	Enabled      bool               `mapstructure:"enabled" json:"enabled" yaml:"enabled"`
+	Categories   []string           `mapstructure:"categories" json:"categories" yaml:"categories"`
+	Backend      RoutingBackend     `mapstructure:"backend" json:"backend" yaml:"backend"`
+	TableID      int                `mapstructure:"table_id" json:"table_id" yaml:"table_id"`
+	Iface        string             `mapstructure:"iface" json:"iface" yaml:"iface"`
+	NFTTable     string             `mapstructure:"nft_table" json:"nft_table" yaml:"nft_table"`
+	NFTSetV4     string             `mapstructure:"nft_set_v4" json:"nft_set_v4" yaml:"nft_set_v4"`
+	NFTSetV6     string             `mapstructure:"nft_set_v6" json:"nft_set_v6" yaml:"nft_set_v6"`
+	DryRun       bool               `mapstructure:"dry_run" json:"dry_run" yaml:"dry_run"`
+	ExportFormat string             `mapstructure:"export_format" json:"export_format" yaml:"export_format"`
+	Aggregation  *AggregationConfig `mapstructure:"aggregation" json:"aggregation,omitempty" yaml:"aggregation,omitempty"`
 }
 
 // SchedulerConfig controls background cadences.
@@ -176,15 +186,9 @@ func Defaults() Config {
 			IPv6File: "ipv6.txt",
 		},
 		Routing: RoutingConfig{
-			Enabled:   false,
-			Backend:   BackendNFTables,
-			TableID:   100,
-			Iface:     "", // Required for iproute2, optional for nftables
-			NFTTable:  "inet d2ip",
-			NFTSetV4:  "d2ip_v4",
-			NFTSetV6:  "d2ip_v6",
-			StatePath: "/var/lib/d2ip/state.json",
-			DryRun:    false,
+			Enabled:  false,
+			StateDir: "/var/lib/d2ip",
+			Policies: nil,
 		},
 		Scheduler: SchedulerConfig{
 			DLCRefresh:   24 * time.Hour,
