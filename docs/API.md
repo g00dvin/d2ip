@@ -17,7 +17,19 @@ All fields are optional. `dry_run=true` stops before export/routing apply. `forc
 
 **Response (200):**
 ```json
-{ "run_id": 1, "domains": 100, "stale": 50, "resolved": 45, "failed": 5, "ipv4_out": 1847, "ipv6_out": 3201, "duration": 12400000000 }
+{
+  "run_id": 1,
+  "domains": 100,
+  "stale": 50,
+  "resolved": 45,
+  "failed": 5,
+  "ipv4_out": 1847,
+  "ipv6_out": 3201,
+  "duration": 12400000000,
+  "policies": [
+    { "name": "streaming", "domains": 1500, "resolved": 1480, "failed": 20, "ipv4_out": 2847, "ipv6_out": 1203, "duration_ms": 12000 }
+  ]
+}
 ```
 
 **Error (409):**
@@ -40,7 +52,23 @@ Returns last 10 pipeline runs.
 
 **Response:**
 ```json
-{ "history": [{ "run_id": 1, "domains": 100, "stale": 50, "resolved": 45, "failed": 5, "ipv4_out": 1847, "ipv6_out": 3201, "duration": 12400000000 }] }
+{
+  "history": [
+    {
+      "run_id": 1,
+      "domains": 100,
+      "stale": 50,
+      "resolved": 45,
+      "failed": 5,
+      "ipv4_out": 1847,
+      "ipv6_out": 3201,
+      "duration": 12400000000,
+      "policies": [
+        { "name": "streaming", "domains": 1500, "ipv4_out": 2847, "ipv6_out": 1203, "duration_ms": 12000 }
+      ]
+    }
+  ]
+}
 ```
 
 ### POST /pipeline/cancel
@@ -221,6 +249,81 @@ Set config overrides. Hot-reloads via Watcher.
 ### DELETE /api/settings/{key}
 
 Remove a config override, reverting to default.
+
+**Response:**
+```json
+{ "status": "ok" }
+```
+
+## Policies
+
+### GET /api/policies
+
+List all configured routing policies.
+
+**Response:**
+```json
+{
+  "policies": [
+    {
+      "name": "streaming",
+      "enabled": true,
+      "categories": ["geosite:netflix", "geosite:youtube"],
+      "backend": "iproute2",
+      "table_id": 200,
+      "iface": "eth1",
+      "dry_run": false,
+      "export_format": "plain"
+    }
+  ]
+}
+```
+
+### GET /api/policies/{name}
+
+Get a single policy by name.
+
+**Response (200):**
+```json
+{ "name": "streaming", "enabled": true, "categories": ["geosite:netflix"], "backend": "iproute2", "table_id": 200, "iface": "eth1" }
+```
+
+**Error (404):**
+```json
+{ "error": "policy not found: streaming" }
+```
+
+### POST /api/policies
+
+Create a new policy.
+
+**Request:**
+```json
+{ "name": "corporate", "enabled": true, "categories": ["geosite:google"], "backend": "iproute2", "table_id": 300, "iface": "wg0" }
+```
+
+**Response:**
+```json
+{ "status": "ok" }
+```
+
+### PUT /api/policies/{name}
+
+Update an existing policy.
+
+**Request:**
+```json
+{ "name": "corporate", "enabled": true, "categories": ["geosite:google", "geosite:microsoft"], "backend": "iproute2", "table_id": 300, "iface": "wg0" }
+```
+
+**Response:**
+```json
+{ "status": "ok" }
+```
+
+### DELETE /api/policies/{name}
+
+Delete a policy.
 
 **Response:**
 ```json

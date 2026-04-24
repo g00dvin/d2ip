@@ -43,18 +43,26 @@ trigger (API/cron)│ Orchestrator │
               │ 8. Cache.Snapshot    │  → []netip.Addr per family
               └──────────┬───────────┘
                          ▼
-              ┌──────────────────────┐
-              │ 9. Aggregator        │  → []netip.Prefix per family
-              └──────────┬───────────┘
-                         ▼
-              ┌──────────────────────┐
-              │10. Exporter.Write    │  ipv4.txt + ipv6.txt (atomic)
-              └──────────┬───────────┘
-                         ▼
-              ┌──────────────────────┐
-              │11. Router            │  cap check → plan v4 → plan v6
-              │   (Plan/Apply)       │  → apply v4 → apply v6 (unless dry-run)
-              └──────────┬───────────┘
+               ┌──────────────────────┐
+               │ 9. Aggregator        │  → []netip.Prefix per family
+               └──────────┬───────────┘
+                          ▼
+          ┌───────────────┼───────────────┐
+          │ (multi-policy │ fork)          │
+          ▼               ▼               ▼
+   ┌────────────┐  ┌────────────┐  ┌────────────┐
+   │Policy A    │  │Policy B    │  │Policy C    │
+   │Exporter    │  │Exporter    │  │Exporter    │
+   │.WritePolicy│  │.WritePolicy│  │.WritePolicy│
+   └─────┬──────┘  └─────┬──────┘  └─────┬──────┘
+         │               │               │
+   ┌─────▼──────┐  ┌─────▼──────┐  ┌─────▼──────┐
+   │Policy A    │  │Policy B    │  │Policy C    │
+   │Router      │  │Router      │  │Router      │
+   │.ApplyPolicy│  │.ApplyPolicy│  │.ApplyPolicy│
+   └─────┬──────┘  └─────┬──────┘  └─────┬──────┘
+         │               │               │
+         └───────────────┼───────────────┘
                          ▼
                     history.append
 ```

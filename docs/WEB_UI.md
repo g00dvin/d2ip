@@ -80,9 +80,18 @@ The d2ip web UI is a modern, responsive single-page application (SPA) built with
 - File size
 - ETag
 
-### 7. Routing
+### 7. Policies
 
-**Purpose:** Preview and manage routing table changes
+**Purpose:** Manage multi-policy routing configuration
+
+**Components:**
+- **Policy List Table:** Name, backend, categories count, table/set, enabled status
+- **Add/Edit Policy Drawer:** Form with category multi-select, backend picker, backend-specific fields (table_id/iface for iproute2, nft_table/set for nftables), export format, dry-run toggle
+- **Per-Policy Actions:** Run, dry-run, rollback, enable/disable, delete
+
+### 8. Routing (Legacy)
+
+**Purpose:** Preview and manage single-policy routing table changes (legacy mode)
 
 **Components:**
 - **Dry Run Button:** Shows planned changes without applying
@@ -110,6 +119,7 @@ Adaptive polling via `usePolling` composable (SSE primary, polling fallback):
 | Health status | /healthz | 10s |
 | Pipeline status (dashboard) | /pipeline/status | 10s |
 | Pipeline status (pipeline page) | /pipeline/status | 2s (running) / 10s (idle) |
+| Policies list | /api/policies | 30s |
 | Cache stats | /api/cache/stats | 30s |
 | Routing snapshot | /routing/snapshot | 30s |
 

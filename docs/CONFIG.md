@@ -51,14 +51,27 @@ export:
 
 routing:
   enabled: false                 # SAFE default
-  backend: nftables              # none|nftables|iproute2
-  table_id: 100                  # iproute2 only
-  iface: ""                      # REQUIRED for iproute2 (e.g. "eth0")
-  nft_table: inet d2ip
-  nft_set_v4: d2ip_v4
-  nft_set_v6: d2ip_v6
-  state_path: /var/lib/d2ip/state.json
-  dry_run: false
+  state_dir: /var/lib/d2ip      # directory for per-policy state files
+
+  policies:
+    - name: streaming
+      enabled: true
+      categories: ["geosite:netflix", "geosite:youtube"]
+      backend: iproute2
+      table_id: 200
+      iface: eth1
+      dry_run: false
+      export_format: plain       # plain | ipset | json | nft | iptables | bgp | yaml
+
+    - name: blocklist
+      enabled: true
+      categories: ["geosite:malware"]
+      backend: nftables
+      nft_table: inet d2ip
+      nft_set_v4: block_v4
+      nft_set_v6: block_v6
+      dry_run: false
+      export_format: nft
 
 scheduler:
   dlc_refresh: 24h
@@ -107,12 +120,15 @@ metrics:
 * `aggregation.v6_max_prefix` ∈ [16, 128]
 * `export.dir`, `export.ipv4_file`, `export.ipv6_file` — non-empty
 * `export.ipv4_file` and `export.ipv6_file` must differ
-* `routing.backend` — `none`, `nftables`, or `iproute2`
-* `routing.enabled=true` requires `routing.backend != none`
-* `routing.table_id` ∈ [1, 252] for iproute2
-* `routing.iface` — required when `backend=iproute2`
-* `routing.nft_table`, `routing.nft_set_v4`, `routing.nft_set_v6` — required when `backend=nftables`
-* `routing.state_path` — required when `routing.enabled=true`
+* `routing.enabled` — boolean
+* `routing.state_dir` — non-empty when `routing.enabled=true`
+* `routing.policies[*].name` — unique, non-empty, must match `[a-z0-9_-]+`
+* `routing.policies[*].categories` — at least one code per enabled policy, must contain `:`
+* `routing.policies[*].backend` — `none`, `nftables`, or `iproute2` (cannot be `none` for enabled policies)
+* `routing.policies[*].table_id` ∈ [1, 252] for iproute2, must be unique across policies
+* `routing.policies[*].iface` — required when `backend=iproute2`
+* `routing.policies[*].nft_table`, `routing.policies[*].nft_set_v4`, `routing.policies[*].nft_set_v6` — required when `backend=nftables`, sets must be unique per table
+* `routing.policies[*].export_format` — `plain` (default), `ipset`, `json`, `nft`, `iptables`, `bgp`, or `yaml`
 * `scheduler.dlc_refresh` ≥ 1m
 * `scheduler.resolve_cycle` ≥ 1m or 0 (disabled)
 * `logging.level` — `debug|info|warn|error|fatal|panic`

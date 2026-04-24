@@ -45,14 +45,36 @@ export:
 
 routing:
   enabled: false
-  backend: "none"  # Options: "none", "nftables", "iproute2"
-  table_id: 100     # For iproute2 backend
-  iface: ""         # Required for iproute2 backend (e.g., "eth0", "wg0")
-  nft_table: "inet d2ip"
-  nft_set_v4: "d2ip_v4"
-  nft_set_v6: "d2ip_v6"
-  state_path: "/var/lib/d2ip/state.json"
-  dry_run: false
+  state_dir: "/var/lib/d2ip"
+
+  policies:
+    - name: streaming
+      enabled: true
+      categories: ["geosite:netflix", "geosite:youtube"]
+      backend: iproute2
+      table_id: 200
+      iface: "eth1"
+      dry_run: false
+      export_format: plain
+
+    - name: corporate
+      enabled: true
+      categories: ["geosite:google", "geosite:microsoft"]
+      backend: iproute2
+      table_id: 300
+      iface: "wg0"
+      dry_run: false
+      export_format: plain
+
+    - name: blocklist
+      enabled: true
+      categories: ["geosite:malware"]
+      backend: nftables
+      nft_table: "inet d2ip"
+      nft_set_v4: "block_v4"
+      nft_set_v6: "block_v6"
+      dry_run: false
+      export_format: nft
 
 scheduler:
   dlc_refresh: 24h

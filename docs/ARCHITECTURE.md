@@ -186,16 +186,22 @@ with the in-flight `run_id`.
 
 ## 7. Routing isolation
 
-* Default backend: **nftables** named set (`d2ip_v4`, `d2ip_v6`, type `ipv4_addr` /
-  `ipv6_addr`, flag `interval`). The set is the sole "owned" object. The user's
-  rules reference the set; we only ever `flush set` + `add element`.
-* Fallback backend: `ip route` writes into table **100** (configurable). All routes
-  carry our table id; we never touch `main`.
-* Marker: every managed object encodes `d2ip` in its name/comment.
-* State file: `/var/lib/d2ip/state.json` — last applied prefixes per family + backend.
-* `DryRun` field on `PipelineRequest` (and `routing.dry_run` in config) computes the
-  plan and diff without applying.
-* Rollback removes only entries we previously applied (set difference with state).
+* **Multi-policy support**: each policy maps categories to an independent routing
+  backend (nftables set or iproute2 table). Policies are isolated — a failure in
+  one does not affect others.
+* **nftables backend**: per-policy named sets (`{policy_name}_v4`, `{policy_name}_v6`,
+  type `ipv4_addr` / `ipv6_addr`, flag `interval`). d2ip only manages set contents
+  (flush + add element); the operator writes `nft` rules referencing these sets.
+* **iproute2 backend**: per-policy routing table (table_id configurable per policy).
+  d2ip manages routes only; the operator creates `ip rule` entries with custom
+  5-tuple criteria to direct traffic to the policy's table.
+* **Marker**: every managed object encodes `d2ip` in its name/comment.
+* **State files**: `/var/lib/d2ip/state/{policy_name}.json` — last applied prefixes
+  per family per policy.
+* **Dry run**: `PipelineRequest.dry_run` and `policy.dry_run` compute the plan and
+  diff without applying.
+* **Rollback**: per-policy rollback removes only entries previously applied for that
+  policy (set difference with per-policy state).
 
 ## 8. Configuration
 
