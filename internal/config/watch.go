@@ -2,6 +2,7 @@ package config
 
 import (
 	"errors"
+	"strings"
 	"sync"
 
 	"github.com/goodvin/d2ip/internal/events"
@@ -75,7 +76,11 @@ func (w *Watcher) Current() Snapshot {
 // Returns an error if the Watcher is closed or if next fails Validate().
 func (w *Watcher) Publish(next Config) error {
 	if errs := next.Validate(); len(errs) > 0 {
-		return errors.Join(errs...)
+		var msgs []string
+		for _, e := range errs {
+			msgs = append(msgs, e.Error())
+		}
+		return errors.New(strings.Join(msgs, "; "))
 	}
 
 	w.mu.Lock()

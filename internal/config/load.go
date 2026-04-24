@@ -110,7 +110,11 @@ func Load(opts LoadOptions) (*Config, error) {
 	}
 
 	if errs := cfg.Validate(); len(errs) > 0 {
-		return nil, fmt.Errorf("config: validation failed: %w", errors.Join(errs...))
+		var msgs []string
+		for _, e := range errs {
+			msgs = append(msgs, e.Error())
+		}
+		return nil, fmt.Errorf("config: validation failed: %s", strings.Join(msgs, "; "))
 	}
 
 	return &cfg, nil
@@ -226,14 +230,7 @@ func applyDefaultsToViper(v *viper.Viper, d Config) {
 	v.SetDefault("export.ipv6_file", d.Export.IPv6File)
 
 	v.SetDefault("routing.enabled", d.Routing.Enabled)
-	v.SetDefault("routing.backend", string(d.Routing.Backend))
-	v.SetDefault("routing.table_id", d.Routing.TableID)
-	v.SetDefault("routing.iface", d.Routing.Iface)
-	v.SetDefault("routing.nft_table", d.Routing.NFTTable)
-	v.SetDefault("routing.nft_set_v4", d.Routing.NFTSetV4)
-	v.SetDefault("routing.nft_set_v6", d.Routing.NFTSetV6)
-	v.SetDefault("routing.state_path", d.Routing.StatePath)
-	v.SetDefault("routing.dry_run", d.Routing.DryRun)
+	v.SetDefault("routing.state_dir", d.Routing.StateDir)
 
 	v.SetDefault("scheduler.dlc_refresh", d.Scheduler.DLCRefresh)
 	v.SetDefault("scheduler.resolve_cycle", d.Scheduler.ResolveCycle)

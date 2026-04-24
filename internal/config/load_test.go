@@ -291,14 +291,21 @@ func TestValidate(t *testing.T) {
 			wantErr: "aggregation.level",
 		},
 		{
-			name:    "routing enabled with backend none",
-			mutate:  func(c *Config) { c.Routing.Enabled = true; c.Routing.Backend = BackendNone },
-			wantErr: "routing.enabled",
+			name:    "routing enabled with empty state_dir",
+			mutate:  func(c *Config) { c.Routing.Enabled = true; c.Routing.StateDir = "" },
+			wantErr: "routing.state_dir",
 		},
 		{
-			name:    "unknown routing backend",
-			mutate:  func(c *Config) { c.Routing.Backend = "pfctl" },
-			wantErr: "routing.backend",
+			name: "policy with invalid backend",
+			mutate: func(c *Config) {
+				c.Routing.Policies = []PolicyConfig{{
+					Name:       "bad",
+					Enabled:    true,
+					Categories: []string{"geosite:x"},
+					Backend:    "pfctl",
+				}}
+			},
+			wantErr: "routing.policies[0].backend",
 		},
 		{
 			name:    "both v4 and v6 disabled",
@@ -361,7 +368,14 @@ func TestValidate(t *testing.T) {
 			cfg := Defaults()
 			tc.mutate(&cfg)
 			errs := cfg.Validate()
-			joined := errors.Join(errs...)
+			var joined error
+			if len(errs) > 0 {
+				var msgs []string
+				for _, e := range errs {
+					msgs = append(msgs, e.Error())
+				}
+				joined = errors.New(strings.Join(msgs, "; "))
+			}
 			if tc.wantErr == "" {
 				if joined != nil {
 					t.Fatalf("expected no errors, got: %v", joined)

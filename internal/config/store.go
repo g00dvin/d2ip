@@ -202,14 +202,7 @@ func seedViperFromConfig(v *viper.Viper, c Config) {
 	v.Set("export.ipv6_file", c.Export.IPv6File)
 
 	v.Set("routing.enabled", c.Routing.Enabled)
-	v.Set("routing.backend", string(c.Routing.Backend))
-	v.Set("routing.table_id", c.Routing.TableID)
-	v.Set("routing.iface", c.Routing.Iface)
-	v.Set("routing.nft_table", c.Routing.NFTTable)
-	v.Set("routing.nft_set_v4", c.Routing.NFTSetV4)
-	v.Set("routing.nft_set_v6", c.Routing.NFTSetV6)
-	v.Set("routing.state_path", c.Routing.StatePath)
-	v.Set("routing.dry_run", c.Routing.DryRun)
+	v.Set("routing.state_dir", c.Routing.StateDir)
 
 	v.Set("scheduler.dlc_refresh", c.Scheduler.DLCRefresh)
 	v.Set("scheduler.resolve_cycle", c.Scheduler.ResolveCycle)

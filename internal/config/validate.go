@@ -4,6 +4,7 @@ import (
 	"errors"
 	"fmt"
 	"net"
+	"regexp"
 	"strconv"
 	"strings"
 	"time"
@@ -31,6 +32,7 @@ func (c *Config) Validate() []error {
 	errs = append(errs, validateAggregation(c.Aggregation)...)
 	errs = append(errs, validateExport(c.Export)...)
 	errs = append(errs, validateRouting(c.Routing)...)
+	errs = append(errs, validatePolicies(c.Routing.Policies)...)
 	errs = append(errs, validateScheduler(c.Scheduler)...)
 	errs = append(errs, validateLogging(c.Logging)...)
 	errs = append(errs, validateMetrics(c.Metrics)...)
@@ -174,37 +176,94 @@ func validateExport(e ExportConfig) []error {
 
 func validateRouting(r RoutingConfig) []error {
 	var errs []error
-	switch r.Backend {
-	case BackendNone, BackendNFTables, BackendIProute2:
-	default:
-		errs = append(errs, fmt.Errorf("routing.backend: must be none|nftables|iproute2, got %q", r.Backend))
+	if r.Enabled && strings.TrimSpace(r.StateDir) == "" {
+		errs = append(errs, errors.New("routing.state_dir: must not be empty when routing is enabled"))
 	}
-	if r.Enabled && r.Backend == BackendNone {
-		errs = append(errs, errors.New("routing.enabled=true requires routing.backend != none"))
+	return errs
+}
+
+func validatePolicies(policies []PolicyConfig) []error {
+	var errs []error
+	if len(policies) == 0 {
+		return nil
 	}
-	if r.Backend == BackendIProute2 {
-		if r.TableID < 1 || r.TableID > 252 {
-			// 253,254,255 are reserved (default, main, local).
-			errs = append(errs, fmt.Errorf("routing.table_id: must be in [1,252] for iproute2, got %d", r.TableID))
+
+	names := make(map[string]struct{})
+	tableIDs := make(map[int]struct{})
+	nftSets := make(map[string]struct{}) // key: "table.set_v4" or "table.set_v6"
+
+	for i, p := range policies {
+		prefix := fmt.Sprintf("routing.policies[%d]", i)
+
+		if p.Name == "" {
+			errs = append(errs, fmt.Errorf("%s.name is required", prefix))
+			continue
 		}
-		if strings.TrimSpace(r.Iface) == "" {
-			errs = append(errs, errors.New("routing.iface: must not be empty when backend=iproute2"))
+		if matched, _ := regexp.MatchString(`^[a-z0-9_-]+$`, p.Name); !matched {
+			errs = append(errs, fmt.Errorf("%s.name must match [a-z0-9_-]+", prefix))
+		}
+		if _, exists := names[p.Name]; exists {
+			errs = append(errs, fmt.Errorf("%s.name %q is duplicate", prefix, p.Name))
+		}
+		names[p.Name] = struct{}{}
+
+		if !p.Enabled {
+			continue
+		}
+
+		if len(p.Categories) == 0 {
+			errs = append(errs, fmt.Errorf("%s.categories must have at least one entry", prefix))
+		}
+		for j, cat := range p.Categories {
+			if !strings.Contains(cat, ":") {
+				errs = append(errs, fmt.Errorf("%s.categories[%d] %q must contain ':'", prefix, j, cat))
+			}
+		}
+
+		if p.Backend == BackendNone {
+			errs = append(errs, fmt.Errorf("%s.backend cannot be 'none' for enabled policy", prefix))
+		}
+		if p.Backend != BackendIProute2 && p.Backend != BackendNFTables && p.Backend != BackendNone {
+			errs = append(errs, fmt.Errorf("%s.backend invalid: %s", prefix, p.Backend))
+		}
+
+		if p.Backend == BackendIProute2 {
+			if p.Iface == "" {
+				errs = append(errs, fmt.Errorf("%s.iface is required for iproute2", prefix))
+			}
+			if p.TableID < 1 || p.TableID > 252 {
+				errs = append(errs, fmt.Errorf("%s.table_id must be in [1,252]", prefix))
+			}
+			if _, exists := tableIDs[p.TableID]; exists {
+				errs = append(errs, fmt.Errorf("%s.table_id %d is duplicate", prefix, p.TableID))
+			}
+			tableIDs[p.TableID] = struct{}{}
+		}
+
+		if p.Backend == BackendNFTables {
+			if p.NFTTable == "" || p.NFTSetV4 == "" || p.NFTSetV6 == "" {
+				errs = append(errs, fmt.Errorf("%s.nft_table, nft_set_v4, nft_set_v6 are required for nftables", prefix))
+			}
+			v4Key := p.NFTTable + "." + p.NFTSetV4
+			v6Key := p.NFTTable + "." + p.NFTSetV6
+			if _, exists := nftSets[v4Key]; exists {
+				errs = append(errs, fmt.Errorf("%s.nft_set_v4 %q is duplicate in table %q", prefix, p.NFTSetV4, p.NFTTable))
+			}
+			if _, exists := nftSets[v6Key]; exists {
+				errs = append(errs, fmt.Errorf("%s.nft_set_v6 %q is duplicate in table %q", prefix, p.NFTSetV6, p.NFTTable))
+			}
+			nftSets[v4Key] = struct{}{}
+			nftSets[v6Key] = struct{}{}
+		}
+
+		validFormats := map[string]struct{}{"plain": {}, "ipset": {}, "json": {}, "nft": {}, "iptables": {}, "bgp": {}, "yaml": {}}
+		if p.ExportFormat != "" {
+			if _, ok := validFormats[p.ExportFormat]; !ok {
+				errs = append(errs, fmt.Errorf("%s.export_format %q is invalid", prefix, p.ExportFormat))
+			}
 		}
 	}
-	if r.Backend == BackendNFTables {
-		if strings.TrimSpace(r.NFTTable) == "" {
-			errs = append(errs, errors.New("routing.nft_table: must not be empty when backend=nftables"))
-		}
-		if strings.TrimSpace(r.NFTSetV4) == "" {
-			errs = append(errs, errors.New("routing.nft_set_v4: must not be empty when backend=nftables"))
-		}
-		if strings.TrimSpace(r.NFTSetV6) == "" {
-			errs = append(errs, errors.New("routing.nft_set_v6: must not be empty when backend=nftables"))
-		}
-	}
-	if r.Enabled && strings.TrimSpace(r.StatePath) == "" {
-		errs = append(errs, errors.New("routing.state_path: must not be empty when routing is enabled"))
-	}
+
 	return errs
 }
 
