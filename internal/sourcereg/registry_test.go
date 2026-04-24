@@ -286,3 +286,107 @@ func TestRemoveSource(t *testing.T) {
 		t.Error("expected source to be removed")
 	}
 }
+
+func TestAddSourceInvalidProvider(t *testing.T) {
+	db := newTestDB(t)
+	reg, err := sourcereg.NewDBRegistry(db.DB())
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer reg.Close()
+	ctx := context.Background()
+
+	err = reg.AddSource(ctx, sourcereg.SourceConfig{
+		ID:       "src1",
+		Provider: "nonexistent",
+		Prefix:   "corp",
+		Enabled:  true,
+		Config:   map[string]any{},
+	})
+	if err == nil {
+		t.Fatal("expected error for unknown provider")
+	}
+}
+
+func TestAddSourceInvalidPrefix(t *testing.T) {
+	db := newTestDB(t)
+	reg, err := sourcereg.NewDBRegistry(db.DB())
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer reg.Close()
+	ctx := context.Background()
+
+	err = reg.AddSource(ctx, sourcereg.SourceConfig{
+		ID:       "src1",
+		Provider: sourcereg.TypePlaintext,
+		Prefix:   "Corp", // uppercase is invalid
+		Enabled:  true,
+		Config:   map[string]any{"type": "domains", "file": "/tmp/x.txt"},
+	})
+	if err == nil {
+		t.Fatal("expected error for invalid prefix")
+	}
+}
+
+type mockSource struct {
+	id     string
+	prefix string
+	closed bool
+}
+
+func (m *mockSource) ID() string                               { return m.id }
+func (m *mockSource) Prefix() string                           { return m.prefix }
+func (m *mockSource) Provider() sourcereg.SourceType            { return "mock" }
+func (m *mockSource) Load(ctx context.Context) error           { return nil }
+func (m *mockSource) Close() error                             { m.closed = true; return nil }
+func (m *mockSource) Categories() []string                     { return []string{m.prefix + ":default"} }
+func (m *mockSource) Info() sourcereg.SourceInfo               { return sourcereg.SourceInfo{ID: m.id, Prefix: m.prefix} }
+func (m *mockSource) IsDomainSource() bool                     { return false }
+func (m *mockSource) IsPrefixSource() bool                     { return false }
+func (m *mockSource) AsDomainSource() sourcereg.DomainSource   { return nil }
+func (m *mockSource) AsPrefixSource() sourcereg.PrefixSource   { return nil }
+
+func TestReplaceSourceClosesOld(t *testing.T) {
+	sourcereg.RegisterFactory("mock", func(id, prefix string, cfg map[string]any) (sourcereg.Source, error) {
+		return &mockSource{id: id, prefix: prefix}, nil
+	})
+
+	db := newTestDB(t)
+	reg, err := sourcereg.NewDBRegistry(db.DB())
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer reg.Close()
+	ctx := context.Background()
+
+	if err := reg.AddSource(ctx, sourcereg.SourceConfig{
+		ID:       "src1",
+		Provider: "mock",
+		Prefix:   "mock1",
+		Enabled:  true,
+		Config:   map[string]any{},
+	}); err != nil {
+		t.Fatal(err)
+	}
+
+	oldSrc, ok := reg.GetSource("src1")
+	if !ok {
+		t.Fatal("expected source to exist")
+	}
+	oldMock := oldSrc.(*mockSource)
+
+	if err := reg.AddSource(ctx, sourcereg.SourceConfig{
+		ID:       "src1",
+		Provider: "mock",
+		Prefix:   "mock2",
+		Enabled:  true,
+		Config:   map[string]any{},
+	}); err != nil {
+		t.Fatal(err)
+	}
+
+	if !oldMock.closed {
+		t.Error("expected old source to be closed after replacement")
+	}
+}

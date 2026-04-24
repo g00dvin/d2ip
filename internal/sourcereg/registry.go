@@ -9,6 +9,8 @@ import (
 	"sync"
 )
 
+var _ Registry = (*DBRegistry)(nil)
+
 // DBRegistry implements Registry using SQLite for persistence.
 type DBRegistry struct {
 	db      *sql.DB
@@ -65,6 +67,12 @@ func (r *DBRegistry) AddSource(ctx context.Context, cfg SourceConfig) error {
 		}
 	}
 
+	// Validate and create source first
+	src, err := createSource(cfg)
+	if err != nil {
+		return err
+	}
+
 	configJSON, err := json.Marshal(cfg.Config)
 	if err != nil {
 		return fmt.Errorf("sourcereg: marshal config: %w", err)
@@ -84,36 +92,32 @@ func (r *DBRegistry) AddSource(ctx context.Context, cfg SourceConfig) error {
 		return fmt.Errorf("sourcereg: insert source: %w", err)
 	}
 
-	// Create and cache the source instance
-	src, err := createSource(cfg)
-	if err != nil {
-		return err
-	}
-
+	// Update in-memory map
 	r.mu.Lock()
-	if old, ok := r.sources[cfg.ID]; ok {
-		_ = old.Close()
-	}
+	old, hadOld := r.sources[cfg.ID]
 	r.sources[cfg.ID] = src
 	r.mu.Unlock()
+	if hadOld {
+		_ = old.Close()
+	}
 
 	return nil
 }
 
 // RemoveSource deletes a source by ID.
 func (r *DBRegistry) RemoveSource(ctx context.Context, id string) error {
+	r.mu.Lock()
+	src, hadSrc := r.sources[id]
+	delete(r.sources, id)
+	r.mu.Unlock()
+
 	_, err := r.db.ExecContext(ctx, `DELETE FROM sources WHERE id = ?`, id)
 	if err != nil {
 		return fmt.Errorf("sourcereg: delete source: %w", err)
 	}
-
-	r.mu.Lock()
-	if old, ok := r.sources[id]; ok {
-		_ = old.Close()
-		delete(r.sources, id)
+	if hadSrc {
+		_ = src.Close()
 	}
-	r.mu.Unlock()
-
 	return nil
 }
 
@@ -147,24 +151,32 @@ func (r *DBRegistry) LoadAll(ctx context.Context) error {
 	}
 	defer rows.Close()
 
+	var skipped int
 	newSources := make(map[string]Source)
 	for rows.Next() {
 		var cfg SourceConfig
 		var configJSON string
 		var enabledInt int
 		if err := rows.Scan(&cfg.ID, &cfg.Provider, &cfg.Prefix, &enabledInt, &configJSON); err != nil {
+			skipped++
 			continue // skip malformed rows
 		}
 		cfg.Enabled = enabledInt == 1
 		if err := json.Unmarshal([]byte(configJSON), &cfg.Config); err != nil {
+			skipped++
 			continue
 		}
 
 		src, err := createSource(cfg)
 		if err != nil {
+			skipped++
 			continue // skip invalid sources
 		}
 		newSources[cfg.ID] = src
+	}
+
+	if len(newSources) == 0 && skipped > 0 {
+		return fmt.Errorf("sourcereg: all %d source rows were malformed", skipped)
 	}
 
 	// Load each enabled source (do not hold registry lock during I/O)
