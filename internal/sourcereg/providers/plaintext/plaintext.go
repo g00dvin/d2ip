@@ -98,7 +98,7 @@ func (p *Provider) Info() sourcereg.SourceInfo {
 		Provider:    string(sourcereg.TypePlaintext),
 		Prefix:      p.prefix,
 		Enabled:     true,
-		Categories:  p.Categories(),
+		Categories:  []string{p.prefix + ":default"},
 		LastFetched: p.loadedAt,
 		LastError:   p.lastErr,
 	}
