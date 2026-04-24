@@ -4,23 +4,28 @@ import { useRoute, useRouter } from 'vue-router'
 import { darkTheme } from 'naive-ui'
 import { useAppStore } from '@/stores/app'
 import { useHealthStore } from '@/stores/health'
+import { useVersionStore } from '@/stores/version'
 import { usePolling } from '@/composables/usePolling'
 import {
   AnalyticsOutline, ListOutline, OptionsOutline, CopyOutline,
   ServerOutline, GlobeOutline, NavigateOutline, SunnyOutline, MoonOutline, MenuOutline,
+  ShieldOutline,
 } from '@vicons/ionicons5'
 
 const app = useAppStore()
 const health = useHealthStore()
+const version = useVersionStore()
 const route = useRoute()
 const router = useRouter()
 
 usePolling(() => health.fetchHealth(), 10_000)
+version.fetchVersion()
 
 const menuItems = [
   { name: 'dashboard', label: 'Dashboard', icon: AnalyticsOutline },
   { name: 'pipeline', label: 'Pipeline', icon: ListOutline },
   { name: 'categories', label: 'Categories', icon: CopyOutline },
+  { name: 'policies', label: 'Policies', icon: ShieldOutline },
   { name: 'config', label: 'Config', icon: OptionsOutline },
   { name: 'cache', label: 'Cache', icon: ServerOutline },
   { name: 'source', label: 'Source', icon: GlobeOutline },
@@ -86,6 +91,9 @@ function handleMenuSelect(key: string) {
             <span class="font-semibold">{{ menuItems.find(i => i.name === activeKey)?.label ?? 'd2ip' }}</span>
           </div>
           <div class="flex items-center gap-3">
+            <n-text v-if="version.version" depth="3" class="text-xs hidden sm:inline">
+              {{ version.version }}
+            </n-text>
             <n-tag v-if="health.status === 'healthy'" type="success" size="small">● healthy</n-tag>
             <n-tag v-else-if="health.status === 'unhealthy'" type="error" size="small">● unhealthy</n-tag>
             <n-tag v-else type="default" size="small">checking...</n-tag>

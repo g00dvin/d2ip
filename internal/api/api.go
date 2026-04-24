@@ -37,12 +37,15 @@ var webFS embed.FS
 type Server struct {
 	orch        *orchestrator.Orchestrator
 	router      routing.Router
+	policyRtr   routing.PolicyRouter
 	cfgWatcher  *config.Watcher
 	kvStore     config.KVStore
 	dlProvider  domainlist.ListProvider
 	sourceStore source.DLCStore
 	cacheAgent  cache.Cache
 	eventBus    *events.Bus
+	version     string
+	buildTime   string
 }
 
 // New creates an API server with dependencies.
@@ -68,6 +71,17 @@ func New(
 	}
 }
 
+// SetVersion sets the build version metadata.
+func (s *Server) SetVersion(version, buildTime string) {
+	s.version = version
+	s.buildTime = buildTime
+}
+
+// SetPolicyRouter sets the policy router for policy-aware endpoints.
+func (s *Server) SetPolicyRouter(r routing.PolicyRouter) {
+	s.policyRtr = r
+}
+
 // Handler returns the configured chi router.
 func (s *Server) Handler() http.Handler {
 	r := chi.NewRouter()
@@ -89,6 +103,7 @@ func (s *Server) Handler() http.Handler {
 		// API Routes.
 		cr.Get("/healthz", s.handleHealth)
 		cr.Get("/readyz", s.handleReady)
+		cr.Get("/api/version", s.handleVersion)
 		cr.Post("/pipeline/run", s.handlePipelineRun)
 		cr.Get("/pipeline/status", s.handlePipelineStatus)
 		cr.Post("/routing/dry-run", s.handleRoutingDryRun)
@@ -221,6 +236,14 @@ func (s *Server) handleReady(w http.ResponseWriter, r *http.Request) {
 	// TODO: check DB connection, last successful run age.
 	w.WriteHeader(http.StatusOK)
 	_, _ = w.Write([]byte(`{"status":"ready"}`))
+}
+
+// handleVersion returns the build version metadata.
+func (s *Server) handleVersion(w http.ResponseWriter, r *http.Request) {
+	s.jsonOK(w, map[string]string{
+		"version":    s.version,
+		"build_time": s.buildTime,
+	})
 }
 
 // handlePipelineRun triggers a new pipeline execution.
@@ -356,7 +379,43 @@ func (s *Server) handleRoutingRollback(w http.ResponseWriter, r *http.Request) {
 }
 
 // handleRoutingSnapshot shows current applied state.
+// When policy routing is configured, returns aggregated policy state.
 func (s *Server) handleRoutingSnapshot(w http.ResponseWriter, r *http.Request) {
+	cfg := s.cfgWatcher.Current().Config
+
+	// If policies are configured, return aggregated policy routing state.
+	if len(cfg.Routing.Policies) > 0 && s.policyRtr != nil {
+		var totalV4, totalV6 int
+		var anyApplied bool
+		var lastApplied string
+		for _, p := range cfg.Routing.Policies {
+			if !p.Enabled {
+				continue
+			}
+			state := s.policyRtr.SnapshotPolicy(p.Name)
+			if state.Backend != "" && state.Backend != "none" {
+				anyApplied = true
+				if state.AppliedAt > lastApplied {
+					lastApplied = state.AppliedAt
+				}
+				totalV4 += len(state.V4)
+				totalV6 += len(state.V6)
+			}
+		}
+		backend := "policies"
+		if !anyApplied {
+			backend = "none"
+		}
+		s.jsonOK(w, map[string]interface{}{
+			"backend":    backend,
+			"applied_at": lastApplied,
+			"v4":         totalV4,
+			"v6":         totalV6,
+			"policies":   len(cfg.Routing.Policies),
+		})
+		return
+	}
+
 	snapshot := s.router.Snapshot()
 	resp := map[string]interface{}{
 		"backend":    snapshot.Backend,

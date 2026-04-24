@@ -250,12 +250,15 @@ func serveCmd() {
 
 	// Create API server
 	apiServer := api.New(orch, routerAgent, cfgWatcher, cacheDB, domainProvider, sourceStore, cacheDB, eventBus)
+	apiServer.SetVersion(Version, BuildTime)
+	apiServer.SetPolicyRouter(policyRtr)
 	httpServer := &http.Server{
-		Addr:         cfg.Listen,
-		Handler:      apiServer.Handler(),
-		ReadTimeout:  10 * time.Second,
-		WriteTimeout: 30 * time.Second,
-		IdleTimeout:  60 * time.Second,
+		Addr:        cfg.Listen,
+		Handler:     apiServer.Handler(),
+		ReadTimeout: 10 * time.Second,
+		// WriteTimeout is disabled to support long-lived SSE streams.
+		// The /events endpoint sends keepalive pings every 30s.
+		IdleTimeout: 60 * time.Second,
 	}
 
 	// Start HTTP server in background

@@ -76,8 +76,15 @@ async function handleForceResolve() {
       <n-descriptions v-else :columns="2" label-placement="top">
         <n-descriptions-item label="Backend">{{ routing.snapshot.backend }}</n-descriptions-item>
         <n-descriptions-item label="Applied">{{ fmtDate(routing.snapshot.applied_at) }}</n-descriptions-item>
-        <n-descriptions-item label="IPv4 Prefixes">{{ routing.snapshot.v4?.length ?? 0 }}</n-descriptions-item>
-        <n-descriptions-item label="IPv6 Prefixes">{{ routing.snapshot.v6?.length ?? 0 }}</n-descriptions-item>
+        <n-descriptions-item label="IPv4 Prefixes">
+          {{ typeof routing.snapshot.v4 === 'number' ? routing.snapshot.v4 : (routing.snapshot.v4?.length ?? 0) }}
+        </n-descriptions-item>
+        <n-descriptions-item label="IPv6 Prefixes">
+          {{ typeof routing.snapshot.v6 === 'number' ? routing.snapshot.v6 : (routing.snapshot.v6?.length ?? 0) }}
+        </n-descriptions-item>
+        <n-descriptions-item v-if="routing.snapshot.policies !== undefined" label="Policies">
+          {{ routing.snapshot.policies }}
+        </n-descriptions-item>
       </n-descriptions>
     </n-card>
   </div>

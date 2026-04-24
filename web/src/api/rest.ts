@@ -123,3 +123,9 @@ export async function getHealth(): Promise<{ status: string }> {
   const { data } = await client.get('/healthz')
   return data
 }
+
+// Version
+export async function getVersion(): Promise<{ version: string; build_time: string }> {
+  const { data } = await client.get('/api/version')
+  return data
+}

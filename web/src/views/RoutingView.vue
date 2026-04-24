@@ -31,8 +31,8 @@ async function handleRollback() {
       <n-descriptions v-else label-placement="top" :columns="2">
         <n-descriptions-item label="Backend">{{ routing.snapshot.backend }}</n-descriptions-item>
         <n-descriptions-item label="Applied">{{ routing.snapshot.applied_at ? new Date(routing.snapshot.applied_at).toLocaleString() : 'never' }}</n-descriptions-item>
-        <n-descriptions-item label="IPv4">{{ routing.snapshot.v4?.length ?? 0 }} prefixes</n-descriptions-item>
-        <n-descriptions-item label="IPv6">{{ routing.snapshot.v6?.length ?? 0 }} prefixes</n-descriptions-item>
+        <n-descriptions-item label="IPv4">{{ typeof routing.snapshot.v4 === 'number' ? routing.snapshot.v4 : (routing.snapshot.v4?.length ?? 0) }} prefixes</n-descriptions-item>
+        <n-descriptions-item label="IPv6">{{ typeof routing.snapshot.v6 === 'number' ? routing.snapshot.v6 : (routing.snapshot.v6?.length ?? 0) }} prefixes</n-descriptions-item>
       </n-descriptions>
     </n-card>
 

@@ -28,8 +28,9 @@ export interface PipelineHistory {
 export interface RoutingSnapshot {
   backend: string
   applied_at: string
-  v4: string[]
-  v6: string[]
+  v4: string[] | number
+  v6: string[] | number
+  policies?: number
 }
 
 export interface DryRunResult {

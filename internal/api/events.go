@@ -34,7 +34,7 @@ func (s *Server) handleEvents(w http.ResponseWriter, r *http.Request) {
 	fmt.Fprint(w, "event: connected\ndata: {}\n\n")
 	flusher.Flush()
 
-	keepAlive := time.NewTicker(30 * time.Second)
+	keepAlive := time.NewTicker(15 * time.Second)
 	defer keepAlive.Stop()
 
 	for {
@@ -49,6 +49,10 @@ func (s *Server) handleEvents(w http.ResponseWriter, r *http.Request) {
 			flusher.Flush()
 
 		case <-r.Context().Done():
+			// Client disconnected; send a final empty chunk to help proxies
+			// close the connection cleanly.
+			fmt.Fprint(w, ":bye\n\n")
+			flusher.Flush()
 			return
 
 		case <-keepAlive.C:
