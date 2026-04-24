@@ -35,8 +35,8 @@ func TestIproute2Backend_Integration_RealKernel(t *testing.T) {
 	}
 	statePath := "/tmp/d2ip-test-ip-state.json"
 
-	ipr := newIProute2Router(cfg, statePath)
-	ipr.netns = nsName
+	backend := newIProute2Router(cfg, statePath)
+	backend.netns = nsName
 
 	// Check capabilities
 	if err := backend.Caps(); err != nil {
