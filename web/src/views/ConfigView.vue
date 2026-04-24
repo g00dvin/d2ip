@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { onMounted } from 'vue'
+import { onMounted, ref } from 'vue'
 import { useConfigStore } from '@/stores/config'
 
 const config = useConfigStore()
@@ -13,7 +13,7 @@ const tabs = [
   { name: 'Cache', keys: ['cache.db_path', 'cache.ttl', 'cache.failed_ttl', 'cache.vacuum_after'] },
   { name: 'Aggregation', keys: ['aggregation.enabled', 'aggregation.level', 'aggregation.v4_max_prefix', 'aggregation.v6_max_prefix'] },
   { name: 'Export', keys: ['export.dir', 'export.ipv4_file', 'export.ipv6_file'] },
-  { name: 'Routing', keys: ['routing.enabled', 'routing.backend', 'routing.table_id', 'routing.iface', 'routing.nft_table', 'routing.nft_set_v4', 'routing.nft_set_v6', 'routing.state_path', 'routing.dry_run'] },
+  { name: 'Routing', keys: ['routing.enabled', 'routing.state_dir'] },
   { name: 'Scheduler', keys: ['scheduler.dlc_refresh', 'scheduler.resolve_cycle'] },
   { name: 'Logging', keys: ['logging.level', 'logging.format'] },
   { name: 'Metrics', keys: ['metrics.enabled', 'metrics.path'] },
@@ -23,11 +23,21 @@ function isOverridden(key: string): boolean {
   return config.settings?.overrides?.[key] !== undefined
 }
 
-async function saveOverride(key: string, value: string) {
-  await config.updateOverride(key, value)
+const debounceTimers = ref<Record<string, ReturnType<typeof setTimeout>>>({})
+
+function saveOverride(key: string, value: string) {
+  if (debounceTimers.value[key]) {
+    clearTimeout(debounceTimers.value[key])
+  }
+  debounceTimers.value[key] = setTimeout(() => {
+    config.updateOverride(key, value)
+  }, 500)
 }
 
 async function removeOverride(key: string) {
+  if (debounceTimers.value[key]) {
+    clearTimeout(debounceTimers.value[key])
+  }
   await config.deleteOverride(key)
 }
 </script>
@@ -39,6 +49,10 @@ async function removeOverride(key: string) {
     <n-tabs v-else type="line">
       <n-tab-pane v-for="tab in tabs" :key="tab.name" :name="tab.name" :tab="tab.name">
         <n-form label-placement="left" label-width="180">
+          <n-alert v-if="tab.name === 'Routing'" type="info" :show-icon="false" class="mb-4">
+            Per-policy routing config (backend, table_id, iface, sets) is managed on the
+            <router-link to="/policies" class="text-blue-500">Policies</router-link> page.
+          </n-alert>
           <n-form-item v-for="key in tab.keys" :key="key" :label="key">
             <n-input-group>
               <n-input

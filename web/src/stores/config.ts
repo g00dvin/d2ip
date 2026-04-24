@@ -6,7 +6,6 @@ import type { SettingsResponse } from '@/api/types'
 export const enumFields: Record<string, string[]> = {
   'resolver.network': ['udp', 'tcp', 'tcp-tls'],
   'aggregation.level': ['off', 'conservative', 'balanced', 'aggressive'],
-  'routing.backend': ['none', 'nftables', 'iproute2'],
   'logging.format': ['json', 'console'],
   'logging.level': ['debug', 'info', 'warn', 'error'],
 }
