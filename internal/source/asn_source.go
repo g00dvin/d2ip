@@ -63,8 +63,12 @@ func (s *ASNSource) FetchPrefixes(ctx context.Context, asn string) ([]netip.Pref
 	}
 
 	// Save cache
-	os.MkdirAll(s.cacheDir, 0755)
-	os.WriteFile(cachePath, data, 0644)
+	if err := os.MkdirAll(s.cacheDir, 0755); err != nil {
+		return nil, fmt.Errorf("create cache dir: %w", err)
+	}
+	if err := os.WriteFile(cachePath, data, 0644); err != nil {
+		return nil, fmt.Errorf("write cache file: %w", err)
+	}
 
 	return parseASNResponse(data)
 }

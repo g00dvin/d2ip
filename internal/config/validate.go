@@ -192,6 +192,8 @@ func validatePolicies(policies []PolicyConfig) []error {
 	tableIDs := make(map[int]struct{})
 	nftSets := make(map[string]struct{}) // key: "table.set_v4" or "table.set_v6"
 
+	validName := regexp.MustCompile(`^[a-z0-9_-]+$`)
+
 	for i, p := range policies {
 		prefix := fmt.Sprintf("routing.policies[%d]", i)
 
@@ -199,7 +201,7 @@ func validatePolicies(policies []PolicyConfig) []error {
 			errs = append(errs, fmt.Errorf("%s.name is required", prefix))
 			continue
 		}
-		if matched, _ := regexp.MatchString(`^[a-z0-9_-]+$`, p.Name); !matched {
+		if !validName.MatchString(p.Name) {
 			errs = append(errs, fmt.Errorf("%s.name must match [a-z0-9_-]+", prefix))
 		}
 		if _, exists := names[p.Name]; exists {

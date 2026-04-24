@@ -25,6 +25,7 @@ type nftRouter struct {
 	state     RouterState
 }
 
+//nolint:unused
 func newNFTRouter(cfg config.PolicyConfig, statePath string) *nftRouter {
 	r := &nftRouter{cfg: cfg, statePath: statePath}
 	// best-effort: pre-load state so Snapshot() reports truth before first Apply

@@ -24,6 +24,7 @@ type iproute2Router struct {
 	state     RouterState
 }
 
+//nolint:unused
 func newIProute2Router(cfg config.PolicyConfig, statePath string) *iproute2Router {
 	r := &iproute2Router{cfg: cfg, statePath: statePath, iface: cfg.Iface}
 	if s, err := loadState(statePath); err == nil {
