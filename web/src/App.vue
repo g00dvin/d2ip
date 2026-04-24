@@ -21,7 +21,9 @@ useSSE({
 </script>
 
 <template>
-  <AppLayout>
-    <router-view />
-  </AppLayout>
+  <n-message-provider>
+    <AppLayout>
+      <router-view />
+    </AppLayout>
+  </n-message-provider>
 </template>
