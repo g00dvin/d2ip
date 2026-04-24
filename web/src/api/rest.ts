@@ -61,6 +61,11 @@ export async function getSourceInfo(): Promise<SourceInfo> {
   return data
 }
 
+export async function fetchSource(): Promise<{ status: string; fetched_at: string; size: number; sha256: string }> {
+  const { data } = await client.post('/api/source/fetch')
+  return data
+}
+
 // Settings
 export async function getSettings(): Promise<SettingsResponse> {
   const { data } = await client.get<SettingsResponse>('/api/settings')

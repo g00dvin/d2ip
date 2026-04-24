@@ -17,6 +17,22 @@ func (c *SQLiteCache) Stats(ctx context.Context) (Stats, error) {
 		return s, fmt.Errorf("count domains: %w", err)
 	}
 
+	// Count domains by resolve_status.
+	row = c.db.QueryRowContext(ctx, "SELECT COUNT(*) FROM domains WHERE resolve_status='valid'")
+	if err := row.Scan(&s.DomainsValid); err != nil {
+		return s, fmt.Errorf("count domains valid: %w", err)
+	}
+
+	row = c.db.QueryRowContext(ctx, "SELECT COUNT(*) FROM domains WHERE resolve_status='failed'")
+	if err := row.Scan(&s.DomainsFailed); err != nil {
+		return s, fmt.Errorf("count domains failed: %w", err)
+	}
+
+	row = c.db.QueryRowContext(ctx, "SELECT COUNT(*) FROM domains WHERE resolve_status='nxdomain'")
+	if err := row.Scan(&s.DomainsNXDomain); err != nil {
+		return s, fmt.Errorf("count domains nxdomain: %w", err)
+	}
+
 	// Count records by type and status.
 	row = c.db.QueryRowContext(ctx, "SELECT COUNT(*) FROM records")
 	if err := row.Scan(&s.RecordsTotal); err != nil {

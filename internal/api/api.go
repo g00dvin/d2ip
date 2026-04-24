@@ -115,6 +115,7 @@ func (s *Server) Handler() http.Handler {
 
 		// Source API.
 		cr.Get("/api/source/info", s.handleSourceInfo)
+		cr.Post("/api/source/fetch", s.handleSourceFetch)
 
 		// Policies API.
 		cr.Get("/api/policies", s.handlePoliciesList)

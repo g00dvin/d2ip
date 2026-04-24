@@ -68,6 +68,9 @@ export interface CategoryDomainsResponse {
 
 export interface CacheStats {
   domains: number
+  domains_valid: number
+  domains_failed: number
+  domains_nxdomain: number
   records_total: number
   records_v4: number
   records_v6: number

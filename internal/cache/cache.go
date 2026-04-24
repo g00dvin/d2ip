@@ -90,6 +90,9 @@ type ResolveResult struct {
 // it does NOT scan the full table.
 type Stats struct {
 	Domains         int64
+	DomainsValid    int64
+	DomainsFailed   int64
+	DomainsNXDomain int64
 	RecordsTotal    int64
 	RecordsV4       int64
 	RecordsV6       int64

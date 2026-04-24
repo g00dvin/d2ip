@@ -41,3 +41,24 @@ func (s *Server) handleSourceInfo(w http.ResponseWriter, r *http.Request) {
 
 	s.jsonOK(w, resp)
 }
+
+// handleSourceFetch triggers an unconditional source refresh.
+func (s *Server) handleSourceFetch(w http.ResponseWriter, r *http.Request) {
+	if s.sourceStore == nil {
+		s.jsonError(w, http.StatusServiceUnavailable, "source store unavailable")
+		return
+	}
+
+	_, v, err := s.sourceStore.ForceRefresh(r.Context())
+	if err != nil {
+		s.jsonError(w, http.StatusInternalServerError, "source fetch failed: "+err.Error())
+		return
+	}
+
+	s.jsonOK(w, map[string]interface{}{
+		"status":     "ok",
+		"fetched_at": v.FetchedAt,
+		"size":       v.Size,
+		"sha256":     v.SHA256,
+	})
+}

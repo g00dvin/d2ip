@@ -60,6 +60,9 @@ func TestUpsertBatch_ValidResults_InsertsRecords(t *testing.T) {
 	stats, err := c.Stats(ctx)
 	require.NoError(t, err)
 	assert.Equal(t, int64(1), stats.Domains)
+	assert.Equal(t, int64(1), stats.DomainsValid)
+	assert.Equal(t, int64(0), stats.DomainsFailed)
+	assert.Equal(t, int64(0), stats.DomainsNXDomain)
 	assert.Equal(t, int64(3), stats.RecordsTotal)
 	assert.Equal(t, int64(2), stats.RecordsV4)
 	assert.Equal(t, int64(1), stats.RecordsV6)
@@ -94,6 +97,10 @@ func TestUpsertBatch_FailedResults_PersistsDomainStatus(t *testing.T) {
 
 	stats, err := c.Stats(ctx)
 	require.NoError(t, err)
+	assert.Equal(t, int64(1), stats.Domains)
+	assert.Equal(t, int64(0), stats.DomainsValid)
+	assert.Equal(t, int64(1), stats.DomainsFailed)
+	assert.Equal(t, int64(0), stats.DomainsNXDomain)
 	assert.Equal(t, int64(0), stats.RecordsTotal, "no IP records for failed domain")
 }
 
@@ -123,6 +130,10 @@ func TestUpsertBatch_NXDomainResults_PersistsStatus(t *testing.T) {
 
 	stats, err := c.Stats(ctx)
 	require.NoError(t, err)
+	assert.Equal(t, int64(1), stats.Domains)
+	assert.Equal(t, int64(0), stats.DomainsValid)
+	assert.Equal(t, int64(0), stats.DomainsFailed)
+	assert.Equal(t, int64(1), stats.DomainsNXDomain)
 	assert.Equal(t, int64(0), stats.RecordsTotal, "no IP records for nxdomain domain")
 }
 
@@ -163,6 +174,9 @@ func TestUpsertBatch_Idempotent_UpsertDoesNotCreateDuplicates(t *testing.T) {
 	stats, err := c.Stats(ctx)
 	require.NoError(t, err)
 	assert.Equal(t, int64(1), stats.Domains, "domain count should not increase on re-upsert")
+	assert.Equal(t, int64(1), stats.DomainsValid)
+	assert.Equal(t, int64(0), stats.DomainsFailed)
+	assert.Equal(t, int64(0), stats.DomainsNXDomain)
 	assert.Equal(t, int64(1), stats.RecordsTotal, "record count should not increase on re-upsert")
 }
 
@@ -291,6 +305,9 @@ func TestStats_ReturnsCorrectCounts(t *testing.T) {
 	stats, err := c.Stats(ctx)
 	require.NoError(t, err)
 	assert.Equal(t, int64(3), stats.Domains)
+	assert.Equal(t, int64(2), stats.DomainsValid)
+	assert.Equal(t, int64(1), stats.DomainsFailed)
+	assert.Equal(t, int64(0), stats.DomainsNXDomain)
 	assert.Equal(t, int64(4), stats.RecordsTotal)
 	assert.Equal(t, int64(3), stats.RecordsV4)
 	assert.Equal(t, int64(1), stats.RecordsV6)
@@ -385,6 +402,8 @@ func TestVacuum_DeletesOldRecords(t *testing.T) {
 
 	stats, err := c.Stats(ctx)
 	require.NoError(t, err)
+	assert.Equal(t, int64(2), stats.Domains, "domains are not deleted by vacuum")
+	assert.Equal(t, int64(2), stats.DomainsValid, "domains are not deleted by vacuum")
 	assert.Equal(t, int64(1), stats.RecordsTotal, "only recent record should remain")
 }
 

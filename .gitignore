@@ -43,9 +43,7 @@ Thumbs.db
 .worktrees/
 AGENTS.md
 CLAUDE.md
-docs/superpowers/*
-!docs/superpowers/specs/
-!docs/superpowers/plans/
+docs/superpowers/
 docs/agents/
 opencode.json
 agents_config.md
