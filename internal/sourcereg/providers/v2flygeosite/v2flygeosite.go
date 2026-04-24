@@ -203,3 +203,9 @@ func (p *Provider) GetDomains(category string) ([]string, error) {
 	}
 	return domains, nil
 }
+
+func init() {
+	sourcereg.RegisterFactory(sourcereg.TypeV2flyGeosite, func(id, prefix string, cfg map[string]any) (sourcereg.Source, error) {
+		return New(id, prefix, cfg)
+	})
+}

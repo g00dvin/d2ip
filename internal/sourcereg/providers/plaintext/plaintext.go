@@ -195,3 +195,9 @@ func (p *Provider) GetPrefixes(category string) ([]netip.Prefix, error) {
 	copy(out, p.prefixes)
 	return out, nil
 }
+
+func init() {
+	sourcereg.RegisterFactory(sourcereg.TypePlaintext, func(id, prefix string, cfg map[string]any) (sourcereg.Source, error) {
+		return New(id, prefix, cfg)
+	})
+}
