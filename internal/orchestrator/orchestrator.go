@@ -224,7 +224,7 @@ func (o *Orchestrator) Run(ctx context.Context, req PipelineRequest) (PipelineRe
 		log.Error().Err(err).Msg("orchestrator: category selection failed")
 		return report, fmt.Errorf("domainlist select: %w", err)
 	}
-	report.Domains = len(resolvable)
+	report.Domains = len(rules)
 	if len(rules) == 0 {
 		log.Warn().Msg("orchestrator: no categories configured; add entries to config.categories to resolve domains")
 	}
@@ -236,6 +236,9 @@ func (o *Orchestrator) Run(ctx context.Context, req PipelineRequest) (PipelineRe
 			resolvable = append(resolvable, rule.Value)
 		}
 	}
+
+	// Update report to reflect only resolvable domain count
+	report.Domains = len(resolvable)
 
 	log.Info().
 		Int("total", len(rules)).
