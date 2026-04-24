@@ -1,6 +1,7 @@
 package config
 
 import (
+	"encoding/json"
 	"errors"
 	"fmt"
 	"os"
@@ -83,9 +84,17 @@ func Load(opts LoadOptions) (*Config, error) {
 		}
 	}
 
+	// Sources require special handling: ENV var contains JSON that Viper
+	// can't unmarshal into []SourceItemConfig. Temporarily clear the sources
+	// key so Unmarshal doesn't fail, then parse manually.
+	sourcesEnv := os.Getenv(EnvPrefix + "_SOURCES")
+	if sourcesEnv != "" {
+		v.Set("sources", []map[string]any{})
+	}
+
 	// Categories require special handling: ENV var contains JSON that Viper
-	// can’t unmarshal into []CategoryConfig. Temporarily clear the categories
-	// key so Unmarshal doesn’t fail, then parse manually.
+	// can't unmarshal into []CategoryConfig. Temporarily clear the categories
+	// key so Unmarshal doesn't fail, then parse manually.
 	categoriesEnv := os.Getenv(EnvPrefix + "_CATEGORIES")
 	if categoriesEnv != "" {
 		// Prevent Viper from trying to parse the JSON array as a string slice.
@@ -99,7 +108,17 @@ func Load(opts LoadOptions) (*Config, error) {
 		return nil, fmt.Errorf("config: unmarshal: %w", err)
 	}
 
-	// Categories can arrive from ENV as JSON (D2IP_CATEGORIES=’[{"code":"geosite:ru"}]’).
+	// Sources can arrive from ENV as JSON (D2IP_SOURCES='[{"id":"x","provider":"y"}]').
+	// Parse it manually after Unmarshal completes.
+	if sourcesEnv != "" {
+		var sources []SourceItemConfig
+		if err := json.Unmarshal([]byte(sourcesEnv), &sources); err != nil {
+			return nil, fmt.Errorf("config: parse %s_SOURCES: %w", EnvPrefix, err)
+		}
+		cfg.Sources = sources
+	}
+
+	// Categories can arrive from ENV as JSON (D2IP_CATEGORIES='[{"code":"geosite:ru"}]').
 	// Parse it manually after Unmarshal completes.
 	if categoriesEnv != "" {
 		cats, err := parseCategoriesEnv(categoriesEnv)
@@ -132,6 +151,10 @@ func bindAllEnvKeys(v *viper.Viper) {
 	_ = v.BindEnv("source.cache_path")
 	_ = v.BindEnv("source.refresh_interval")
 	_ = v.BindEnv("source.http_timeout")
+
+	// Sources: bound to ENV but handled manually after Unmarshal because it
+	// requires JSON parsing.
+	_ = v.BindEnv("sources", "D2IP_SOURCES")
 
 	// Categories: NOT bound to ENV because it requires JSON parsing.
 	// The D2IP_CATEGORIES env var is handled manually after Unmarshal.

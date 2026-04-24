@@ -16,9 +16,10 @@ type Config struct {
 	// Hot-reload does NOT apply to this field — changing it requires restart.
 	Listen string `mapstructure:"listen" json:"listen" yaml:"listen"`
 
-	Source      SourceConfig      `mapstructure:"source" json:"source" yaml:"source"`
-	Categories  []CategoryConfig  `mapstructure:"categories" json:"categories" yaml:"categories"`
-	Resolver    ResolverConfig    `mapstructure:"resolver" json:"resolver" yaml:"resolver"`
+	Source      SourceConfig       `mapstructure:"source" json:"source" yaml:"source"`
+	Categories  []CategoryConfig   `mapstructure:"categories" json:"categories" yaml:"categories"`
+	Sources     []SourceItemConfig `mapstructure:"sources" json:"sources" yaml:"sources"`
+	Resolver    ResolverConfig     `mapstructure:"resolver" json:"resolver" yaml:"resolver"`
 	Cache       CacheConfig       `mapstructure:"cache" json:"cache" yaml:"cache"`
 	Aggregation AggregationConfig `mapstructure:"aggregation" json:"aggregation" yaml:"aggregation"`
 	Export      ExportConfig      `mapstructure:"export" json:"export" yaml:"export"`
@@ -34,6 +35,15 @@ type SourceConfig struct {
 	CachePath       string        `mapstructure:"cache_path" json:"cache_path" yaml:"cache_path"`
 	RefreshInterval time.Duration `mapstructure:"refresh_interval" json:"refresh_interval" yaml:"refresh_interval"`
 	HTTPTimeout     time.Duration `mapstructure:"http_timeout" json:"http_timeout" yaml:"http_timeout"`
+}
+
+// SourceItemConfig defines a single source in the multi-source system.
+type SourceItemConfig struct {
+	ID       string         `mapstructure:"id" json:"id" yaml:"id"`
+	Provider string         `mapstructure:"provider" json:"provider" yaml:"provider"`
+	Prefix   string         `mapstructure:"prefix" json:"prefix" yaml:"prefix"`
+	Enabled  bool           `mapstructure:"enabled" json:"enabled" yaml:"enabled"`
+	Config   map[string]any `mapstructure:"config" json:"config" yaml:"config"`
 }
 
 // CategoryConfig selects a geosite category (and optional @attribute filter).
@@ -155,6 +165,20 @@ func Defaults() Config {
 			HTTPTimeout:     30 * time.Second,
 		},
 		Categories: []CategoryConfig{},
+		Sources: []SourceItemConfig{
+			{
+				ID:       "default-geosite",
+				Provider: "v2flygeosite",
+				Prefix:   "geosite",
+				Enabled:  true,
+				Config: map[string]any{
+					"url":              "https://github.com/v2fly/domain-list-community/releases/latest/download/dlc.dat",
+					"cache_path":       "/var/lib/d2ip/dlc.dat",
+					"refresh_interval": "24h",
+					"http_timeout":     "30s",
+				},
+			},
+		},
 		Resolver: ResolverConfig{
 			Upstream:    "1.1.1.1:53",
 			Network:     "udp",
@@ -205,7 +229,7 @@ func Defaults() Config {
 	}
 }
 
-// Clone returns a deep copy of the Config. Slices (Categories, Attrs) are
+// Clone returns a deep copy of the Config. Slices (Categories, Attrs, Sources) are
 // copied so the returned value is safe to mutate without affecting the source.
 func (c Config) Clone() Config {
 	out := c
@@ -218,6 +242,19 @@ func (c Config) Clone() Config {
 				copy(ccat.Attrs, cat.Attrs)
 			}
 			out.Categories[i] = ccat
+		}
+	}
+	if c.Sources != nil {
+		out.Sources = make([]SourceItemConfig, len(c.Sources))
+		for i, src := range c.Sources {
+			s := src
+			if src.Config != nil {
+				s.Config = make(map[string]any)
+				for k, v := range src.Config {
+					s.Config[k] = v
+				}
+			}
+			out.Sources[i] = s
 		}
 	}
 	return out

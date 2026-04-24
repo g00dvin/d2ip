@@ -118,6 +118,13 @@ func applyKVToViper(v *viper.Viper, kv map[string]string) error {
 // will either decode or ignore them.
 func coerceKVValue(key, raw string) (any, error) {
 	raw = strings.TrimSpace(raw)
+	if key == "sources" {
+		var items []SourceItemConfig
+		if err := json.Unmarshal([]byte(raw), &items); err != nil {
+			return nil, err
+		}
+		return items, nil
+	}
 	switch key {
 	// Durations.
 	case "source.refresh_interval", "source.http_timeout",
@@ -164,6 +171,21 @@ func seedViperFromConfig(v *viper.Viper, c Config) {
 	v.Set("source.cache_path", c.Source.CachePath)
 	v.Set("source.refresh_interval", c.Source.RefreshInterval)
 	v.Set("source.http_timeout", c.Source.HTTPTimeout)
+
+	// Preserve sources as a slice of maps viper can re-encode.
+	if len(c.Sources) > 0 {
+		srcs := make([]map[string]any, 0, len(c.Sources))
+		for _, src := range c.Sources {
+			srcs = append(srcs, map[string]any{
+				"id":       src.ID,
+				"provider": src.Provider,
+				"prefix":   src.Prefix,
+				"enabled":  src.Enabled,
+				"config":   src.Config,
+			})
+		}
+		v.Set("sources", srcs)
+	}
 
 	// Preserve categories as a slice of maps viper can re-encode.
 	cats := make([]map[string]any, 0, len(c.Categories))

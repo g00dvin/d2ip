@@ -25,7 +25,9 @@ func (c *Config) Validate() []error {
 		errs = append(errs, fmt.Errorf("listen: invalid address %q: %w", c.Listen, err))
 	}
 
-	errs = append(errs, validateSource(c.Source)...)
+	if err := validateSources(*c); err != nil {
+		errs = append(errs, err)
+	}
 	errs = append(errs, validateCategories(c.Categories)...)
 	errs = append(errs, validateResolver(c.Resolver)...)
 	errs = append(errs, validateCache(c.Cache)...)
@@ -40,23 +42,48 @@ func (c *Config) Validate() []error {
 	return errs
 }
 
-func validateSource(s SourceConfig) []error {
-	var errs []error
-	if strings.TrimSpace(s.URL) == "" {
-		errs = append(errs, errors.New("source.url: must not be empty"))
-	} else if !strings.HasPrefix(s.URL, "http://") && !strings.HasPrefix(s.URL, "https://") {
-		errs = append(errs, fmt.Errorf("source.url: must be http(s) URL, got %q", s.URL))
+func validateSources(cfg Config) error {
+	if len(cfg.Sources) == 0 && len(cfg.Categories) == 0 {
+		// Allow empty during transition if legacy categories exist
+		return nil
 	}
-	if strings.TrimSpace(s.CachePath) == "" {
-		errs = append(errs, errors.New("source.cache_path: must not be empty"))
+
+	prefixes := make(map[string]bool)
+	ids := make(map[string]bool)
+
+	for i, src := range cfg.Sources {
+		field := fmt.Sprintf("sources[%d]", i)
+		if src.ID == "" {
+			return fmt.Errorf("%s.id is required", field)
+		}
+		if ids[src.ID] {
+			return fmt.Errorf("%s.id %q is duplicate", field, src.ID)
+		}
+		ids[src.ID] = true
+
+		if src.Prefix == "" {
+			return fmt.Errorf("%s.prefix is required", field)
+		}
+		for _, ch := range src.Prefix {
+			if !((ch >= 'a' && ch <= 'z') || (ch >= '0' && ch <= '9') || ch == '-') {
+				return fmt.Errorf("%s.prefix %q must be lowercase alphanumeric or hyphen", field, src.Prefix)
+			}
+		}
+		if prefixes[src.Prefix] {
+			return fmt.Errorf("%s.prefix %q is duplicate", field, src.Prefix)
+		}
+		prefixes[src.Prefix] = true
+
+		if src.Provider == "" {
+			return fmt.Errorf("%s.provider is required", field)
+		}
+		validProviders := map[string]bool{"v2flygeosite": true, "plaintext": true, "ipverse": true, "v2flygeoip": true, "mmdb": true}
+		if !validProviders[src.Provider] {
+			return fmt.Errorf("%s.provider %q is not valid", field, src.Provider)
+		}
 	}
-	if s.RefreshInterval < time.Minute {
-		errs = append(errs, fmt.Errorf("source.refresh_interval: must be >= 1m, got %s", s.RefreshInterval))
-	}
-	if s.HTTPTimeout < time.Second {
-		errs = append(errs, fmt.Errorf("source.http_timeout: must be >= 1s, got %s", s.HTTPTimeout))
-	}
-	return errs
+
+	return nil
 }
 
 func validateCategories(cats []CategoryConfig) []error {
@@ -217,8 +244,9 @@ func validatePolicies(policies []PolicyConfig) []error {
 			errs = append(errs, fmt.Errorf("%s.categories must have at least one entry", prefix))
 		}
 		for j, cat := range p.Categories {
-			if !strings.Contains(cat, ":") {
-				errs = append(errs, fmt.Errorf("%s.categories[%d] %q must contain ':'", prefix, j, cat))
+			parts := strings.SplitN(cat, ":", 2)
+			if len(parts) != 2 || parts[0] == "" || parts[1] == "" {
+				errs = append(errs, fmt.Errorf("%s.categories[%d] %q must be prefix:name", prefix, j, cat))
 			}
 		}
 
