@@ -1,14 +1,18 @@
 <script setup lang="ts">
-import { ref } from 'vue'
+import { ref, computed, onMounted } from 'vue'
 import { usePoliciesStore } from '@/stores/policies'
+import { useCategoriesStore } from '@/stores/categories'
 import { usePolling } from '@/composables/usePolling'
 import { useMessage } from 'naive-ui'
 import type { PolicyConfig } from '@/api/types'
 
 const policies = usePoliciesStore()
+const categories = useCategoriesStore()
 const message = useMessage()
 
 usePolling(() => policies.fetchPolicies(), 30_000)
+
+onMounted(() => categories.fetchCategories())
 
 const showModal = ref(false)
 const isEditing = ref(false)
@@ -24,6 +28,10 @@ const emptyPolicy: PolicyConfig = {
 }
 
 const form = ref<PolicyConfig>({ ...emptyPolicy })
+
+const categoryOptions = computed(() =>
+  categories.available.map(code => ({ label: code, value: code }))
+)
 
 const backendOptions = [
   { label: 'iproute2', value: 'iproute2' },
@@ -112,13 +120,6 @@ async function savePolicy() {
   }
 }
 
-function categoryInput(v: string) {
-  form.value.categories = v.split(',').map(s => s.trim()).filter(Boolean)
-}
-
-function categoryValue(cats: string[]): string {
-  return cats.join(', ')
-}
 </script>
 
 <template>
@@ -146,7 +147,14 @@ function categoryValue(cats: string[]): string {
           <n-switch v-model:value="form.enabled" />
         </n-form-item>
         <n-form-item label="Categories">
-          <n-input :value="categoryValue(form.categories)" placeholder="netflix, youtube, ..." @update:value="categoryInput" />
+          <n-select
+            v-model:value="form.categories"
+            multiple
+            filterable
+            :options="categoryOptions"
+            placeholder="Select categories..."
+            :loading="categories.loading"
+          />
         </n-form-item>
         <n-form-item label="Backend">
           <n-select v-model:value="form.backend" :options="backendOptions" />
