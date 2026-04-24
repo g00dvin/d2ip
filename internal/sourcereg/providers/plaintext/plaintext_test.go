@@ -33,6 +33,10 @@ func TestProviderNew(t *testing.T) {
 			cfg:     map[string]any{"type": "invalid", "file": "/tmp/test.txt"},
 			wantErr: true,
 		},
+		{
+			name: "default type to domains",
+			cfg:  map[string]any{"file": "/tmp/test.txt"},
+		},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -51,6 +55,9 @@ func TestProviderNew(t *testing.T) {
 			}
 			if p.Prefix() != "corp" {
 				t.Errorf("Prefix = %q, want corp", p.Prefix())
+			}
+			if tt.name == "default type to domains" && !p.IsDomainSource() {
+				t.Errorf("expected IsDomainSource() to be true for default type")
 			}
 		})
 	}
@@ -91,6 +98,16 @@ google.com
 			t.Errorf("domains[%d] = %q, want %q", i, domains[i], d)
 		}
 	}
+
+	// Defensive copy: mutating returned slice must not affect internal state.
+	domains[0] = "mutated.com"
+	domains2, err := p.GetDomains("corp:default")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if domains2[0] != "example.com" {
+		t.Errorf("internal domain mutated after GetDomains copy: got %q", domains2[0])
+	}
 }
 
 func TestProviderLoadIPs(t *testing.T) {
@@ -99,6 +116,7 @@ func TestProviderLoadIPs(t *testing.T) {
 	data := `192.168.1.0/24
 10.0.0.1
 2001:db8::/32
+2001:db8::1
 # comment
 invalid-line
 `
@@ -118,8 +136,8 @@ invalid-line
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(prefixes) != 3 {
-		t.Fatalf("got %d prefixes, want 3", len(prefixes))
+	if len(prefixes) != 4 {
+		t.Fatalf("got %d prefixes, want 4", len(prefixes))
 	}
 	if prefixes[0].String() != "192.168.1.0/24" {
 		t.Errorf("prefix[0] = %q", prefixes[0].String())
@@ -129,6 +147,9 @@ invalid-line
 	}
 	if prefixes[2].String() != "2001:db8::/32" {
 		t.Errorf("prefix[2] = %q", prefixes[2].String())
+	}
+	if prefixes[3].String() != "2001:db8::1/128" {
+		t.Errorf("prefix[3] = %q", prefixes[3].String())
 	}
 }
 
@@ -151,5 +172,40 @@ func TestProviderInfo(t *testing.T) {
 	}
 	if info.Prefix != "streaming" {
 		t.Errorf("Info.Prefix = %q", info.Prefix)
+	}
+}
+
+func TestProviderGetDomainsErrors(t *testing.T) {
+	p, _ := New("id1", "corp", map[string]any{"type": "domains", "file": "/tmp/x.txt"})
+
+	_, err := p.GetDomains("wrong:default")
+	if err == nil {
+		t.Fatal("expected error for unknown category")
+	}
+
+	_, err = p.GetDomains("corp:default")
+	if err == nil {
+		t.Fatal("expected error before Load")
+	}
+}
+
+func TestProviderGetPrefixesErrors(t *testing.T) {
+	p, _ := New("id1", "corp", map[string]any{"type": "ips", "file": "/tmp/x.txt"})
+
+	_, err := p.GetPrefixes("wrong:default")
+	if err == nil {
+		t.Fatal("expected error for unknown category")
+	}
+
+	_, err = p.GetPrefixes("corp:default")
+	if err == nil {
+		t.Fatal("expected error before Load")
+	}
+}
+
+func TestProviderClose(t *testing.T) {
+	p, _ := New("id1", "corp", map[string]any{"type": "domains", "file": "/tmp/x.txt"})
+	if err := p.Close(); err != nil {
+		t.Fatalf("Close() = %v, want nil", err)
 	}
 }

@@ -7,6 +7,7 @@ import (
 	"net/netip"
 	"os"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/goodvin/d2ip/internal/sourcereg"
@@ -20,6 +21,7 @@ type Config struct {
 
 // Provider implements a plaintext file source.
 type Provider struct {
+	mu       sync.RWMutex
 	id       string
 	prefix   string
 	config   Config
@@ -57,8 +59,16 @@ func New(id string, prefix string, cfg map[string]any) (*Provider, error) {
 func (p *Provider) ID() string             { return p.id }
 func (p *Provider) Prefix() string         { return p.prefix }
 func (p *Provider) Provider() sourcereg.SourceType { return sourcereg.TypePlaintext }
-func (p *Provider) IsDomainSource() bool   { return p.config.Type == "domains" }
-func (p *Provider) IsPrefixSource() bool   { return p.config.Type == "ips" }
+func (p *Provider) IsDomainSource() bool {
+	p.mu.RLock()
+	defer p.mu.RUnlock()
+	return p.config.Type == "domains"
+}
+func (p *Provider) IsPrefixSource() bool {
+	p.mu.RLock()
+	defer p.mu.RUnlock()
+	return p.config.Type == "ips"
+}
 
 func (p *Provider) AsDomainSource() sourcereg.DomainSource {
 	if p.IsDomainSource() {
@@ -75,10 +85,14 @@ func (p *Provider) AsPrefixSource() sourcereg.PrefixSource {
 }
 
 func (p *Provider) Categories() []string {
+	p.mu.RLock()
+	defer p.mu.RUnlock()
 	return []string{p.prefix + ":default"}
 }
 
 func (p *Provider) Info() sourcereg.SourceInfo {
+	p.mu.RLock()
+	defer p.mu.RUnlock()
 	return sourcereg.SourceInfo{
 		ID:          p.id,
 		Provider:    string(sourcereg.TypePlaintext),
@@ -92,9 +106,13 @@ func (p *Provider) Info() sourcereg.SourceInfo {
 
 // Load reads the plaintext file and parses entries.
 func (p *Provider) Load(_ context.Context) error {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+
 	f, err := os.Open(p.config.File)
 	if err != nil {
 		p.lastErr = err.Error()
+		p.loadedAt = nil
 		return fmt.Errorf("plaintext: open %q: %w", p.config.File, err)
 	}
 	defer f.Close()
@@ -102,11 +120,10 @@ func (p *Provider) Load(_ context.Context) error {
 	p.domains = nil
 	p.prefixes = nil
 	p.lastErr = ""
+	p.loadedAt = nil
 
 	scanner := bufio.NewScanner(f)
-	lineNum := 0
 	for scanner.Scan() {
-		lineNum++
 		line := strings.TrimSpace(scanner.Text())
 		if line == "" || strings.HasPrefix(line, "#") {
 			continue
@@ -133,6 +150,7 @@ func (p *Provider) Load(_ context.Context) error {
 	}
 	if err := scanner.Err(); err != nil {
 		p.lastErr = err.Error()
+		p.loadedAt = nil
 		return fmt.Errorf("plaintext: scan %q: %w", p.config.File, err)
 	}
 
@@ -146,6 +164,9 @@ func (p *Provider) Close() error { return nil }
 
 // GetDomains returns domains for the given category (only "prefix:default").
 func (p *Provider) GetDomains(category string) ([]string, error) {
+	p.mu.RLock()
+	defer p.mu.RUnlock()
+
 	expected := p.prefix + ":default"
 	if category != expected {
 		return nil, fmt.Errorf("plaintext: unknown category %q (expected %q)", category, expected)
@@ -160,6 +181,9 @@ func (p *Provider) GetDomains(category string) ([]string, error) {
 
 // GetPrefixes returns prefixes for the given category (only "prefix:default").
 func (p *Provider) GetPrefixes(category string) ([]netip.Prefix, error) {
+	p.mu.RLock()
+	defer p.mu.RUnlock()
+
 	expected := p.prefix + ":default"
 	if category != expected {
 		return nil, fmt.Errorf("plaintext: unknown category %q (expected %q)", category, expected)
