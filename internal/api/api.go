@@ -116,6 +116,13 @@ func (s *Server) Handler() http.Handler {
 		// Source API.
 		cr.Get("/api/source/info", s.handleSourceInfo)
 
+		// Policies API.
+		cr.Get("/api/policies", s.handlePoliciesList)
+		cr.Get("/api/policies/{name}", s.handlePolicyGet)
+		cr.Post("/api/policies", s.handlePolicyCreate)
+		cr.Put("/api/policies/{name}", s.handlePolicyUpdate)
+		cr.Delete("/api/policies/{name}", s.handlePolicyDelete)
+
 		// Static web UI (serve at root and /web/*).
 		webRoot, err := fs.Sub(webFS, "web")
 		if err != nil {
