@@ -1,6 +1,8 @@
 package api
 
 import (
+	"bytes"
+	"compress/gzip"
 	"io"
 	"io/fs"
 	"strings"
@@ -45,6 +47,19 @@ func TestWebFilesEmbedded(t *testing.T) {
 				t.Errorf("%s is empty", tt.path)
 			}
 
+			// Embedded files are pre-gzipped; decompress for content checks.
+			if len(content) >= 2 && content[0] == 0x1f && content[1] == 0x8b {
+				gr, err := gzip.NewReader(bytes.NewReader(content))
+				if err != nil {
+					t.Fatalf("failed to decompress %s: %v", tt.path, err)
+				}
+				defer gr.Close()
+				content, err = io.ReadAll(gr)
+				if err != nil {
+					t.Fatalf("failed to read decompressed %s: %v", tt.path, err)
+				}
+			}
+
 			if tt.want != "" {
 				s := string(content)
 				if len(s) < len(tt.want) || !strings.Contains(s, tt.want) {
@@ -81,4 +96,3 @@ func TestWebFilesSize(t *testing.T) {
 	}
 	t.Logf("Total web size: %d bytes (%.1fKB)", total, float64(total)/1024)
 }
-

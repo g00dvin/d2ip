@@ -12,11 +12,9 @@
     "@vicons/ionicons5": "^0.13.0",
     "@vueuse/core": "^14.2.1",
     "axios": "^1.7.9",
-    "chart.js": "^4.5.1",
     "naive-ui": "^2.44.1",
     "pinia": "^2.3.1",
     "vue": "^3.5.13",
-    "vue-chartjs": "^5.3.3",
     "vue-router": "^4.5.0"
   },
   "devDependencies": {

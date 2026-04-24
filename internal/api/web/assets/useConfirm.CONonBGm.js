@@ -1,1 +1,0 @@
-import{n as l}from"./index.CcWPxck7.js";function s(){const u=l(!1),e=l("");let n=null;function t(o){return e.value=o,u.value=!0,new Promise(i=>{n=i})}function a(){u.value=!1,n==null||n(!0),n=null}function f(){u.value=!1,n==null||n(!1),n=null}return{visible:u,message:e,confirm:t,onOk:a,onCancel:f}}export{s as u};

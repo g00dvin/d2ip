@@ -63,6 +63,10 @@ docker: ## Build production Docker image
 web-build: ## Build the web UI and copy to internal/api/web/
 	@echo "Building web UI..."
 	cd web && npm ci && npm run build
+	@echo "Compressing assets for smaller binary..."
+	find web/dist -type f | while read f; do \
+		gzip -c "$$f" > "$$f.gz" && mv "$$f.gz" "$$f"; \
+	done
 	rm -rf internal/api/web/index.html internal/api/web/assets
 	cp -r web/dist/* internal/api/web/
 

@@ -2,6 +2,7 @@
 package api
 
 import (
+	"compress/gzip"
 	"context"
 	"embed"
 	"encoding/json"
@@ -10,6 +11,7 @@ import (
 	"io/fs"
 	"net/http"
 	"net/netip"
+	"strconv"
 	"strings"
 	"time"
 
@@ -133,7 +135,8 @@ func (s *Server) Handler() http.Handler {
 }
 
 // serveEmbeddedFile serves a file from the embedded FS with correct MIME types.
-func serveEmbeddedFile(w http.ResponseWriter, r *http.Request, fs fs.FS, name string) {
+// Embedded assets are pre-gzipped during build to reduce binary size.
+func serveEmbeddedFile(w http.ResponseWriter, r *http.Request, embedFS fs.FS, name string) {
 	// Determine MIME type by extension
 	switch {
 	case strings.HasSuffix(name, ".css"):
@@ -157,14 +160,36 @@ func serveEmbeddedFile(w http.ResponseWriter, r *http.Request, fs fs.FS, name st
 		w.Header().Set("Cache-Control", "public, max-age=31536000, immutable")
 	}
 
-	f, err := fs.Open(name)
+	f, err := embedFS.Open(name)
 	if err != nil {
 		http.Error(w, "not found", http.StatusNotFound)
 		return
 	}
 	defer f.Close()
 
-	http.ServeContent(w, r, name, time.Time{}, f.(io.ReadSeeker))
+	stat, err := f.Stat()
+	if err != nil {
+		http.Error(w, "stat error", http.StatusInternalServerError)
+		return
+	}
+
+	// Embedded assets are pre-gzipped during build to reduce binary size.
+	// Serve with Content-Encoding: gzip so browsers decompress automatically.
+	// Fallback to on-the-fly decompression for clients that don't accept gzip.
+	if strings.Contains(r.Header.Get("Accept-Encoding"), "gzip") {
+		w.Header().Set("Content-Encoding", "gzip")
+		w.Header().Set("Vary", "Accept-Encoding")
+		w.Header().Set("Content-Length", strconv.FormatInt(stat.Size(), 10))
+		io.Copy(w, f)
+	} else {
+		gr, err := gzip.NewReader(f)
+		if err != nil {
+			http.Error(w, "decompression error", http.StatusInternalServerError)
+			return
+		}
+		defer gr.Close()
+		io.Copy(w, gr)
+	}
 }
 
 // handleHealth returns 200 if the process is alive.
@@ -252,11 +277,11 @@ func (s *Server) handleRoutingDryRun(w http.ResponseWriter, r *http.Request) {
 	// Handle empty prefix arrays without calling router
 	if len(req.IPv4Prefixes) == 0 && len(req.IPv6Prefixes) == 0 {
 		s.jsonOK(w, map[string]interface{}{
-			"v4_plan":  map[string]interface{}{"add": []interface{}{}, "remove": []interface{}{}},
-			"v6_plan":  map[string]interface{}{"add": []interface{}{}, "remove": []interface{}{}},
-			"v4_diff":  "",
-			"v6_diff":  "",
-			"message":  "no prefixes to test",
+			"v4_plan": map[string]interface{}{"add": []interface{}{}, "remove": []interface{}{}},
+			"v6_plan": map[string]interface{}{"add": []interface{}{}, "remove": []interface{}{}},
+			"v4_diff": "",
+			"v6_diff": "",
+			"message": "no prefixes to test",
 		})
 		return
 	}
