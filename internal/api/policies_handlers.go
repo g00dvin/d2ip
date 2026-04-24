@@ -10,13 +10,13 @@ import (
 
 func (s *Server) handlePoliciesList(w http.ResponseWriter, r *http.Request) {
 	cfg := s.cfgWatcher.Current()
-	s.jsonOK(w, map[string]interface{}{"policies": cfg.Routing.Policies})
+	s.jsonOK(w, map[string]interface{}{"policies": cfg.Config.Routing.Policies})
 }
 
 func (s *Server) handlePolicyGet(w http.ResponseWriter, r *http.Request) {
 	name := chi.URLParam(r, "name")
 	cfg := s.cfgWatcher.Current()
-	for _, p := range cfg.Routing.Policies {
+	for _, p := range cfg.Config.Routing.Policies {
 		if p.Name == name {
 			s.jsonOK(w, p)
 			return
