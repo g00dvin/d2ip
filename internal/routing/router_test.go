@@ -120,9 +120,12 @@ func TestNoopRouter_DisabledShortCircuits(t *testing.T) {
 	}
 }
 
-func TestNew_UnknownBackend(t *testing.T) {
-	_, err := New(config.RoutingConfig{Enabled: true, Backend: "bogus"})
-	if err == nil {
-		t.Fatal("expected error for unknown backend")
+func TestNew_AlwaysNoop(t *testing.T) {
+	r, err := New(config.RoutingConfig{Enabled: true})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if r == nil {
+		t.Fatal("expected non-nil router")
 	}
 }

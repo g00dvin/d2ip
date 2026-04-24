@@ -30,17 +30,9 @@ type Router interface {
 // New constructs a Router for the given config. If routing is disabled a
 // noopRouter is returned whose methods are inexpensive and side-effect-free.
 func New(cfg config.RoutingConfig) (Router, error) {
-	if !cfg.Enabled || cfg.Backend == config.BackendNone {
-		return &noopRouter{}, nil
-	}
-	switch cfg.Backend {
-	case config.BackendNFTables:
-		return newNFTRouter(cfg), nil
-	case config.BackendIProute2:
-		return newIProute2Router(cfg), nil
-	default:
-		return nil, fmt.Errorf("routing: unknown backend %q", cfg.Backend)
-	}
+	// Legacy single-policy router is deprecated; policies are handled by
+	// CompositeRouter via PolicyRouter. Always return noop here.
+	return &noopRouter{}, nil
 }
 
 // computePlan returns the minimal deterministic set difference between

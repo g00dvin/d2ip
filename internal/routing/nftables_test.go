@@ -48,7 +48,7 @@ func TestParseNftSet_Empty(t *testing.T) {
 }
 
 func TestBuildScript_AddAndRemove(t *testing.T) {
-	cfg := config.RoutingConfig{
+	cfg := config.PolicyConfig{
 		Enabled:  true,
 		Backend:  config.BackendNFTables,
 		NFTTable: "inet d2ip",
@@ -71,14 +71,14 @@ func TestBuildScript_AddAndRemove(t *testing.T) {
 }
 
 func TestBuildScript_Empty(t *testing.T) {
-	r := &nftRouter{cfg: config.RoutingConfig{NFTTable: "inet d2ip", NFTSetV4: "d2ip_v4", NFTSetV6: "d2ip_v6"}}
+	r := &nftRouter{cfg: config.PolicyConfig{NFTTable: "inet d2ip", NFTSetV4: "d2ip_v4", NFTSetV6: "d2ip_v6"}}
 	if s := r.buildScript(Plan{Family: FamilyV4}); s != "" {
 		t.Errorf("want empty, got %q", s)
 	}
 }
 
 func TestTableArgs_Default(t *testing.T) {
-	r := &nftRouter{cfg: config.RoutingConfig{NFTTable: ""}}
+	r := &nftRouter{cfg: config.PolicyConfig{NFTTable: ""}}
 	fam, name := r.tableArgs()
 	if fam != "inet" || name != "d2ip" {
 		t.Errorf("tableArgs = %q %q", fam, name)

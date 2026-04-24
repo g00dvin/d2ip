@@ -16,16 +16,17 @@ import (
 )
 
 type iproute2Router struct {
-	cfg   config.RoutingConfig
-	iface string
-	netns string
-	mu    sync.Mutex
-	state RouterState
+	cfg       config.PolicyConfig
+	statePath string
+	iface     string
+	netns     string
+	mu        sync.Mutex
+	state     RouterState
 }
 
-func newIProute2Router(cfg config.RoutingConfig) *iproute2Router {
-	r := &iproute2Router{cfg: cfg, iface: cfg.Iface}
-	if s, err := loadState(cfg.StatePath); err == nil {
+func newIProute2Router(cfg config.PolicyConfig, statePath string) *iproute2Router {
+	r := &iproute2Router{cfg: cfg, statePath: statePath, iface: cfg.Iface}
+	if s, err := loadState(statePath); err == nil {
 		r.state = s
 	}
 	return r
@@ -130,7 +131,7 @@ func (r *iproute2Router) Rollback(ctx context.Context) error {
 		}
 	}
 	r.state = RouterState{Backend: string(config.BackendIProute2), AppliedAt: time.Now().UTC()}
-	return saveState(r.cfg.StatePath, r.state)
+	return saveState(r.statePath, r.state)
 }
 
 func (r *iproute2Router) DryRun(ctx context.Context, desired []netip.Prefix, f Family) (Plan, string, error) {
@@ -178,7 +179,7 @@ func (r *iproute2Router) refreshState(p Plan) error {
 	} else {
 		apply(&s.V6)
 	}
-	if err := saveState(r.cfg.StatePath, s); err != nil {
+	if err := saveState(r.statePath, s); err != nil {
 		return err
 	}
 	r.state = s

@@ -52,7 +52,7 @@ func TestListRoutes_NonexistentTable(t *testing.T) {
 		t.Skip("skipping: requires ip command")
 	}
 	r := &iproute2Router{
-		cfg: config.RoutingConfig{TableID: 9999},
+		cfg: config.PolicyConfig{TableID: 9999},
 	}
 	prefixes, err := r.listRoutes(context.Background(), FamilyV4)
 	if err != nil {

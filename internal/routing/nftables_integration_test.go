@@ -27,20 +27,17 @@ func TestNftablesBackend_Integration_RealKernel(t *testing.T) {
 	}
 
 	// Create nftables backend
-	cfg := config.RoutingConfig{
-		Enabled:   true,
-		Backend:   "nftables",
-		NFTTable:  "inet d2ip",
-		NFTSetV4:  "d2ip_v4",
-		NFTSetV6:  "d2ip_v6",
-		StatePath: "/tmp/d2ip-test-nft-state.json",
-		DryRun:    false,
+	cfg := config.PolicyConfig{
+		Enabled:  true,
+		Backend:  config.BackendNFTables,
+		NFTTable: "inet d2ip",
+		NFTSetV4: "d2ip_v4",
+		NFTSetV6: "d2ip_v6",
+		DryRun:   false,
 	}
+	statePath := "/tmp/d2ip-test-nft-state.json"
 
-	backend, err := New(cfg)
-	if err != nil {
-		t.Fatalf("Failed to create nftables backend: %v", err)
-	}
+	backend := newNFTRouter(cfg, statePath)
 
 	// Check capabilities
 	if err := backend.Caps(); err != nil {

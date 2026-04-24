@@ -19,15 +19,16 @@ import (
 // d2ip_v4 and d2ip_v6 (both interval sets). All mutations are performed via
 // `nft -f -` for single-transaction atomicity.
 type nftRouter struct {
-	cfg   config.RoutingConfig
-	mu    sync.Mutex // process-wide serialization of Apply/Rollback
-	state RouterState
+	cfg       config.PolicyConfig
+	statePath string
+	mu        sync.Mutex // process-wide serialization of Apply/Rollback
+	state     RouterState
 }
 
-func newNFTRouter(cfg config.RoutingConfig) *nftRouter {
-	r := &nftRouter{cfg: cfg}
+func newNFTRouter(cfg config.PolicyConfig, statePath string) *nftRouter {
+	r := &nftRouter{cfg: cfg, statePath: statePath}
 	// best-effort: pre-load state so Snapshot() reports truth before first Apply
-	if s, err := loadState(cfg.StatePath); err == nil {
+	if s, err := loadState(statePath); err == nil {
 		r.state = s
 	}
 	return r
@@ -102,7 +103,7 @@ func (r *nftRouter) refreshState(p Plan) error {
 	} else {
 		apply(&s.V6)
 	}
-	if err := saveState(r.cfg.StatePath, s); err != nil {
+	if err := saveState(r.statePath, s); err != nil {
 		return err
 	}
 	r.state = s
@@ -138,7 +139,7 @@ func (r *nftRouter) Rollback(ctx context.Context) error {
 		return fmt.Errorf("routing/nft: rollback: %w", err)
 	}
 	r.state = RouterState{Backend: string(config.BackendNFTables), AppliedAt: time.Now().UTC()}
-	return saveState(r.cfg.StatePath, r.state)
+	return saveState(r.statePath, r.state)
 }
 
 // DryRun returns the plan and a human-readable diff without executing.

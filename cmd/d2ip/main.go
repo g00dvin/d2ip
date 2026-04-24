@@ -197,15 +197,18 @@ func serveCmd() {
 		return *cfg
 	}
 
-	// Create router
+	// Create legacy router (deprecated, noop — policies use CompositeRouter)
 	routerAgent, err := routing.New(cfg.Routing)
 	if err != nil {
 		log.Fatal().Err(err).Msg("Failed to create router")
 	}
 	log.Info().
 		Bool("enabled", cfg.Routing.Enabled).
-		Str("backend", string(cfg.Routing.Backend)).
 		Msg("Router initialized")
+
+	// Create policy exporter and router
+	policyExp := exporter.NewPolicyExporter(cfg.Export.Dir)
+	policyRtr := routing.NewCompositeRouter(cfg.Routing)
 
 	// Create event bus
 	eventBus := events.NewBus()
@@ -221,6 +224,8 @@ func serveCmd() {
 		routerAgent,
 		configSnapshot,
 		eventBus,
+		policyExp,
+		policyRtr,
 	)
 	log.Info().Msg("Orchestrator initialized with all agents")
 

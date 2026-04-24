@@ -26,24 +26,16 @@ func TestIproute2Backend_Integration_RealKernel(t *testing.T) {
 	createDummyInterface(t, nsName, ifname)
 
 	// Create iproute2 backend
-	cfg := config.RoutingConfig{
-		Enabled:   true,
-		Backend:   "iproute2",
-		Iface:     ifname,
-		TableID:   100,
-		StatePath: "/tmp/d2ip-test-ip-state.json",
-		DryRun:    false,
+	cfg := config.PolicyConfig{
+		Enabled: true,
+		Backend: config.BackendIProute2,
+		Iface:   ifname,
+		TableID: 100,
+		DryRun:  false,
 	}
+	statePath := "/tmp/d2ip-test-ip-state.json"
 
-	backend, err := New(cfg)
-	if err != nil {
-		t.Fatalf("Failed to create iproute2 backend: %v", err)
-	}
-
-	ipr, ok := backend.(*iproute2Router)
-	if !ok {
-		t.Fatalf("Expected *iproute2Router, got %T", backend)
-	}
+	ipr := newIProute2Router(cfg, statePath)
 	ipr.netns = nsName
 
 	// Check capabilities

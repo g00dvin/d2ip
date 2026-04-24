@@ -42,7 +42,7 @@ func (r *iproute2PolicyRouter) ApplyPolicy(ctx context.Context, policy config.Po
 	}
 
 	state = RouterState{
-		Backend:   string(config.RoutingBackendIPRoute2),
+		Backend:   string(config.BackendIProute2),
 		AppliedAt: time.Now(),
 		V4:        v4,
 		V6:        v6,
