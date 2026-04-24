@@ -468,3 +468,87 @@ func TestEnsureAllDomainsWithStatus_UpdatesExisting(t *testing.T) {
 	require.NoError(t, err)
 	assert.Equal(t, "failed", status, "status should be updated to failed")
 }
+
+func TestSnapshotForDomains_ReturnsFilteredIPs(t *testing.T) {
+	c := openTestDB(t)
+	ctx := context.Background()
+
+	now := time.Now()
+	results := []ResolveResult{
+		{
+			Domain:     "a.example.com",
+			IPv4:       []netip.Addr{mustParseAddr("10.0.0.1"), mustParseAddr("10.0.0.2")},
+			IPv6:       []netip.Addr{mustParseAddr("2001:db8::1")},
+			Status:     StatusValid,
+			ResolvedAt: now,
+		},
+		{
+			Domain:     "b.example.com",
+			IPv4:       []netip.Addr{mustParseAddr("10.0.0.3")},
+			Status:     StatusValid,
+			ResolvedAt: now,
+		},
+		{
+			Domain:     "c.example.com",
+			IPv4:       []netip.Addr{mustParseAddr("10.0.0.4")},
+			Status:     StatusFailed,
+			ResolvedAt: now,
+		},
+	}
+
+	err := c.UpsertBatch(ctx, results)
+	require.NoError(t, err)
+
+	ipv4, ipv6, err := c.SnapshotForDomains(ctx, []string{"a.example.com", "b.example.com"})
+	require.NoError(t, err)
+	assert.Len(t, ipv4, 3)
+	assert.Contains(t, ipv4, mustParseAddr("10.0.0.1"))
+	assert.Contains(t, ipv4, mustParseAddr("10.0.0.2"))
+	assert.Contains(t, ipv4, mustParseAddr("10.0.0.3"))
+	assert.Len(t, ipv6, 1)
+	assert.Contains(t, ipv6, mustParseAddr("2001:db8::1"))
+}
+
+func TestSnapshotForDomains_ExcludesFailedAndMissing(t *testing.T) {
+	c := openTestDB(t)
+	ctx := context.Background()
+
+	now := time.Now()
+	results := []ResolveResult{
+		{
+			Domain:     "valid.example.com",
+			IPv4:       []netip.Addr{mustParseAddr("10.0.0.1")},
+			Status:     StatusValid,
+			ResolvedAt: now,
+		},
+		{
+			Domain:     "failed.example.com",
+			IPv4:       []netip.Addr{mustParseAddr("10.0.0.2")},
+			Status:     StatusFailed,
+			ResolvedAt: now,
+		},
+	}
+
+	err := c.UpsertBatch(ctx, results)
+	require.NoError(t, err)
+
+	ipv4, _, err := c.SnapshotForDomains(ctx, []string{"valid.example.com", "failed.example.com", "missing.example.com"})
+	require.NoError(t, err)
+	assert.Len(t, ipv4, 1)
+	assert.Contains(t, ipv4, mustParseAddr("10.0.0.1"))
+}
+
+func TestSnapshotForDomains_EmptyInput_ReturnsNil(t *testing.T) {
+	c := openTestDB(t)
+	ctx := context.Background()
+
+	ipv4, ipv6, err := c.SnapshotForDomains(ctx, []string{})
+	require.NoError(t, err)
+	assert.Nil(t, ipv4)
+	assert.Nil(t, ipv6)
+
+	ipv4, ipv6, err = c.SnapshotForDomains(ctx, nil)
+	require.NoError(t, err)
+	assert.Nil(t, ipv4)
+	assert.Nil(t, ipv6)
+}

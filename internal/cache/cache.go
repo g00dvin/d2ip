@@ -127,6 +127,10 @@ type Cache interface {
 	// IPv6 addresses, ordered canonically by string representation.
 	Snapshot(ctx context.Context) (ipv4, ipv6 []netip.Addr, err error)
 
+	// SnapshotForDomains returns the resolved IPv4 and IPv6 addresses for
+	// the given domain list. Addresses are not deduplicated or sorted.
+	SnapshotForDomains(ctx context.Context, domains []string) (ipv4, ipv6 []netip.Addr, err error)
+
 	// Stats returns record counts by type and status in O(few queries).
 	Stats(ctx context.Context) (Stats, error)
 

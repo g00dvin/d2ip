@@ -187,3 +187,50 @@ func (c *SQLiteCache) checkStaleBatch(ctx context.Context, domains []string, val
 
 	return nil
 }
+
+// SnapshotForDomains returns the resolved IPv4 and IPv6 addresses for the
+// given domain list. Addresses are not deduplicated or sorted.
+func (c *SQLiteCache) SnapshotForDomains(ctx context.Context, domains []string) (ipv4 []netip.Addr, ipv6 []netip.Addr, err error) {
+	if len(domains) == 0 {
+		return nil, nil, nil
+	}
+
+	placeholders := make([]string, len(domains))
+	args := make([]any, 0, len(domains)+1)
+	args = append(args, "valid")
+	for i, d := range domains {
+		placeholders[i] = "?"
+		args = append(args, d)
+	}
+
+	query := fmt.Sprintf(
+		"SELECT d.name, r.ip, r.type FROM records r JOIN domains d ON r.domain_id = d.id WHERE r.status = ? AND d.name IN (%s)",
+		strings.Join(placeholders, ","),
+	)
+
+	rows, err := c.db.QueryContext(ctx, query, args...)
+	if err != nil {
+		return nil, nil, fmt.Errorf("cache: snapshot query: %w", err)
+	}
+	defer rows.Close()
+
+	for rows.Next() {
+		var domain string
+		var ipStr string
+		var typ string
+		if err := rows.Scan(&domain, &ipStr, &typ); err != nil {
+			continue
+		}
+		addr, err := netip.ParseAddr(ipStr)
+		if err != nil {
+			log.Warn().Str("ip", ipStr).Str("domain", domain).Err(err).Msg("cache: snapshot: unparseable IP, skipping")
+			continue
+		}
+		if typ == "A" || addr.Is4() {
+			ipv4 = append(ipv4, addr)
+		} else {
+			ipv6 = append(ipv6, addr)
+		}
+	}
+	return ipv4, ipv6, rows.Err()
+}

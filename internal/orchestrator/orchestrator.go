@@ -18,13 +18,12 @@ import (
 	"github.com/goodvin/d2ip/internal/aggregator"
 	"github.com/goodvin/d2ip/internal/cache"
 	"github.com/goodvin/d2ip/internal/config"
-	"github.com/goodvin/d2ip/internal/domainlist"
 	"github.com/goodvin/d2ip/internal/events"
 	"github.com/goodvin/d2ip/internal/exporter"
 	"github.com/goodvin/d2ip/internal/metrics"
 	"github.com/goodvin/d2ip/internal/resolver"
 	"github.com/goodvin/d2ip/internal/routing"
-	"github.com/goodvin/d2ip/internal/source"
+	"github.com/goodvin/d2ip/internal/sourcereg"
 	"github.com/rs/zerolog/log"
 )
 
@@ -77,8 +76,7 @@ var ErrNotRunning = errors.New("orchestrator: no pipeline running")
 // Orchestrator composes the agents and executes the pipeline.
 type Orchestrator struct {
 	// Agent dependencies (injected by cmd/d2ip).
-	source     source.DLCStore
-	domainlist domainlist.ListProvider
+	registry   sourcereg.Registry
 	resolver   resolver.Resolver
 	cache      cache.Cache
 	aggregator *aggregator.Aggregator
@@ -107,8 +105,7 @@ type Orchestrator struct {
 
 // New creates an Orchestrator with injected agent dependencies.
 func New(
-	src source.DLCStore,
-	dl domainlist.ListProvider,
+	registry sourcereg.Registry,
 	res resolver.Resolver,
 	cch cache.Cache,
 	agg *aggregator.Aggregator,
@@ -120,8 +117,7 @@ func New(
 	policyRtr routing.PolicyRouter,
 ) *Orchestrator {
 	return &Orchestrator{
-		source:     src,
-		domainlist: dl,
+		registry:   registry,
 		resolver:   res,
 		cache:      cch,
 		aggregator: agg,
@@ -202,18 +198,14 @@ func (o *Orchestrator) Run(ctx context.Context, req PipelineRequest) (PipelineRe
 
 	log.Info().Int64("run_id", runID).Msg("orchestrator: pipeline started")
 
-	// Step 1: Get config snapshot
-	cfg := o.config()
-
-	// Step 2: Source - fetch dlc.dat
-	log.Info().Msg("orchestrator: fetching dlc.dat")
+	// Step 1-3: Load all sources
+	log.Info().Msg("orchestrator: loading sources")
 	stepStart := time.Now()
-	dlcPath, _, err := o.source.Get(ctx, cfg.Source.RefreshInterval)
-	metrics.PipelineStepDuration.WithLabelValues("source").Observe(time.Since(stepStart).Seconds())
-	if err != nil {
-		log.Error().Err(err).Msg("orchestrator: source fetch failed")
-		return report, fmt.Errorf("source fetch: %w", err)
+	if err := o.registry.LoadAll(ctx); err != nil {
+		log.Error().Err(err).Msg("orchestrator: source load failed")
+		return report, fmt.Errorf("source load: %w", err)
 	}
+	metrics.PipelineStepDuration.WithLabelValues("source").Observe(time.Since(stepStart).Seconds())
 
 	// Check context after I/O
 	select {
@@ -223,49 +215,31 @@ func (o *Orchestrator) Run(ctx context.Context, req PipelineRequest) (PipelineRe
 	default:
 	}
 
-	// Step 3: Domain - parse and select categories
-	log.Info().Msg("orchestrator: loading domain list")
-	stepStart = time.Now()
-	if err := o.domainlist.Load(dlcPath); err != nil {
-		log.Error().Err(err).Msg("orchestrator: domain list load failed")
-		return report, fmt.Errorf("domainlist load: %w", err)
-	}
+	// Collect all domain categories across all policies
+	cfg := o.config()
+	allDomainCats, _ := o.categorizePolicyCategories(cfg)
 
-	selectors := make([]domainlist.CategorySelector, len(cfg.Categories))
-	for i, cat := range cfg.Categories {
-		selectors[i] = domainlist.CategorySelector{
-			Code:  cat.Code,
-			Attrs: cat.Attrs,
+	// Collect all domains that need resolution
+	domainSet := make(map[string]struct{})
+	for _, cat := range allDomainCats {
+		domains, err := o.registry.GetDomains(cat)
+		if err != nil {
+			log.Warn().Err(err).Str("category", cat).Msg("orchestrator: failed to get domains")
+			continue
+		}
+		for _, d := range domains {
+			domainSet[d] = struct{}{}
 		}
 	}
-
-	log.Info().Msg("orchestrator: selecting categories")
-	rules, err := o.domainlist.Select(selectors)
-	metrics.PipelineStepDuration.WithLabelValues("domainlist").Observe(time.Since(stepStart).Seconds())
-	if err != nil {
-		log.Error().Err(err).Msg("orchestrator: category selection failed")
-		return report, fmt.Errorf("domainlist select: %w", err)
+	resolvable := make([]string, 0, len(domainSet))
+	for d := range domainSet {
+		resolvable = append(resolvable, d)
 	}
-	report.Domains = len(rules)
-	if len(rules) == 0 {
-		log.Warn().Msg("orchestrator: no categories configured; add entries to config.categories to resolve domains")
-	}
-
-	// Filter to only resolvable rules (Full and RootDomain)
-	resolvable := make([]string, 0, len(rules))
-	for _, rule := range rules {
-		if rule.Type.IsResolvable() {
-			resolvable = append(resolvable, rule.Value)
-		}
-	}
-
-	// Update report to reflect only resolvable domain count
 	report.Domains = len(resolvable)
 
 	log.Info().
-		Int("total", len(rules)).
-		Int("resolvable", len(resolvable)).
-		Msg("orchestrator: filtered resolvable domains")
+		Int("domains", len(resolvable)).
+		Msg("orchestrator: collected resolvable domains")
 
 	// Check context
 	select {
@@ -275,112 +249,8 @@ func (o *Orchestrator) Run(ctx context.Context, req PipelineRequest) (PipelineRe
 	default:
 	}
 
-	// Step 4: Cache - check what needs refresh
-	log.Info().Msg("orchestrator: checking cache freshness")
-	stepStart = time.Now()
-	stale, err := o.cache.NeedsRefresh(ctx, resolvable, cfg.Cache.TTL, cfg.Cache.FailedTTL)
-	metrics.PipelineStepDuration.WithLabelValues("cache").Observe(time.Since(stepStart).Seconds())
-	if err != nil {
-		log.Error().Err(err).Msg("orchestrator: cache check failed")
-		return report, fmt.Errorf("cache check: %w", err)
-	}
-	report.Stale = len(stale)
-	report.CacheHits = len(resolvable) - len(stale)
-
-	// Step 5: Resolver - resolve stale domains
-	if len(stale) > 0 || req.ForceResolve {
-		toResolve := resolvable
-		if !req.ForceResolve {
-			toResolve = stale
-		}
-
-		log.Info().
-			Int("count", len(toResolve)).
-			Bool("force", req.ForceResolve).
-			Msg("orchestrator: resolving domains")
-
-		stepStart = time.Now()
-		resultsCh := o.resolver.ResolveBatch(ctx, toResolve)
-		results := make([]cache.ResolveResult, 0, len(toResolve))
-
-		for res := range resultsCh {
-			// Convert resolver.ResolveResult to cache.ResolveResult
-			cacheStatus := cache.StatusValid
-			if res.Status == resolver.StatusFailed {
-				cacheStatus = cache.StatusFailed
-			} else if res.Status == resolver.StatusNXDomain {
-				cacheStatus = cache.StatusNXDomain
-			}
-
-			results = append(results, cache.ResolveResult{
-				Domain:     res.Domain,
-				IPv4:       res.IPv4,
-				IPv6:       res.IPv6,
-				Status:     cacheStatus,
-				ResolvedAt: res.ResolvedAt,
-				Err:        res.Err,
-			})
-
-			if res.Status == resolver.StatusValid {
-				report.Resolved++
-			} else {
-				report.Failed++
-			}
-		}
-		metrics.PipelineStepDuration.WithLabelValues("resolver").Observe(time.Since(stepStart).Seconds())
-		o.emit("pipeline.progress", map[string]any{
-			"run_id":   runID,
-			"step":     "resolver",
-			"resolved": report.Resolved,
-			"failed":   report.Failed,
-			"total":    len(toResolve),
-		})
-
-		log.Info().
-			Int("valid", report.Resolved).
-			Int("failed", report.Failed).
-			Int("total", len(results)).
-			Msg("orchestrator: resolution summary")
-
-		// Check context after resolution
-		select {
-		case <-ctx.Done():
-			log.Warn().Int64("run_id", runID).Msg("orchestrator: pipeline canceled")
-			return report, ctx.Err()
-		default:
-		}
-
-		// Step 6: Cache - upsert batch results
-		log.Info().Int("count", len(results)).Msg("orchestrator: upserting results to cache")
-		if err := o.cache.UpsertBatch(ctx, results); err != nil {
-			log.Error().Err(err).Msg("orchestrator: cache upsert failed")
-			return report, fmt.Errorf("cache upsert: %w", err)
-		}
-	} else if len(resolvable) == 0 {
-		log.Info().Msg("orchestrator: no resolvable domains selected, skipping resolution")
-	} else {
-		log.Info().Msg("orchestrator: all domains cached, skipping resolution")
-	}
-
-	// Check context
-	select {
-	case <-ctx.Done():
-		log.Warn().Int64("run_id", runID).Msg("orchestrator: pipeline canceled")
-		return report, ctx.Err()
-	default:
-	}
-
-	// Step 7: Aggregator - get snapshot and aggregate
-	log.Info().Msg("orchestrator: fetching cache snapshot")
-	stepStart = time.Now()
-	ipv4Addrs, ipv6Addrs, err := o.cache.Snapshot(ctx)
-	if err != nil {
-		log.Error().Err(err).Msg("orchestrator: cache snapshot failed")
-		return report, fmt.Errorf("cache snapshot: %w", err)
-	}
-
-	// Convert aggregation level
-	aggLevel := aggregator.AggConservative
+	// Compute global aggregation level for policies that don't override it
+	aggLevel := aggregator.AggBalanced
 	switch cfg.Aggregation.Level {
 	case config.AggOff:
 		aggLevel = aggregator.AggOff
@@ -392,91 +262,34 @@ func (o *Orchestrator) Run(ctx context.Context, req PipelineRequest) (PipelineRe
 		aggLevel = aggregator.AggAggressive
 	}
 
-	var ipv4Prefixes, ipv6Prefixes []netip.Prefix
-	if cfg.Aggregation.Enabled {
-		log.Info().
-			Int("ipv4", len(ipv4Addrs)).
-			Int("ipv6", len(ipv6Addrs)).
-			Str("level", string(cfg.Aggregation.Level)).
-			Msg("orchestrator: aggregating addresses")
-		ipv4Prefixes = o.aggregator.AggregateV4(ipv4Addrs, aggLevel, cfg.Aggregation.V4MaxPrefix)
-		ipv6Prefixes = o.aggregator.AggregateV6(ipv6Addrs, aggLevel, cfg.Aggregation.V6MaxPrefix)
-	} else {
-		log.Info().
-			Int("ipv4", len(ipv4Addrs)).
-			Int("ipv6", len(ipv6Addrs)).
-			Msg("orchestrator: skipping aggregation, converting to /32 and /128")
-		// No aggregation: convert each address to /32 or /128
-		ipv4Prefixes = make([]netip.Prefix, len(ipv4Addrs))
-		for i, addr := range ipv4Addrs {
-			ipv4Prefixes[i] = netip.PrefixFrom(addr, 32)
-		}
-		ipv6Prefixes = make([]netip.Prefix, len(ipv6Addrs))
-		for i, addr := range ipv6Addrs {
-			ipv6Prefixes[i] = netip.PrefixFrom(addr, 128)
-		}
-	}
-	metrics.PipelineStepDuration.WithLabelValues("aggregator").Observe(time.Since(stepStart).Seconds())
-
-	report.IPv4Out = len(ipv4Prefixes)
-	report.IPv6Out = len(ipv6Prefixes)
-
-	// Check context
-	select {
-	case <-ctx.Done():
-		log.Warn().Int64("run_id", runID).Msg("orchestrator: pipeline canceled")
-		return report, ctx.Err()
-	default:
-	}
-
-	// Step 8+9: Export and route — per-policy or legacy single-policy
+	// Step 4-9: Per-policy execution
 	if len(cfg.Routing.Policies) > 0 && o.policyRtr != nil && o.policyExp != nil {
 		for _, policy := range cfg.Routing.Policies {
 			if !policy.Enabled {
 				continue
 			}
-			start := time.Now()
-			policyReport, err := o.runPolicy(ctx, policy, resolvable, ipv4Addrs, ipv6Addrs, aggLevel, cfg)
+			policyStart := time.Now()
+			policyReport, err := o.runPolicy(ctx, policy, req, aggLevel, cfg)
 			if err != nil {
 				// Log error but continue with other policies
 				log.Error().Err(err).Str("policy", policy.Name).Msg("orchestrator: policy run failed")
+				report.Policies = append(report.Policies, PolicyReport{
+					Name:     policy.Name,
+					Duration: time.Since(policyStart).Milliseconds(),
+				})
+				continue
 			}
-			policyReport.Duration = time.Since(start).Milliseconds()
+			policyReport.Duration = time.Since(policyStart).Milliseconds()
 			report.Policies = append(report.Policies, policyReport)
+
+			// Accumulate global report counts
+			report.Resolved += policyReport.Resolved
+			report.Failed += policyReport.Failed
+			report.IPv4Out += policyReport.IPv4Out
+			report.IPv6Out += policyReport.IPv6Out
 		}
 	} else {
-		// Legacy single-policy path
-		// Step 8: Exporter - write files
-		if !req.DryRun {
-			log.Info().Msg("orchestrator: exporting prefix files")
-			stepStart = time.Now()
-			exportReport, err := o.exporter.Write(ctx, ipv4Prefixes, ipv6Prefixes)
-			metrics.PipelineStepDuration.WithLabelValues("exporter").Observe(time.Since(stepStart).Seconds())
-			if err != nil {
-				log.Error().Err(err).Msg("orchestrator: export failed")
-				return report, fmt.Errorf("export: %w", err)
-			}
-
-			log.Info().
-				Str("ipv4_path", exportReport.IPv4Path).
-				Str("ipv6_path", exportReport.IPv6Path).
-				Bool("unchanged", exportReport.Unchanged).
-				Msg("orchestrator: export completed")
-		} else {
-			log.Info().Msg("orchestrator: dry run, skipping export")
-		}
-
-		// Check context
-		select {
-		case <-ctx.Done():
-			log.Warn().Int64("run_id", runID).Msg("orchestrator: pipeline canceled")
-			return report, ctx.Err()
-		default:
-		}
-
-		// Step 9: Routing — legacy single-policy path is not available with new config structure.
-		// Routing requires at least one policy in routing.policies.
-		log.Info().Msg("orchestrator: legacy routing not configured, skipping")
+		log.Info().Msg("orchestrator: no policies configured, skipping export and routing")
 	}
 
 	report.Duration = time.Since(started)
@@ -512,28 +325,215 @@ func (o *Orchestrator) Run(ctx context.Context, req PipelineRequest) (PipelineRe
 	return report, nil
 }
 
-func (o *Orchestrator) runPolicy(ctx context.Context, policy config.PolicyConfig, allDomains []string, allIPv4, allIPv6 []netip.Addr, aggLevel aggregator.Aggressiveness, cfg config.Config) (PolicyReport, error) {
-	// For now, use all IPs (proper domain filtering will be added later)
-	v4Out := o.aggregator.AggregateV4(allIPv4, aggLevel, cfg.Aggregation.V4MaxPrefix)
-	v6Out := o.aggregator.AggregateV6(allIPv6, aggLevel, cfg.Aggregation.V6MaxPrefix)
+func (o *Orchestrator) runPolicy(ctx context.Context, policy config.PolicyConfig, req PipelineRequest, aggLevel aggregator.Aggressiveness, cfg config.Config) (PolicyReport, error) {
+	start := time.Now()
+
+	// Separate policy categories into domain and prefix categories
+	var domainCats, prefixCats []string
+	for _, cat := range policy.Categories {
+		_, catType, found := o.registry.ResolveCategory(cat)
+		if !found {
+			log.Warn().Str("category", cat).Msg("orchestrator: unknown category in policy")
+			continue
+		}
+		if catType == "domain" {
+			domainCats = append(domainCats, cat)
+		} else {
+			prefixCats = append(prefixCats, cat)
+		}
+	}
+
+	// Collect domains for this policy
+	domainSet := make(map[string]struct{})
+	for _, cat := range domainCats {
+		domains, err := o.registry.GetDomains(cat)
+		if err != nil {
+			log.Warn().Err(err).Str("category", cat).Msg("orchestrator: failed to get domains for policy")
+			continue
+		}
+		for _, d := range domains {
+			domainSet[d] = struct{}{}
+		}
+	}
+	policyDomains := make([]string, 0, len(domainSet))
+	for d := range domainSet {
+		policyDomains = append(policyDomains, d)
+	}
+
+	// Resolve policy domains (use cache)
+	var ipv4Addrs, ipv6Addrs []netip.Addr
+	var resolvedCount, failedCount int
+	if len(policyDomains) > 0 {
+		var toResolve []string
+		if req.ForceResolve {
+			toResolve = policyDomains
+		} else {
+			stale, err := o.cache.NeedsRefresh(ctx, policyDomains, cfg.Cache.TTL, cfg.Cache.FailedTTL)
+			if err != nil {
+				return PolicyReport{}, fmt.Errorf("cache check: %w", err)
+			}
+			toResolve = stale
+		}
+
+		if len(toResolve) > 0 {
+			log.Info().
+				Int("count", len(toResolve)).
+				Bool("force", req.ForceResolve).
+				Str("policy", policy.Name).
+				Msg("orchestrator: resolving policy domains")
+
+			resultsCh := o.resolver.ResolveBatch(ctx, toResolve)
+			var results []cache.ResolveResult
+			for res := range resultsCh {
+				cacheStatus := cache.StatusValid
+				if res.Status == resolver.StatusFailed {
+					cacheStatus = cache.StatusFailed
+				} else if res.Status == resolver.StatusNXDomain {
+					cacheStatus = cache.StatusNXDomain
+				}
+				results = append(results, cache.ResolveResult{
+					Domain:     res.Domain,
+					IPv4:       res.IPv4,
+					IPv6:       res.IPv6,
+					Status:     cacheStatus,
+					ResolvedAt: res.ResolvedAt,
+					Err:        res.Err,
+				})
+
+				if res.Status == resolver.StatusValid {
+					resolvedCount++
+				} else {
+					failedCount++
+				}
+			}
+			if err := o.cache.UpsertBatch(ctx, results); err != nil {
+				return PolicyReport{}, fmt.Errorf("cache upsert: %w", err)
+			}
+
+			log.Info().
+				Int("valid", resolvedCount).
+				Int("failed", failedCount).
+				Int("total", len(results)).
+				Str("policy", policy.Name).
+				Msg("orchestrator: policy resolution summary")
+		}
+
+		var err error
+		ipv4Addrs, ipv6Addrs, err = o.cache.SnapshotForDomains(ctx, policyDomains)
+		if err != nil {
+			return PolicyReport{}, fmt.Errorf("cache snapshot: %w", err)
+		}
+	}
+
+	// Collect prefixes from IP-direct sources
+	var ipv4Prefixes, ipv6Prefixes []netip.Prefix
+	for _, cat := range prefixCats {
+		prefixes, err := o.registry.GetPrefixes(cat)
+		if err != nil {
+			log.Warn().Err(err).Str("category", cat).Msg("orchestrator: failed to get prefixes for policy")
+			continue
+		}
+		for _, p := range prefixes {
+			if p.Addr().Is4() {
+				ipv4Prefixes = append(ipv4Prefixes, p)
+			} else {
+				ipv6Prefixes = append(ipv6Prefixes, p)
+			}
+		}
+	}
+
+	// Convert resolved addresses to prefixes
+	for _, addr := range ipv4Addrs {
+		ipv4Prefixes = append(ipv4Prefixes, netip.PrefixFrom(addr, 32))
+	}
+	for _, addr := range ipv6Addrs {
+		ipv6Prefixes = append(ipv6Prefixes, netip.PrefixFrom(addr, 128))
+	}
+
+	// Aggregate per policy
+	var v4Out, v6Out []netip.Prefix
+	if policy.Aggregation != nil && policy.Aggregation.Enabled {
+		level := aggregator.AggBalanced
+		switch policy.Aggregation.Level {
+		case config.AggOff:
+			level = aggregator.AggOff
+		case config.AggConservative:
+			level = aggregator.AggConservative
+		case config.AggBalanced:
+			level = aggregator.AggBalanced
+		case config.AggAggressive:
+			level = aggregator.AggAggressive
+		}
+		v4Out = o.aggregator.AggregateV4(ipv4Prefixes, level, policy.Aggregation.V4MaxPrefix)
+		v6Out = o.aggregator.AggregateV6(ipv6Prefixes, level, policy.Aggregation.V6MaxPrefix)
+	} else if cfg.Aggregation.Enabled {
+		v4Out = o.aggregator.AggregateV4(ipv4Prefixes, aggLevel, cfg.Aggregation.V4MaxPrefix)
+		v6Out = o.aggregator.AggregateV6(ipv6Prefixes, aggLevel, cfg.Aggregation.V6MaxPrefix)
+	} else {
+		v4Out = ipv4Prefixes
+		v6Out = ipv6Prefixes
+	}
+
+	// Dry run: compute outputs but skip export and routing
+	if req.DryRun || policy.DryRun {
+		log.Info().Str("policy", policy.Name).Msg("orchestrator: dry run, skipping policy export and routing")
+		return PolicyReport{
+			Name:     policy.Name,
+			Domains:  len(policyDomains),
+			Resolved: resolvedCount,
+			Failed:   failedCount,
+			IPv4Out:  len(v4Out),
+			IPv6Out:  len(v6Out),
+			Duration: time.Since(start).Milliseconds(),
+		}, nil
+	}
 
 	expReport, err := o.policyExp.WritePolicy(ctx, policy, v4Out, v6Out)
 	if err != nil {
 		return PolicyReport{}, err
 	}
 
-	if !policy.DryRun {
+	if !req.SkipRouting {
 		if err := o.policyRtr.ApplyPolicy(ctx, policy, v4Out, v6Out); err != nil {
 			return PolicyReport{}, err
 		}
+	} else {
+		log.Info().Str("policy", policy.Name).Msg("orchestrator: skip routing requested, skipping policy routing")
 	}
 
 	return PolicyReport{
-		Name:    policy.Name,
-		Domains: len(allDomains),
-		IPv4Out: expReport.IPv4Count,
-		IPv6Out: expReport.IPv6Count,
+		Name:     policy.Name,
+		Domains:  len(policyDomains),
+		Resolved: resolvedCount,
+		Failed:   failedCount,
+		IPv4Out:  expReport.IPv4Count,
+		IPv6Out:  expReport.IPv6Count,
+		Duration: time.Since(start).Milliseconds(),
 	}, nil
+}
+
+func (o *Orchestrator) categorizePolicyCategories(cfg config.Config) (domainCats, prefixCats []string) {
+	catSet := make(map[string]struct{})
+	for _, pol := range cfg.Routing.Policies {
+		if !pol.Enabled {
+			continue
+		}
+		for _, cat := range pol.Categories {
+			catSet[cat] = struct{}{}
+		}
+	}
+	for cat := range catSet {
+		_, catType, found := o.registry.ResolveCategory(cat)
+		if !found {
+			continue
+		}
+		if catType == "domain" {
+			domainCats = append(domainCats, cat)
+		} else {
+			prefixCats = append(prefixCats, cat)
+		}
+	}
+	return
 }
 
 // Status returns the current or last-completed run status.
