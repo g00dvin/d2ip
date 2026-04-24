@@ -23,6 +23,7 @@ import (
 	"github.com/goodvin/d2ip/internal/resolver"
 	"github.com/goodvin/d2ip/internal/routing"
 	"github.com/goodvin/d2ip/internal/scheduler"
+	"github.com/goodvin/d2ip/internal/sourcereg"
 	"github.com/goodvin/d2ip/internal/source"
 	"github.com/rs/zerolog/log"
 )
@@ -136,28 +137,30 @@ func serveCmd() {
 	defer cacheDB.Close()
 	log.Info().Str("db", dbPath).Msg("Cache database ready")
 
-	// Initialize source store
-	sourceStore, err := source.NewHTTPStore(
-		cfg.Source.URL,
-		cfg.Source.CachePath,
-		cfg.Source.HTTPTimeout,
-	)
+	// Create source registry
+	registry, err := sourcereg.NewDBRegistry(cacheDB.DB())
 	if err != nil {
-		log.Fatal().Err(err).Msg("Failed to create source store")
+		log.Fatal().Err(err).Msg("failed to create source registry")
+	}
+	defer registry.Close()
+
+	// Seed registry from config sources
+	for _, srcCfg := range cfg.Sources {
+		sc := sourcereg.SourceConfig{
+			ID:       srcCfg.ID,
+			Provider: sourcereg.SourceType(srcCfg.Provider),
+			Prefix:   srcCfg.Prefix,
+			Enabled:  srcCfg.Enabled,
+			Config:   srcCfg.Config,
+		}
+		if err := registry.AddSource(ctx, sc); err != nil {
+			log.Warn().Err(err).Str("id", srcCfg.ID).Msg("failed to seed source")
+		}
 	}
 
-	// Initialize domain list provider
-	domainProvider := domainlist.NewProvider()
-
-	// Pre-load dlc.dat into the provider so the API can serve categories/domains
-	if _, err := os.Stat(cfg.Source.CachePath); err == nil {
-		if err := domainProvider.Load(cfg.Source.CachePath); err != nil {
-			log.Warn().Err(err).Msg("Failed to preload domain list; categories API will be unavailable until first pipeline run")
-		} else {
-			log.Info().Int("categories", len(domainProvider.Categories())).Msg("Domain list preloaded")
-		}
-	} else {
-		log.Info().Msg("No cached dlc.dat found; categories API will be available after first pipeline run")
+	// Load all sources
+	if err := registry.LoadAll(ctx); err != nil {
+		log.Warn().Err(err).Msg("initial source load failed")
 	}
 
 	// Initialize resolver
@@ -192,9 +195,15 @@ func serveCmd() {
 		log.Fatal().Err(err).Msg("Failed to create exporter")
 	}
 
+	// Create event bus
+	eventBus := events.NewBus()
+
+	// Create config watcher with initial config
+	cfgWatcher := config.NewWatcher(*cfg, 1, eventBus)
+
 	// Config snapshot function
 	configSnapshot := func() config.Config {
-		return *cfg
+		return cfgWatcher.Current().Config
 	}
 
 	// Create legacy router (deprecated, noop — policies use CompositeRouter)
@@ -210,13 +219,9 @@ func serveCmd() {
 	policyExp := exporter.NewPolicyExporter(cfg.Export.Dir)
 	policyRtr := routing.NewCompositeRouter(cfg.Routing)
 
-	// Create event bus
-	eventBus := events.NewBus()
-
 	// Create orchestrator with all agents
 	orch := orchestrator.New(
-		sourceStore,
-		domainProvider,
+		registry,
 		resolverAgent,
 		cacheDB,
 		aggAgent,
@@ -245,11 +250,8 @@ func serveCmd() {
 		log.Info().Dur("interval", cfg.Scheduler.ResolveCycle).Msg("Scheduler started")
 	}
 
-	// Create config watcher with initial config
-	cfgWatcher := config.NewWatcher(*cfg, 1, eventBus)
-
 	// Create API server
-	apiServer := api.New(orch, routerAgent, cfgWatcher, cacheDB, domainProvider, sourceStore, cacheDB, eventBus)
+	apiServer := api.New(orch, routerAgent, cfgWatcher, cacheDB, nil, nil, cacheDB, eventBus, registry)
 	apiServer.SetVersion(Version, BuildTime)
 	apiServer.SetPolicyRouter(policyRtr)
 	httpServer := &http.Server{
