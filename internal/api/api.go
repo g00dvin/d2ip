@@ -7,10 +7,12 @@ import (
 	"embed"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"io"
 	"io/fs"
 	"net/http"
 	"net/netip"
+	"os"
 	"strconv"
 	"strings"
 	"time"
@@ -132,6 +134,13 @@ func (s *Server) Handler() http.Handler {
 		// Source API.
 		cr.Get("/api/source/info", s.handleSourceInfo)
 		cr.Post("/api/source/fetch", s.handleSourceFetch)
+
+		// Export API.
+		cr.Get("/api/export/download", s.handleExportDownload)
+
+		// Config export/import.
+		cr.Get("/api/config/export", s.handleConfigExport)
+		cr.Post("/api/config/import", s.handleConfigImport)
 
 		// Policies API.
 		cr.Get("/api/policies", s.handlePoliciesList)
@@ -429,4 +438,96 @@ func (s *Server) handleRoutingSnapshot(w http.ResponseWriter, r *http.Request) {
 		"v6":         snapshot.V6,
 	}
 	s.jsonOK(w, resp)
+}
+
+// handleExportDownload serves exported prefix files for download.
+func (s *Server) handleExportDownload(w http.ResponseWriter, r *http.Request) {
+	policy := r.URL.Query().Get("policy")
+	typ := r.URL.Query().Get("type")
+	if policy == "" || (typ != "ipv4" && typ != "ipv6") {
+		s.jsonError(w, http.StatusBadRequest, "policy and type (ipv4|ipv6) query params required")
+		return
+	}
+
+	cfg := s.cfgWatcher.Current().Config
+	baseDir := cfg.Export.Dir
+	if baseDir == "" {
+		baseDir = "/var/lib/d2ip/out"
+	}
+
+	filename := cfg.Export.IPv4File
+	if typ == "ipv6" {
+		filename = cfg.Export.IPv6File
+	}
+	if filename == "" {
+		filename = typ + ".txt"
+	}
+
+	path := baseDir + "/" + policy + "/" + filename
+	data, err := os.ReadFile(path)
+	if err != nil {
+		s.jsonError(w, http.StatusNotFound, "export file not found: "+err.Error())
+		return
+	}
+
+	w.Header().Set("Content-Type", "text/plain")
+	w.Header().Set("Content-Disposition", fmt.Sprintf("attachment; filename=%s_%s.txt", policy, typ))
+	w.Header().Set("Content-Length", strconv.Itoa(len(data)))
+	w.WriteHeader(http.StatusOK)
+	_, _ = w.Write(data)
+}
+
+// handleConfigExport returns the current effective config as JSON download.
+func (s *Server) handleConfigExport(w http.ResponseWriter, r *http.Request) {
+	snapshot := s.cfgWatcher.Current()
+	overrides, _ := s.kvStore.GetAll(r.Context())
+
+	resp := map[string]interface{}{
+		"config":    structToMap(snapshot.Config),
+		"overrides": overrides,
+	}
+
+	data, err := json.MarshalIndent(resp, "", "  ")
+	if err != nil {
+		s.jsonError(w, http.StatusInternalServerError, "failed to marshal config: "+err.Error())
+		return
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	w.Header().Set("Content-Disposition", "attachment; filename=d2ip-config.json")
+	w.Header().Set("Content-Length", strconv.Itoa(len(data)))
+	w.WriteHeader(http.StatusOK)
+	_, _ = w.Write(data)
+}
+
+// handleConfigImport applies a JSON config object as KV overrides.
+func (s *Server) handleConfigImport(w http.ResponseWriter, r *http.Request) {
+	var payload struct {
+		Overrides map[string]string `json:"overrides"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&payload); err != nil {
+		s.jsonError(w, http.StatusBadRequest, "invalid JSON: "+err.Error())
+		return
+	}
+
+	if s.kvStore == nil {
+		s.jsonError(w, http.StatusInternalServerError, "kvStore not initialized")
+		return
+	}
+
+	for key, value := range payload.Overrides {
+		if err := s.kvStore.Set(r.Context(), key, value); err != nil {
+			log.Error().Err(err).Str("key", key).Msg("api: failed to import config override")
+			s.jsonError(w, http.StatusInternalServerError, "failed to set "+key+": "+err.Error())
+			return
+		}
+	}
+
+	if err := s.reloadConfig(r.Context()); err != nil {
+		log.Error().Err(err).Msg("api: config reload failed after import")
+		s.jsonError(w, http.StatusInternalServerError, "config reload failed: "+err.Error())
+		return
+	}
+
+	s.jsonOK(w, map[string]string{"status": "ok", "message": "config imported"})
 }

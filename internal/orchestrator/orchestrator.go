@@ -37,15 +37,16 @@ type PipelineRequest struct {
 
 // PipelineReport is the outcome of a completed (or failed) pipeline run.
 type PipelineReport struct {
-	RunID    int64          `json:"run_id"`
-	Domains  int            `json:"domains"`
-	Stale    int            `json:"stale"`
-	Resolved int            `json:"resolved"`
-	Failed   int            `json:"failed"`
-	IPv4Out  int            `json:"ipv4_out"`
-	IPv6Out  int            `json:"ipv6_out"`
-	Duration time.Duration  `json:"duration"`
-	Policies []PolicyReport `json:"policies,omitempty"`
+	RunID     int64          `json:"run_id"`
+	Domains   int            `json:"domains"`
+	Stale     int            `json:"stale"`
+	Resolved  int            `json:"resolved"`
+	CacheHits int            `json:"cache_hits"`
+	Failed    int            `json:"failed"`
+	IPv4Out   int            `json:"ipv4_out"`
+	IPv6Out   int            `json:"ipv6_out"`
+	Duration  time.Duration  `json:"duration"`
+	Policies  []PolicyReport `json:"policies,omitempty"`
 }
 
 // PolicyReport is the outcome of a single policy run.
@@ -96,6 +97,9 @@ type Orchestrator struct {
 	// Run history (last 10).
 	history   []PipelineReport
 	historyMu sync.Mutex
+
+	// Sequential run ID counter (starts at 1).
+	runCounter atomic.Int64
 
 	// Event bus for pipeline notifications.
 	eventBus *events.Bus
@@ -153,7 +157,7 @@ func (o *Orchestrator) Run(ctx context.Context, req PipelineRequest) (PipelineRe
 	}
 	defer o.running.Store(false)
 
-	runID := time.Now().UnixNano() // temporary; in Iteration 4 we'll use DB-assigned id
+	runID := o.runCounter.Add(1)
 	o.emit("pipeline.start", map[string]any{"run_id": runID})
 	started := time.Now()
 
@@ -281,6 +285,7 @@ func (o *Orchestrator) Run(ctx context.Context, req PipelineRequest) (PipelineRe
 		return report, fmt.Errorf("cache check: %w", err)
 	}
 	report.Stale = len(stale)
+	report.CacheHits = len(resolvable) - len(stale)
 
 	// Step 5: Resolver - resolve stale domains
 	if len(stale) > 0 || req.ForceResolve {

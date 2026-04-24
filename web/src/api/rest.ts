@@ -129,3 +129,23 @@ export async function getVersion(): Promise<{ version: string; build_time: strin
   const { data } = await client.get('/api/version')
   return data
 }
+
+// Export
+export async function downloadExport(policy: string, type: 'ipv4' | 'ipv6'): Promise<Blob> {
+  const { data } = await client.get(`/api/export/download?policy=${encodeURIComponent(policy)}&type=${type}`, {
+    responseType: 'blob',
+  })
+  return data
+}
+
+// Config export/import
+export async function exportConfig(): Promise<Blob> {
+  const { data } = await client.get('/api/config/export', {
+    responseType: 'blob',
+  })
+  return data
+}
+
+export async function importConfig(overrides: Record<string, string>): Promise<void> {
+  await client.post('/api/config/import', { overrides })
+}

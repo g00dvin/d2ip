@@ -2,6 +2,7 @@
 import { onMounted, ref, computed } from 'vue'
 import { useConfigStore, enumFields } from '@/stores/config'
 import { useMessage } from 'naive-ui'
+import * as api from '@/api/rest'
 
 const config = useConfigStore()
 const message = useMessage()
@@ -20,6 +21,50 @@ const tabs = [
   { name: 'Logging', keys: ['logging.level', 'logging.format'] },
   { name: 'Metrics', keys: ['metrics.enabled', 'metrics.path'] },
 ]
+
+const durationKeys = new Set([
+  'source.refresh_interval',
+  'source.http_timeout',
+  'resolver.timeout',
+  'resolver.backoff_base',
+  'resolver.backoff_max',
+  'cache.ttl',
+  'cache.failed_ttl',
+  'cache.vacuum_after',
+  'scheduler.dlc_refresh',
+  'scheduler.resolve_cycle',
+])
+
+function formatDuration(ns: number | string | undefined): string {
+  if (ns === undefined || ns === null || ns === '') return ''
+  const n = typeof ns === 'string' ? parseFloat(ns) : ns
+  if (isNaN(n) || n === 0) return '0s'
+  const seconds = n / 1e9
+  if (seconds < 60) return `${seconds.toFixed(1)}s`
+  const minutes = seconds / 60
+  if (minutes < 60) return `${Math.round(minutes)}m`
+  const hours = minutes / 60
+  if (hours < 24) return `${Math.round(hours)}h`
+  const days = hours / 24
+  return `${Math.round(days)}d`
+}
+
+function parseDurationInput(v: string): string {
+  v = v.trim()
+  if (!v) return ''
+  // If already a number, assume nanoseconds and pass through
+  if (/^\d+$/.test(v)) return v
+  // Parse human-readable durations like "4h", "30m", "7d"
+  const match = v.match(/^(\d+(?:\.\d+)?)\s*([smhd])$/i)
+  if (!match) return v
+  const num = parseFloat(match[1])
+  const unit = match[2].toLowerCase()
+  let seconds = num
+  if (unit === 'm') seconds = num * 60
+  else if (unit === 'h') seconds = num * 3600
+  else if (unit === 'd') seconds = num * 86400
+  return String(Math.round(seconds * 1e9))
+}
 
 // Local edits: key -> current input value
 const edits = ref<Record<string, string>>({})
@@ -68,6 +113,47 @@ async function handleSave() {
     message.error('Failed to save configuration')
   }
 }
+
+async function handleExport() {
+  try {
+    const blob = await api.exportConfig()
+    const url = URL.createObjectURL(blob)
+    const a = document.createElement('a')
+    a.href = url
+    a.download = 'd2ip-config.json'
+    a.click()
+    URL.revokeObjectURL(url)
+    message.success('Config exported')
+  } catch (e) {
+    message.error('Failed to export config')
+  }
+}
+
+async function handleImport() {
+  const input = document.createElement('input')
+  input.type = 'file'
+  input.accept = '.json'
+  input.onchange = async () => {
+    const file = input.files?.[0]
+    if (!file) return
+    try {
+      const text = await file.text()
+      const data = JSON.parse(text)
+      const overrides = data.overrides || data.config || {}
+      // Flatten if needed
+      const flat: Record<string, string> = {}
+      for (const [k, v] of Object.entries(overrides)) {
+        flat[k] = String(v)
+      }
+      await api.importConfig(flat)
+      await config.fetchSettings()
+      message.success('Config imported')
+    } catch (e) {
+      message.error('Failed to import config')
+    }
+  }
+  input.click()
+}
 </script>
 
 <template>
@@ -79,6 +165,8 @@ async function handleSave() {
         <n-button type="primary" :disabled="!hasChanges" @click="handleSave">
           Save Changes
         </n-button>
+        <n-button @click="handleExport">Export</n-button>
+        <n-button @click="handleImport">Import</n-button>
         <n-text v-if="hasChanges" type="warning">
           Unsaved changes
         </n-text>
@@ -107,6 +195,13 @@ async function handleSave() {
                   :options="enumFields[key].map((opt: string) => ({ label: opt, value: opt }))"
                   style="width: 200px"
                   @update:value="(v: string) => handleChange(key, v)"
+                />
+                <!-- Duration fields: show human-readable, store nanoseconds -->
+                <n-input
+                  v-else-if="durationKeys.has(key)"
+                  :value="getValue(key) ? formatDuration(getValue(key)) : ''"
+                  :placeholder="formatDuration((config.settings.defaults as any)[key])"
+                  @update:value="(v: string) => handleChange(key, parseDurationInput(v))"
                 />
                 <!-- Regular text fields -->
                 <n-input

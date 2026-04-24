@@ -1,28 +1,23 @@
+export interface PipelineReport {
+  run_id: number
+  duration: number
+  domains: number
+  resolved: number
+  cache_hits: number
+  failed: number
+  ipv4_out: number
+  ipv6_out: number
+}
+
 export interface PipelineStatus {
   running: boolean
   run_id: number
   started: string
-  report: {
-    run_id: number
-    duration: number
-    domains: number
-    resolved: number
-    failed: number
-    ipv4_out: number
-    ipv6_out: number
-  } | null
+  report: PipelineReport | null
 }
 
 export interface PipelineHistory {
-  history: Array<{
-    run_id: number
-    duration: number
-    domains: number
-    resolved: number
-    failed: number
-    ipv4_out: number
-    ipv6_out: number
-  }>
+  history: PipelineReport[]
 }
 
 export interface RoutingSnapshot {
