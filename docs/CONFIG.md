@@ -15,6 +15,10 @@ source:
   http_timeout: 30s
 
 categories:
+  # Global categories to resolve and cache.
+  # The pipeline resolves ALL of these into the SQLite cache, making them
+  # available to any routing policy below. This is the "what domains do we
+  # know about?" list — independent of how (or whether) they are routed.
   - code: geosite:ru
   - code: geosite:google
     attrs: []                    # optional @attribute filter (AND)
@@ -54,6 +58,10 @@ routing:
   state_dir: /var/lib/d2ip      # directory for per-policy state files
 
   policies:
+    # Each policy selects a SUBSET of the global categories above and routes
+    # their resolved IPs through its own backend/table. Multiple policies can
+    # share categories. This is the "which domains go through this table?"
+    # list — it filters from the already-resolved global cache.
     - name: streaming
       enabled: true
       categories: ["geosite:netflix", "geosite:youtube"]
