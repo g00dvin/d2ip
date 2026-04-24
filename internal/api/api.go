@@ -13,6 +13,7 @@ import (
 	"net/netip"
 	"strconv"
 	"strings"
+	"time"
 
 	"github.com/go-chi/chi/v5"
 	"github.com/go-chi/chi/v5/middleware"
@@ -387,7 +388,7 @@ func (s *Server) handleRoutingSnapshot(w http.ResponseWriter, r *http.Request) {
 	if len(cfg.Routing.Policies) > 0 && s.policyRtr != nil {
 		var totalV4, totalV6 int
 		var anyApplied bool
-		var lastApplied string
+		var lastApplied time.Time
 		for _, p := range cfg.Routing.Policies {
 			if !p.Enabled {
 				continue
@@ -395,7 +396,7 @@ func (s *Server) handleRoutingSnapshot(w http.ResponseWriter, r *http.Request) {
 			state := s.policyRtr.SnapshotPolicy(p.Name)
 			if state.Backend != "" && state.Backend != "none" {
 				anyApplied = true
-				if state.AppliedAt > lastApplied {
+				if state.AppliedAt.After(lastApplied) {
 					lastApplied = state.AppliedAt
 				}
 				totalV4 += len(state.V4)
@@ -406,9 +407,13 @@ func (s *Server) handleRoutingSnapshot(w http.ResponseWriter, r *http.Request) {
 		if !anyApplied {
 			backend = "none"
 		}
+		appliedStr := ""
+		if !lastApplied.IsZero() {
+			appliedStr = lastApplied.Format(time.RFC3339)
+		}
 		s.jsonOK(w, map[string]interface{}{
 			"backend":    backend,
-			"applied_at": lastApplied,
+			"applied_at": appliedStr,
 			"v4":         totalV4,
 			"v6":         totalV6,
 			"policies":   len(cfg.Routing.Policies),
