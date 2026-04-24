@@ -6,7 +6,6 @@ import (
 	"net/http"
 	"time"
 
-	"github.com/goodvin/d2ip/internal/events"
 	"github.com/rs/zerolog/log"
 )
 

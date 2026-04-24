@@ -99,6 +99,7 @@ func New(
 	exp *exporter.FileExporter,
 	rtr routing.Router,
 	cfgGetter func() config.Config,
+	eventBus *events.Bus,
 ) *Orchestrator {
 	return &Orchestrator{
 		source:     src,
@@ -109,6 +110,7 @@ func New(
 		exporter:   exp,
 		router:     rtr,
 		config:     cfgGetter,
+		eventBus:   eventBus,
 	}
 }
 
