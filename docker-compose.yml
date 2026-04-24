@@ -1,0 +1,90 @@
+# d2ip Docker Compose Examples
+#
+# Copy this file to docker-compose.yml and uncomment the profile you need.
+# All profiles use the pre-built GHCR image. To build locally instead:
+#   docker compose -f docker-compose.yml -f docker-compose.build.yml up
+
+services:
+  # -------------------------------------------------
+  # Profile: default (no routing — just resolve + export)
+  # Usage: docker compose --profile default up
+  # -------------------------------------------------
+  d2ip-default:
+    image: ghcr.io/g00dvin/d2ip:latest
+    container_name: d2ip
+    profiles: ["default"]
+    ports:
+      - "9099:9099"
+    volumes:
+      - d2ip-data:/var/lib/d2ip
+      # Optional: mount a custom config file
+      # - ./config.yaml:/app/config.yaml:ro
+    environment:
+      # Required: DNS upstream
+      D2IP_RESOLVER_UPSTREAM: "1.1.1.1:53"
+      # Example categories (JSON array)
+      D2IP_CATEGORIES: '[{"code":"geosite:google"},{"code":"geosite:netflix"}]'
+      # Optional: shorten cache TTL for testing
+      # D2IP_CACHE_TTL: "5m"
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://localhost:9099/healthz"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
+
+  # -------------------------------------------------
+  # Profile: nftables (routing via nftables sets)
+  # Usage: docker compose --profile nftables up
+  # -------------------------------------------------
+  d2ip-nftables:
+    image: ghcr.io/g00dvin/d2ip:latest
+    container_name: d2ip-nftables
+    profiles: ["nftables"]
+    network_mode: host          # Required for nftables
+    cap_add:
+      - NET_ADMIN               # Required for nftables manipulation
+      - NET_RAW
+    volumes:
+      - d2ip-data:/var/lib/d2ip
+      # Optional: mount custom config
+      # - ./config.yaml:/app/config.yaml:ro
+      # Optional: mount your nftables ruleset template
+      # - ./custom-rules.nft:/etc/nftables/custom-rules.nft:ro
+    environment:
+      D2IP_RESOLVER_UPSTREAM: "1.1.1.1:53"
+      D2IP_CATEGORIES: '[{"code":"geosite:google"},{"code":"geosite:netflix"}]'
+      D2IP_ROUTING_ENABLED: "true"
+      D2IP_ROUTING_BACKEND: "nftables"
+      D2IP_ROUTING_NFT_TABLE: "inet d2ip"
+      D2IP_ROUTING_NFT_SET_V4: "d2ip_v4"
+      D2IP_ROUTING_NFT_SET_V6: "d2ip_v6"
+    restart: unless-stopped
+
+  # -------------------------------------------------
+  # Profile: iproute2 (routing via ip route table)
+  # Usage: docker compose --profile iproute2 up
+  # -------------------------------------------------
+  d2ip-iproute2:
+    image: ghcr.io/g00dvin/d2ip:latest
+    container_name: d2ip-iproute2
+    profiles: ["iproute2"]
+    network_mode: host          # Required for iproute2
+    cap_add:
+      - NET_ADMIN               # Required for routing table manipulation
+      - NET_RAW
+    volumes:
+      - d2ip-data:/var/lib/d2ip
+    environment:
+      D2IP_RESOLVER_UPSTREAM: "1.1.1.1:53"
+      D2IP_CATEGORIES: '[{"code":"geosite:google"},{"code":"geosite:netflix"}]'
+      D2IP_ROUTING_ENABLED: "true"
+      D2IP_ROUTING_BACKEND: "iproute2"
+      D2IP_ROUTING_TABLE_ID: "100"
+      D2IP_ROUTING_IFACE: "eth0"  # <-- CHANGE to your actual interface
+    restart: unless-stopped
+
+volumes:
+  d2ip-data:
+    driver: local
