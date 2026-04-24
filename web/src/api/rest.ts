@@ -2,7 +2,7 @@ import { client } from './client'
 import type {
   CategoriesResponse, CategoryDomainsResponse,
   PipelineStatus, PipelineHistory, RoutingSnapshot,
-  DryRunResult, SettingsResponse, CacheStats, SourceInfo,
+  DryRunResult, SettingsResponse, CacheStats, SourceInfo, SourceConfig,
   PolicyConfig,
 } from './types'
 
@@ -55,14 +55,31 @@ export async function vacuumCache(): Promise<{ deleted: number }> {
   return data
 }
 
-// Source
-export async function getSourceInfo(): Promise<SourceInfo> {
-  const { data } = await client.get<SourceInfo>('/api/source/info')
+// Sources
+export async function getSources(): Promise<{ sources: SourceInfo[] }> {
+  const { data } = await client.get('/api/sources')
   return data
 }
 
-export async function fetchSource(): Promise<{ status: string; fetched_at: string; size: number; sha256: string }> {
-  const { data } = await client.post('/api/source/fetch')
+export async function getSource(id: string): Promise<SourceInfo> {
+  const { data } = await client.get(`/api/sources/${id}`)
+  return data
+}
+
+export async function createSource(source: SourceConfig): Promise<void> {
+  await client.post('/api/sources', source)
+}
+
+export async function updateSource(id: string, source: SourceConfig): Promise<void> {
+  await client.put(`/api/sources/${id}`, source)
+}
+
+export async function deleteSource(id: string): Promise<void> {
+  await client.delete(`/api/sources/${id}`)
+}
+
+export async function refreshSource(id: string): Promise<{ status: string; info: SourceInfo }> {
+  const { data } = await client.post(`/api/sources/${id}/refresh`)
   return data
 }
 

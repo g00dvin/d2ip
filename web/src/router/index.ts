@@ -7,7 +7,7 @@ const routes = [
   { path: '/categories', name: 'categories', component: () => import('@/views/CategoriesView.vue') },
   { path: '/config', name: 'config', component: () => import('@/views/ConfigView.vue') },
   { path: '/cache', name: 'cache', component: () => import('@/views/CacheView.vue') },
-  { path: '/source', name: 'source', component: () => import('@/views/SourceView.vue') },
+  { path: '/sources', name: 'sources', component: () => import('@/views/SourcesView.vue') },
   { path: '/routing', name: 'routing', component: () => import('@/views/RoutingView.vue') },
   { path: '/policies', name: 'policies', component: () => import('@/views/PoliciesView.vue') },
 ]

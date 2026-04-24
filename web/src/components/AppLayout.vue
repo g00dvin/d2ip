@@ -28,7 +28,7 @@ const menuItems = [
   { name: 'policies', label: 'Policies', icon: ShieldOutline },
   { name: 'config', label: 'Config', icon: OptionsOutline },
   { name: 'cache', label: 'Cache', icon: ServerOutline },
-  { name: 'source', label: 'Source', icon: GlobeOutline },
+  { name: 'sources', label: 'Sources', icon: GlobeOutline },
   { name: 'routing', label: 'Routing', icon: NavigateOutline },
 ]
 

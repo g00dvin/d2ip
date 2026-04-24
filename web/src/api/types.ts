@@ -78,12 +78,21 @@ export interface CacheStats {
 }
 
 export interface SourceInfo {
-  available: boolean
-  fetched_at?: string
-  size?: number
-  etag?: string
-  sha256?: string
-  last_modified?: string
+  id: string
+  provider: string
+  prefix: string
+  enabled: boolean
+  categories: string[]
+  last_fetched?: string
+  last_error?: string
+}
+
+export interface SourceConfig {
+  id: string
+  provider: string
+  prefix: string
+  enabled: boolean
+  config: Record<string, unknown>
 }
 
 export interface PolicyConfig {
