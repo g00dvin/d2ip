@@ -37,7 +37,8 @@ func (s *Server) handleSettingsGet(w http.ResponseWriter, r *http.Request) {
 	s.jsonOK(w, resp)
 }
 
-// structToMap converts a struct to a map via JSON round-trip.
+// structToMap converts a struct to a flat map via JSON round-trip.
+// Nested fields are flattened with dot notation (e.g. "resolver.upstream").
 func structToMap(v interface{}) map[string]interface{} {
 	data, err := json.Marshal(v)
 	if err != nil {
@@ -45,7 +46,27 @@ func structToMap(v interface{}) map[string]interface{} {
 	}
 	var m map[string]interface{}
 	_ = json.Unmarshal(data, &m)
-	return m
+	return flattenMap(m, "")
+}
+
+// flattenMap flattens a nested map into dot-notation keys.
+func flattenMap(m map[string]interface{}, prefix string) map[string]interface{} {
+	out := make(map[string]interface{})
+	for k, v := range m {
+		key := k
+		if prefix != "" {
+			key = prefix + "." + k
+		}
+		switch val := v.(type) {
+		case map[string]interface{}:
+			for nestedK, nestedV := range flattenMap(val, key) {
+				out[nestedK] = nestedV
+			}
+		default:
+			out[key] = v
+		}
+	}
+	return out
 }
 
 // handleSettingsPut updates a config override via KVStore.

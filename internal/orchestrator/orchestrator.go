@@ -37,24 +37,22 @@ type PipelineRequest struct {
 
 // PipelineReport is the outcome of a completed (or failed) pipeline run.
 type PipelineReport struct {
-	RunID    int64
-	Domains  int
-	Stale    int
-	Resolved int
-	Failed   int
-	IPv4Out  int
-	IPv6Out  int
-	// Export   exporter.ExportReport  // TODO: Iteration 3
-	// RoutingPlan *routing.Plan        // TODO: Iteration 5
-	Duration time.Duration
+	RunID    int64         `json:"run_id"`
+	Domains  int           `json:"domains"`
+	Stale    int           `json:"stale"`
+	Resolved int           `json:"resolved"`
+	Failed   int           `json:"failed"`
+	IPv4Out  int           `json:"ipv4_out"`
+	IPv6Out  int           `json:"ipv6_out"`
+	Duration time.Duration `json:"duration"`
 }
 
 // RunStatus describes the current or last-completed pipeline run.
 type RunStatus struct {
-	Running bool
-	RunID   int64
-	Started time.Time
-	Report  *PipelineReport // nil if still running
+	Running bool            `json:"running"`
+	RunID   int64           `json:"run_id"`
+	Started time.Time       `json:"started"`
+	Report  *PipelineReport `json:"report"` // nil if still running
 }
 
 // ErrBusy is returned when a second Run() is attempted while one is in flight.
@@ -226,7 +224,7 @@ func (o *Orchestrator) Run(ctx context.Context, req PipelineRequest) (PipelineRe
 		log.Error().Err(err).Msg("orchestrator: category selection failed")
 		return report, fmt.Errorf("domainlist select: %w", err)
 	}
-	report.Domains = len(rules)
+	report.Domains = len(resolvable)
 	if len(rules) == 0 {
 		log.Warn().Msg("orchestrator: no categories configured; add entries to config.categories to resolve domains")
 	}
@@ -355,11 +353,6 @@ func (o *Orchestrator) Run(ctx context.Context, req PipelineRequest) (PipelineRe
 		return report, fmt.Errorf("cache snapshot: %w", err)
 	}
 
-	log.Info().
-		Int("ipv4", len(ipv4Addrs)).
-		Int("ipv6", len(ipv6Addrs)).
-		Msg("orchestrator: aggregating addresses")
-
 	// Convert aggregation level
 	aggLevel := aggregator.AggConservative
 	switch cfg.Aggregation.Level {
@@ -375,9 +368,18 @@ func (o *Orchestrator) Run(ctx context.Context, req PipelineRequest) (PipelineRe
 
 	var ipv4Prefixes, ipv6Prefixes []netip.Prefix
 	if cfg.Aggregation.Enabled {
+		log.Info().
+			Int("ipv4", len(ipv4Addrs)).
+			Int("ipv6", len(ipv6Addrs)).
+			Str("level", string(cfg.Aggregation.Level)).
+			Msg("orchestrator: aggregating addresses")
 		ipv4Prefixes = o.aggregator.AggregateV4(ipv4Addrs, aggLevel, cfg.Aggregation.V4MaxPrefix)
 		ipv6Prefixes = o.aggregator.AggregateV6(ipv6Addrs, aggLevel, cfg.Aggregation.V6MaxPrefix)
 	} else {
+		log.Info().
+			Int("ipv4", len(ipv4Addrs)).
+			Int("ipv6", len(ipv6Addrs)).
+			Msg("orchestrator: skipping aggregation, converting to /32 and /128")
 		// No aggregation: convert each address to /32 or /128
 		ipv4Prefixes = make([]netip.Prefix, len(ipv4Addrs))
 		for i, addr := range ipv4Addrs {

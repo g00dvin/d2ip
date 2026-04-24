@@ -89,12 +89,13 @@ type ResolveResult struct {
 // implementation computes every field with a handful of COUNT queries;
 // it does NOT scan the full table.
 type Stats struct {
-	Domains      int64
-	RecordsTotal int64
-	RecordsV4    int64
-	RecordsV6    int64
-	RecordsValid int64
-	RecordsFail  int64
+	Domains         int64
+	RecordsTotal    int64
+	RecordsV4       int64
+	RecordsV6       int64
+	RecordsValid    int64
+	RecordsFail     int64
+	RecordsNXDomain int64
 	// OldestUpdatedAt is the unix seconds of the oldest still-present
 	// record. Zero if the table is empty.
 	OldestUpdatedAt int64

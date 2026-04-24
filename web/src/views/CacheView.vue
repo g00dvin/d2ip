@@ -20,11 +20,12 @@ async function handleVacuum() {
     <n-card title="Cache Statistics">
       <n-spin v-if="cache.loading" />
       <n-empty v-else-if="!cache.stats" description="No data" />
-      <n-grid v-else cols="2 s:3 m:4" :x-gap="16" :y-gap="16">
+      <n-grid v-else cols="2 s:3 m:4 l:6" :x-gap="16" :y-gap="16">
         <n-gi><n-statistic label="Domains" :value="cache.stats.domains" /></n-gi>
         <n-gi><n-statistic label="Records" :value="cache.stats.records_total" /></n-gi>
         <n-gi><n-statistic label="Valid" :value="cache.stats.records_valid" /></n-gi>
         <n-gi><n-statistic label="Failed" :value="cache.stats.records_failed" /></n-gi>
+        <n-gi><n-statistic label="NXDomain" :value="cache.stats.records_nxdomain" /></n-gi>
       </n-grid>
     </n-card>
 

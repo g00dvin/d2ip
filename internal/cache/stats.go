@@ -43,6 +43,11 @@ func (c *SQLiteCache) Stats(ctx context.Context) (Stats, error) {
 		return s, fmt.Errorf("count failed: %w", err)
 	}
 
+	row = c.db.QueryRowContext(ctx, "SELECT COUNT(*) FROM records WHERE status='nxdomain'")
+	if err := row.Scan(&s.RecordsNXDomain); err != nil {
+		return s, fmt.Errorf("count nxdomain: %w", err)
+	}
+
 	// Age bounds.
 	var oldest, newest sql.NullInt64
 	row = c.db.QueryRowContext(ctx, "SELECT MIN(updated_at), MAX(updated_at) FROM records")

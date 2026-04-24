@@ -77,6 +77,11 @@ func (s *Server) Handler() http.Handler {
 	r.Use(logging.RequestIDMiddleware)
 	r.Use(middleware.RealIP)
 	r.Use(middleware.Recoverer)
+
+	// SSE endpoint must NOT be compressed — compression buffers response data
+	// and breaks the streaming protocol (flusher.Flush() has no effect).
+	r.Get("/events", s.handleEvents)
+
 	r.Use(middleware.Compress(5))
 
 	// API Routes (registered first to take precedence).
@@ -88,7 +93,6 @@ func (s *Server) Handler() http.Handler {
 	r.Post("/routing/rollback", s.handleRoutingRollback)
 	r.Get("/routing/snapshot", s.handleRoutingSnapshot)
 	r.Get("/metrics", s.handleMetrics)
-	r.Get("/events", s.handleEvents)
 	r.Get("/api/settings", s.handleSettingsGet)
 	r.Put("/api/settings", s.handleSettingsPut)
 	r.Delete("/api/settings/{key}", s.handleSettingsDelete)

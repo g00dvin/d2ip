@@ -19,14 +19,15 @@ func (s *Server) handleCacheStats(w http.ResponseWriter, r *http.Request) {
 	}
 
 	s.jsonOK(w, map[string]interface{}{
-		"domains":        stats.Domains,
-		"records_total":  stats.RecordsTotal,
-		"records_v4":     stats.RecordsV4,
-		"records_v6":     stats.RecordsV6,
-		"records_valid":  stats.RecordsValid,
-		"records_failed": stats.RecordsFail,
-		"oldest_updated": stats.OldestUpdatedAt,
-		"newest_updated": stats.NewestUpdatedAt,
+		"domains":          stats.Domains,
+		"records_total":    stats.RecordsTotal,
+		"records_v4":       stats.RecordsV4,
+		"records_v6":       stats.RecordsV6,
+		"records_valid":    stats.RecordsValid,
+		"records_failed":   stats.RecordsFail,
+		"records_nxdomain": stats.RecordsNXDomain,
+		"oldest_updated":   stats.OldestUpdatedAt,
+		"newest_updated":   stats.NewestUpdatedAt,
 	})
 }
 

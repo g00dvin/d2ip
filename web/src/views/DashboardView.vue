@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed } from 'vue'
+import { computed, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
 import { usePipelineStore } from '@/stores/pipeline'
 import { useCategoriesStore } from '@/stores/categories'
@@ -14,6 +14,7 @@ const router = useRouter()
 
 usePolling(() => pipeline.fetchStatus(), 10_000)
 usePolling(() => routing.fetchSnapshot(), 30_000)
+onMounted(() => categories.fetchCategories())
 
 const report = computed(() => pipeline.status?.report)
 const fmtDate = (d: string | null | undefined) => d ? new Date(d).toLocaleString() : 'never'
