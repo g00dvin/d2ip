@@ -3,6 +3,7 @@ import type {
   CategoriesResponse, CategoryDomainsResponse,
   PipelineStatus, PipelineHistory, RoutingSnapshot,
   DryRunResult, SettingsResponse, CacheStats, SourceInfo,
+  PolicyConfig,
 } from './types'
 
 // Pipeline
@@ -72,6 +73,29 @@ export async function updateSettings(overrides: Record<string, string>): Promise
 
 export async function deleteSetting(key: string): Promise<void> {
   await client.delete(`/api/settings/${key}`)
+}
+
+// Policies
+export async function getPolicies(): Promise<{ policies: PolicyConfig[] }> {
+  const { data } = await client.get('/api/policies')
+  return data
+}
+
+export async function getPolicy(name: string): Promise<PolicyConfig> {
+  const { data } = await client.get(`/api/policies/${name}`)
+  return data
+}
+
+export async function createPolicy(policy: PolicyConfig): Promise<void> {
+  await client.post('/api/policies', policy)
+}
+
+export async function updatePolicy(name: string, policy: PolicyConfig): Promise<void> {
+  await client.put(`/api/policies/${name}`, policy)
+}
+
+export async function deletePolicy(name: string): Promise<void> {
+  await client.delete(`/api/policies/${name}`)
 }
 
 // Routing

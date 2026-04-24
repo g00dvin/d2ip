@@ -86,3 +86,27 @@ export interface SourceInfo {
   sha256?: string
   last_modified?: string
 }
+
+export interface PolicyConfig {
+  name: string
+  enabled: boolean
+  categories: string[]
+  backend: 'iproute2' | 'nftables' | 'none'
+  table_id?: number
+  iface?: string
+  nft_table?: string
+  nft_set_v4?: string
+  nft_set_v6?: string
+  dry_run: boolean
+  export_format: string
+}
+
+export interface PolicyReport {
+  name: string
+  domains: number
+  resolved: number
+  failed: number
+  ipv4_out: number
+  ipv6_out: number
+  duration_ms: number
+}
