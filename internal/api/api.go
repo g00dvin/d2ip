@@ -31,6 +31,7 @@ import (
 	"github.com/goodvin/d2ip/internal/orchestrator"
 	"github.com/goodvin/d2ip/internal/routing"
 	"github.com/goodvin/d2ip/internal/source"
+	"github.com/goodvin/d2ip/internal/sourcereg"
 )
 
 //go:embed web
@@ -47,6 +48,7 @@ type Server struct {
 	sourceStore source.DLCStore
 	cacheAgent  cache.Cache
 	eventBus    *events.Bus
+	registry    sourcereg.Registry
 	version     string
 	buildTime   string
 }
@@ -61,6 +63,7 @@ func New(
 	sourceStore source.DLCStore,
 	cacheAgent cache.Cache,
 	eventBus *events.Bus,
+	registry sourcereg.Registry,
 ) *Server {
 	return &Server{
 		orch:        orch,
@@ -71,6 +74,7 @@ func New(
 		sourceStore: sourceStore,
 		cacheAgent:  cacheAgent,
 		eventBus:    eventBus,
+		registry:    registry,
 	}
 }
 
@@ -131,9 +135,17 @@ func (s *Server) Handler() http.Handler {
 		cr.Post("/api/cache/vacuum", s.handleCacheVacuum)
 		cr.Get("/api/cache/entries", s.handleCacheEntries)
 
-		// Source API.
-		cr.Get("/api/source/info", s.handleSourceInfo)
-		cr.Post("/api/source/fetch", s.handleSourceFetch)
+		// Sources (multi-source)
+		cr.Get("/api/sources", s.handleSourcesList)
+		cr.Post("/api/sources", s.handleSourceCreate)
+		cr.Get("/api/sources/{id}", s.handleSourceGet)
+		cr.Put("/api/sources/{id}", s.handleSourceUpdate)
+		cr.Delete("/api/sources/{id}", s.handleSourceDelete)
+		cr.Post("/api/sources/{id}/refresh", s.handleSourceRefresh)
+
+		// Legacy source endpoints (redirect to registry)
+		cr.Get("/api/source/info", s.handleSourcesList)
+		cr.Post("/api/source/fetch", s.handleSourceFetchLegacy)
 
 		// Export API.
 		cr.Get("/api/export/download", s.handleExportDownload)

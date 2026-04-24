@@ -4,76 +4,31 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
-	"sort"
 	"strings"
 
 	"github.com/go-chi/chi/v5"
 	"github.com/goodvin/d2ip/internal/config"
-	"github.com/goodvin/d2ip/internal/domainlist"
 	"github.com/rs/zerolog/log"
 )
 
-// categoryInfo represents a category with its domain count.
-type categoryInfo struct {
-	Code        string   `json:"code"`
-	Attrs       []string `json:"attrs,omitempty"`
-	DomainCount int      `json:"domain_count"`
-}
-
 // handleCategoriesList returns configured and available geosite categories.
 func (s *Server) handleCategoriesList(w http.ResponseWriter, r *http.Request) {
-	snapshot := s.cfgWatcher.Current()
-
-	// Build configured categories map
-	configuredSet := make(map[string]categoryInfo)
-	for _, cat := range snapshot.Config.Categories {
-		configuredSet[cat.Code] = categoryInfo{
-			Code:  cat.Code,
-			Attrs: cat.Attrs,
-		}
+	if s.registry == nil {
+		s.jsonOK(w, map[string]interface{}{
+			"configured": []any{},
+			"available":  []any{},
+		})
+		return
 	}
 
-	// Enrich with domain counts from provider
-	if s.dlProvider != nil {
-		for code := range configuredSet {
-			rules, err := s.dlProvider.Select([]domainlist.CategorySelector{{Code: code}})
-			if err == nil {
-				info := configuredSet[code]
-				info.DomainCount = len(rules)
-				configuredSet[code] = info
-			}
-		}
+	cats := s.registry.ListCategories()
+	var available []string
+	for _, c := range cats {
+		available = append(available, c.Name)
 	}
-
-	// Build configured slice (sorted)
-	configured := make([]categoryInfo, 0, len(configuredSet))
-	for _, c := range configuredSet {
-		configured = append(configured, c)
-	}
-	sort.Slice(configured, func(i, j int) bool {
-		return configured[i].Code < configured[j].Code
-	})
-
-	// Build available slice (all provider categories minus configured)
-	available := []string{}
-	if s.dlProvider != nil {
-		allCats := s.dlProvider.Categories()
-		for _, code := range allCats {
-			// Check if configured with or without geosite: prefix
-			geositeCode := "geosite:" + code
-			if _, isConfigured := configuredSet[code]; isConfigured {
-				continue
-			}
-			if _, isConfigured := configuredSet[geositeCode]; isConfigured {
-				continue
-			}
-			available = append(available, geositeCode)
-		}
-	}
-	sort.Strings(available)
 
 	s.jsonOK(w, map[string]interface{}{
-		"configured": configured,
+		"configured": []any{}, // legacy, no longer used
 		"available":  available,
 	})
 }
@@ -85,24 +40,33 @@ func (s *Server) handleCategoryDomains(w http.ResponseWriter, r *http.Request) {
 		s.jsonError(w, http.StatusBadRequest, "category code is required")
 		return
 	}
-
-	if s.dlProvider == nil {
-		s.jsonError(w, http.StatusServiceUnavailable, "domain list provider unavailable")
+	if s.registry == nil {
+		s.jsonError(w, http.StatusServiceUnavailable, "registry unavailable")
 		return
 	}
 
-	rules, err := s.dlProvider.Select([]domainlist.CategorySelector{{Code: code}})
+	domains, err := s.registry.GetDomains(code)
 	if err != nil {
+		// Try prefixes
+		prefixes, err2 := s.registry.GetPrefixes(code)
+		if err2 == nil {
+			// Return prefixes as "domains" for display
+			prefixStrs := make([]string, len(prefixes))
+			for i, p := range prefixes {
+				prefixStrs[i] = p.String()
+			}
+			s.jsonOK(w, map[string]interface{}{
+				"code":     code,
+				"domains":  prefixStrs,
+				"page":     1,
+				"per_page": len(prefixes),
+				"total":    len(prefixes),
+				"has_more": false,
+			})
+			return
+		}
 		s.jsonError(w, http.StatusNotFound, "category not found: "+code)
 		return
-	}
-
-	// Extract domain values from rules
-	domains := make([]string, 0, len(rules))
-	for _, rule := range rules {
-		if rule.Value != "" {
-			domains = append(domains, rule.Value)
-		}
 	}
 
 	// Pagination
@@ -122,21 +86,22 @@ func (s *Server) handleCategoryDomains(w http.ResponseWriter, r *http.Request) {
 
 	start := (page - 1) * perPage
 	end := start + perPage
-	if start >= len(domains) {
-		domains = []string{}
-	} else if end > len(domains) {
-		domains = domains[start:]
-	} else {
-		domains = domains[start:end]
+	var pageDomains []string
+	if start < len(domains) {
+		if end > len(domains) {
+			pageDomains = domains[start:]
+		} else {
+			pageDomains = domains[start:end]
+		}
 	}
 
 	s.jsonOK(w, map[string]interface{}{
 		"code":     code,
-		"domains":  domains,
+		"domains":  pageDomains,
 		"page":     page,
 		"per_page": perPage,
-		"total":    len(rules),
-		"has_more": end < len(rules),
+		"total":    len(domains),
+		"has_more": end < len(domains),
 	})
 }
 
