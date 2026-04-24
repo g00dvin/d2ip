@@ -687,3 +687,41 @@ func TestCacheVacuum_NilCache_Returns503(t *testing.T) {
 	defer resp.Body.Close()
 	assert.Equal(t, http.StatusServiceUnavailable, resp.StatusCode)
 }
+
+func setupTestServer(t *testing.T) (*httptest.Server, func()) {
+	t.Helper()
+	s := newTestServer(t)
+	srv := httptest.NewServer(s.Handler())
+	return srv, srv.Close
+}
+
+func TestPoliciesAPI(t *testing.T) {
+	srv, cleanup := setupTestServer(t)
+	defer cleanup()
+
+	// Test GET /api/policies (empty list)
+	resp, err := http.Get(srv.URL + "/api/policies")
+	if err != nil {
+		t.Fatalf("get policies: %v", err)
+	}
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("expected 200, got %d", resp.StatusCode)
+	}
+	var listResp struct {
+		Policies []interface{} `json:"policies"`
+	}
+	if err := json.NewDecoder(resp.Body).Decode(&listResp); err != nil {
+		t.Fatalf("decode policies list: %v", err)
+	}
+	resp.Body.Close()
+
+	// Test GET /api/policies/{name} (not found)
+	resp, err = http.Get(srv.URL + "/api/policies/nonexistent")
+	if err != nil {
+		t.Fatalf("get policy: %v", err)
+	}
+	if resp.StatusCode != http.StatusNotFound {
+		t.Fatalf("expected 404, got %d", resp.StatusCode)
+	}
+	resp.Body.Close()
+}
