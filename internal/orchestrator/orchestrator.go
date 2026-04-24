@@ -269,7 +269,7 @@ func (o *Orchestrator) Run(ctx context.Context, req PipelineRequest) (PipelineRe
 				continue
 			}
 			policyStart := time.Now()
-			policyReport, err := o.runPolicy(ctx, policy, req, aggLevel, cfg)
+			policyReport, staleCount, cacheHits, err := o.runPolicy(ctx, policy, req, aggLevel, cfg)
 			if err != nil {
 				// Log error but continue with other policies
 				log.Error().Err(err).Str("policy", policy.Name).Msg("orchestrator: policy run failed")
@@ -287,6 +287,8 @@ func (o *Orchestrator) Run(ctx context.Context, req PipelineRequest) (PipelineRe
 			report.Failed += policyReport.Failed
 			report.IPv4Out += policyReport.IPv4Out
 			report.IPv6Out += policyReport.IPv6Out
+			report.Stale += staleCount
+			report.CacheHits += cacheHits
 		}
 	} else {
 		log.Info().Msg("orchestrator: no policies configured, skipping export and routing")
@@ -325,7 +327,7 @@ func (o *Orchestrator) Run(ctx context.Context, req PipelineRequest) (PipelineRe
 	return report, nil
 }
 
-func (o *Orchestrator) runPolicy(ctx context.Context, policy config.PolicyConfig, req PipelineRequest, aggLevel aggregator.Aggressiveness, cfg config.Config) (PolicyReport, error) {
+func (o *Orchestrator) runPolicy(ctx context.Context, policy config.PolicyConfig, req PipelineRequest, aggLevel aggregator.Aggressiveness, cfg config.Config) (PolicyReport, int, int, error) {
 	start := time.Now()
 
 	// Separate policy categories into domain and prefix categories
@@ -363,16 +365,21 @@ func (o *Orchestrator) runPolicy(ctx context.Context, policy config.PolicyConfig
 	// Resolve policy domains (use cache)
 	var ipv4Addrs, ipv6Addrs []netip.Addr
 	var resolvedCount, failedCount int
+	staleCount := 0
+	cacheHitCount := 0
 	if len(policyDomains) > 0 {
 		var toResolve []string
 		if req.ForceResolve {
 			toResolve = policyDomains
+			staleCount = len(policyDomains)
 		} else {
 			stale, err := o.cache.NeedsRefresh(ctx, policyDomains, cfg.Cache.TTL, cfg.Cache.FailedTTL)
 			if err != nil {
-				return PolicyReport{}, fmt.Errorf("cache check: %w", err)
+				return PolicyReport{}, 0, 0, fmt.Errorf("cache check: %w", err)
 			}
 			toResolve = stale
+			staleCount = len(stale)
+			cacheHitCount = len(policyDomains) - len(stale)
 		}
 
 		if len(toResolve) > 0 {
@@ -406,9 +413,9 @@ func (o *Orchestrator) runPolicy(ctx context.Context, policy config.PolicyConfig
 					failedCount++
 				}
 			}
-			if err := o.cache.UpsertBatch(ctx, results); err != nil {
-				return PolicyReport{}, fmt.Errorf("cache upsert: %w", err)
-			}
+		if err := o.cache.UpsertBatch(ctx, results); err != nil {
+			return PolicyReport{}, 0, 0, fmt.Errorf("cache upsert: %w", err)
+		}
 
 			log.Info().
 				Int("valid", resolvedCount).
@@ -421,7 +428,7 @@ func (o *Orchestrator) runPolicy(ctx context.Context, policy config.PolicyConfig
 		var err error
 		ipv4Addrs, ipv6Addrs, err = o.cache.SnapshotForDomains(ctx, policyDomains)
 		if err != nil {
-			return PolicyReport{}, fmt.Errorf("cache snapshot: %w", err)
+			return PolicyReport{}, 0, 0, fmt.Errorf("cache snapshot: %w", err)
 		}
 	}
 
@@ -485,17 +492,17 @@ func (o *Orchestrator) runPolicy(ctx context.Context, policy config.PolicyConfig
 			IPv4Out:  len(v4Out),
 			IPv6Out:  len(v6Out),
 			Duration: time.Since(start).Milliseconds(),
-		}, nil
+		}, staleCount, cacheHitCount, nil
 	}
 
 	expReport, err := o.policyExp.WritePolicy(ctx, policy, v4Out, v6Out)
 	if err != nil {
-		return PolicyReport{}, err
+		return PolicyReport{}, 0, 0, err
 	}
 
 	if !req.SkipRouting {
 		if err := o.policyRtr.ApplyPolicy(ctx, policy, v4Out, v6Out); err != nil {
-			return PolicyReport{}, err
+			return PolicyReport{}, 0, 0, err
 		}
 	} else {
 		log.Info().Str("policy", policy.Name).Msg("orchestrator: skip routing requested, skipping policy routing")
@@ -509,7 +516,7 @@ func (o *Orchestrator) runPolicy(ctx context.Context, policy config.PolicyConfig
 		IPv4Out:  expReport.IPv4Count,
 		IPv6Out:  expReport.IPv6Count,
 		Duration: time.Since(start).Milliseconds(),
-	}, nil
+	}, staleCount, cacheHitCount, nil
 }
 
 func (o *Orchestrator) categorizePolicyCategories(cfg config.Config) (domainCats, prefixCats []string) {
