@@ -9,6 +9,7 @@ const routes = [
   { path: '/cache', name: 'cache', component: () => import('@/views/CacheView.vue') },
   { path: '/source', name: 'source', component: () => import('@/views/SourceView.vue') },
   { path: '/routing', name: 'routing', component: () => import('@/views/RoutingView.vue') },
+  { path: '/policies', name: 'policies', component: () => import('@/views/PoliciesView.vue') },
 ]
 
 export default createRouter({
