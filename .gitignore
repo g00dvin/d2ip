@@ -40,6 +40,7 @@ Thumbs.db
 
 # AI tooling (auto-generated, not part of project)
 .superpowers/
+.worktrees/
 AGENTS.md
 CLAUDE.md
 docs/superpowers/*
