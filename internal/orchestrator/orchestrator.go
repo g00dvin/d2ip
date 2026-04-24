@@ -469,69 +469,9 @@ func (o *Orchestrator) Run(ctx context.Context, req PipelineRequest) (PipelineRe
 		default:
 		}
 
-		// Step 9: Routing - apply to kernel (if enabled and not skipped)
-		if !req.SkipRouting && cfg.Routing.Enabled {
-			log.Info().Msg("orchestrator: applying routing rules")
-			stepStart = time.Now()
-
-			// Check capabilities first
-			if err := o.router.Caps(); err != nil {
-				log.Error().Err(err).Msg("orchestrator: routing capability check failed")
-				return report, fmt.Errorf("routing caps: %w", err)
-			}
-
-			// Plan IPv4
-			planV4, err := o.router.Plan(ctx, ipv4Prefixes, routing.FamilyV4)
-			if err != nil {
-				log.Error().Err(err).Msg("orchestrator: routing plan v4 failed")
-				return report, fmt.Errorf("routing plan v4: %w", err)
-			}
-
-			// Plan IPv6
-			planV6, err := o.router.Plan(ctx, ipv6Prefixes, routing.FamilyV6)
-			if err != nil {
-				log.Error().Err(err).Msg("orchestrator: routing plan v6 failed")
-				return report, fmt.Errorf("routing plan v6: %w", err)
-			}
-
-			log.Info().
-				Int("v4_add", len(planV4.Add)).
-				Int("v4_remove", len(planV4.Remove)).
-				Int("v6_add", len(planV6.Add)).
-				Int("v6_remove", len(planV6.Remove)).
-				Msg("orchestrator: routing plan computed")
-
-			// Apply plans (skip if dry-run or config dry_run)
-			if !req.DryRun && !cfg.Routing.DryRun {
-				if err := o.router.Apply(ctx, planV4); err != nil {
-					log.Error().Err(err).Msg("orchestrator: routing apply v4 failed")
-					return report, fmt.Errorf("routing apply v4: %w", err)
-				}
-
-				if err := o.router.Apply(ctx, planV6); err != nil {
-					log.Error().Err(err).Msg("orchestrator: routing apply v6 failed")
-					return report, fmt.Errorf("routing apply v6: %w", err)
-				}
-
-				log.Info().Msg("orchestrator: routing applied successfully")
-				if o.eventBus != nil {
-					o.eventBus.Publish("routing", events.Event{
-						Topic: "routing",
-						Type:  "routing.apply",
-						Data: map[string]any{
-							"backend": cfg.Routing.Backend,
-							"v4":      len(planV4.Add),
-							"v6":      len(planV6.Add),
-						},
-					})
-				}
-			} else {
-				log.Info().Msg("orchestrator: dry run, skipping routing apply")
-			}
-			metrics.PipelineStepDuration.WithLabelValues("routing").Observe(time.Since(stepStart).Seconds())
-		} else {
-			log.Info().Msg("orchestrator: routing skipped (disabled or SkipRouting=true)")
-		}
+		// Step 9: Routing — legacy single-policy path is not available with new config structure.
+		// Routing requires at least one policy in routing.policies.
+		log.Info().Msg("orchestrator: legacy routing not configured, skipping")
 	}
 
 	report.Duration = time.Since(started)
