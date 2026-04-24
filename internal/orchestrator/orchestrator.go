@@ -37,14 +37,26 @@ type PipelineRequest struct {
 
 // PipelineReport is the outcome of a completed (or failed) pipeline run.
 type PipelineReport struct {
-	RunID    int64         `json:"run_id"`
-	Domains  int           `json:"domains"`
-	Stale    int           `json:"stale"`
-	Resolved int           `json:"resolved"`
-	Failed   int           `json:"failed"`
-	IPv4Out  int           `json:"ipv4_out"`
-	IPv6Out  int           `json:"ipv6_out"`
-	Duration time.Duration `json:"duration"`
+	RunID    int64          `json:"run_id"`
+	Domains  int            `json:"domains"`
+	Stale    int            `json:"stale"`
+	Resolved int            `json:"resolved"`
+	Failed   int            `json:"failed"`
+	IPv4Out  int            `json:"ipv4_out"`
+	IPv6Out  int            `json:"ipv6_out"`
+	Duration time.Duration  `json:"duration"`
+	Policies []PolicyReport `json:"policies,omitempty"`
+}
+
+// PolicyReport is the outcome of a single policy run.
+type PolicyReport struct {
+	Name     string `json:"name"`
+	Domains  int    `json:"domains"`
+	Resolved int    `json:"resolved"`
+	Failed   int    `json:"failed"`
+	IPv4Out  int    `json:"ipv4_out"`
+	IPv6Out  int    `json:"ipv6_out"`
+	Duration int64  `json:"duration_ms"`
 }
 
 // RunStatus describes the current or last-completed pipeline run.
@@ -70,7 +82,9 @@ type Orchestrator struct {
 	cache      cache.Cache
 	aggregator *aggregator.Aggregator
 	exporter   *exporter.FileExporter
+	policyExp  *exporter.PolicyExporter
 	router     routing.Router
+	policyRtr  routing.PolicyRouter
 	config     func() config.Config // returns current config snapshot
 
 	// Single-flight enforcement.
@@ -98,6 +112,8 @@ func New(
 	rtr routing.Router,
 	cfgGetter func() config.Config,
 	eventBus *events.Bus,
+	policyExp *exporter.PolicyExporter,
+	policyRtr routing.PolicyRouter,
 ) *Orchestrator {
 	return &Orchestrator{
 		source:     src,
@@ -106,7 +122,9 @@ func New(
 		cache:      cch,
 		aggregator: agg,
 		exporter:   exp,
+		policyExp:  policyExp,
 		router:     rtr,
+		policyRtr:  policyRtr,
 		config:     cfgGetter,
 		eventBus:   eventBus,
 	}
@@ -406,96 +424,114 @@ func (o *Orchestrator) Run(ctx context.Context, req PipelineRequest) (PipelineRe
 	default:
 	}
 
-	// Step 8: Exporter - write files
-	if !req.DryRun {
-		log.Info().Msg("orchestrator: exporting prefix files")
-		stepStart = time.Now()
-		exportReport, err := o.exporter.Write(ctx, ipv4Prefixes, ipv6Prefixes)
-		metrics.PipelineStepDuration.WithLabelValues("exporter").Observe(time.Since(stepStart).Seconds())
-		if err != nil {
-			log.Error().Err(err).Msg("orchestrator: export failed")
-			return report, fmt.Errorf("export: %w", err)
+	// Step 8+9: Export and route — per-policy or legacy single-policy
+	if len(cfg.Routing.Policies) > 0 && o.policyRtr != nil && o.policyExp != nil {
+		for _, policy := range cfg.Routing.Policies {
+			if !policy.Enabled {
+				continue
+			}
+			start := time.Now()
+			policyReport, err := o.runPolicy(ctx, policy, resolvable, ipv4Addrs, ipv6Addrs, aggLevel, cfg)
+			if err != nil {
+				// Log error but continue with other policies
+				log.Error().Err(err).Str("policy", policy.Name).Msg("orchestrator: policy run failed")
+			}
+			policyReport.Duration = time.Since(start).Milliseconds()
+			report.Policies = append(report.Policies, policyReport)
 		}
-
-		log.Info().
-			Str("ipv4_path", exportReport.IPv4Path).
-			Str("ipv6_path", exportReport.IPv6Path).
-			Bool("unchanged", exportReport.Unchanged).
-			Msg("orchestrator: export completed")
 	} else {
-		log.Info().Msg("orchestrator: dry run, skipping export")
-	}
-
-	// Check context
-	select {
-	case <-ctx.Done():
-		log.Warn().Int64("run_id", runID).Msg("orchestrator: pipeline canceled")
-		return report, ctx.Err()
-	default:
-	}
-
-	// Step 9: Routing - apply to kernel (if enabled and not skipped)
-	if !req.SkipRouting && cfg.Routing.Enabled {
-		log.Info().Msg("orchestrator: applying routing rules")
-		stepStart = time.Now()
-
-		// Check capabilities first
-		if err := o.router.Caps(); err != nil {
-			log.Error().Err(err).Msg("orchestrator: routing capability check failed")
-			return report, fmt.Errorf("routing caps: %w", err)
-		}
-
-		// Plan IPv4
-		planV4, err := o.router.Plan(ctx, ipv4Prefixes, routing.FamilyV4)
-		if err != nil {
-			log.Error().Err(err).Msg("orchestrator: routing plan v4 failed")
-			return report, fmt.Errorf("routing plan v4: %w", err)
-		}
-
-		// Plan IPv6
-		planV6, err := o.router.Plan(ctx, ipv6Prefixes, routing.FamilyV6)
-		if err != nil {
-			log.Error().Err(err).Msg("orchestrator: routing plan v6 failed")
-			return report, fmt.Errorf("routing plan v6: %w", err)
-		}
-
-		log.Info().
-			Int("v4_add", len(planV4.Add)).
-			Int("v4_remove", len(planV4.Remove)).
-			Int("v6_add", len(planV6.Add)).
-			Int("v6_remove", len(planV6.Remove)).
-			Msg("orchestrator: routing plan computed")
-
-		// Apply plans (skip if dry-run or config dry_run)
-		if !req.DryRun && !cfg.Routing.DryRun {
-			if err := o.router.Apply(ctx, planV4); err != nil {
-				log.Error().Err(err).Msg("orchestrator: routing apply v4 failed")
-				return report, fmt.Errorf("routing apply v4: %w", err)
+		// Legacy single-policy path
+		// Step 8: Exporter - write files
+		if !req.DryRun {
+			log.Info().Msg("orchestrator: exporting prefix files")
+			stepStart = time.Now()
+			exportReport, err := o.exporter.Write(ctx, ipv4Prefixes, ipv6Prefixes)
+			metrics.PipelineStepDuration.WithLabelValues("exporter").Observe(time.Since(stepStart).Seconds())
+			if err != nil {
+				log.Error().Err(err).Msg("orchestrator: export failed")
+				return report, fmt.Errorf("export: %w", err)
 			}
 
-			if err := o.router.Apply(ctx, planV6); err != nil {
-				log.Error().Err(err).Msg("orchestrator: routing apply v6 failed")
-				return report, fmt.Errorf("routing apply v6: %w", err)
-			}
-
-			log.Info().Msg("orchestrator: routing applied successfully")
-			if o.eventBus != nil {
-				o.eventBus.Publish("routing", events.Event{
-					Topic: "routing",
-					Type:  "routing.apply",
-					Data: map[string]any{
-						"backend": cfg.Routing.Backend,
-						"v4":      len(planV4.Add),
-						"v6":      len(planV6.Add),
-					},
-				})
-			}
+			log.Info().
+				Str("ipv4_path", exportReport.IPv4Path).
+				Str("ipv6_path", exportReport.IPv6Path).
+				Bool("unchanged", exportReport.Unchanged).
+				Msg("orchestrator: export completed")
 		} else {
-			log.Info().Msg("orchestrator: dry run, skipping routing apply")
+			log.Info().Msg("orchestrator: dry run, skipping export")
 		}
-		metrics.PipelineStepDuration.WithLabelValues("routing").Observe(time.Since(stepStart).Seconds())
-	} else {
-		log.Info().Msg("orchestrator: routing skipped (disabled or SkipRouting=true)")
+
+		// Check context
+		select {
+		case <-ctx.Done():
+			log.Warn().Int64("run_id", runID).Msg("orchestrator: pipeline canceled")
+			return report, ctx.Err()
+		default:
+		}
+
+		// Step 9: Routing - apply to kernel (if enabled and not skipped)
+		if !req.SkipRouting && cfg.Routing.Enabled {
+			log.Info().Msg("orchestrator: applying routing rules")
+			stepStart = time.Now()
+
+			// Check capabilities first
+			if err := o.router.Caps(); err != nil {
+				log.Error().Err(err).Msg("orchestrator: routing capability check failed")
+				return report, fmt.Errorf("routing caps: %w", err)
+			}
+
+			// Plan IPv4
+			planV4, err := o.router.Plan(ctx, ipv4Prefixes, routing.FamilyV4)
+			if err != nil {
+				log.Error().Err(err).Msg("orchestrator: routing plan v4 failed")
+				return report, fmt.Errorf("routing plan v4: %w", err)
+			}
+
+			// Plan IPv6
+			planV6, err := o.router.Plan(ctx, ipv6Prefixes, routing.FamilyV6)
+			if err != nil {
+				log.Error().Err(err).Msg("orchestrator: routing plan v6 failed")
+				return report, fmt.Errorf("routing plan v6: %w", err)
+			}
+
+			log.Info().
+				Int("v4_add", len(planV4.Add)).
+				Int("v4_remove", len(planV4.Remove)).
+				Int("v6_add", len(planV6.Add)).
+				Int("v6_remove", len(planV6.Remove)).
+				Msg("orchestrator: routing plan computed")
+
+			// Apply plans (skip if dry-run or config dry_run)
+			if !req.DryRun && !cfg.Routing.DryRun {
+				if err := o.router.Apply(ctx, planV4); err != nil {
+					log.Error().Err(err).Msg("orchestrator: routing apply v4 failed")
+					return report, fmt.Errorf("routing apply v4: %w", err)
+				}
+
+				if err := o.router.Apply(ctx, planV6); err != nil {
+					log.Error().Err(err).Msg("orchestrator: routing apply v6 failed")
+					return report, fmt.Errorf("routing apply v6: %w", err)
+				}
+
+				log.Info().Msg("orchestrator: routing applied successfully")
+				if o.eventBus != nil {
+					o.eventBus.Publish("routing", events.Event{
+						Topic: "routing",
+						Type:  "routing.apply",
+						Data: map[string]any{
+							"backend": cfg.Routing.Backend,
+							"v4":      len(planV4.Add),
+							"v6":      len(planV6.Add),
+						},
+					})
+				}
+			} else {
+				log.Info().Msg("orchestrator: dry run, skipping routing apply")
+			}
+			metrics.PipelineStepDuration.WithLabelValues("routing").Observe(time.Since(stepStart).Seconds())
+		} else {
+			log.Info().Msg("orchestrator: routing skipped (disabled or SkipRouting=true)")
+		}
 	}
 
 	report.Duration = time.Since(started)
@@ -529,6 +565,30 @@ func (o *Orchestrator) Run(ctx context.Context, req PipelineRequest) (PipelineRe
 	o.historyMu.Unlock()
 
 	return report, nil
+}
+
+func (o *Orchestrator) runPolicy(ctx context.Context, policy config.PolicyConfig, allDomains []string, allIPv4, allIPv6 []netip.Addr, aggLevel aggregator.Aggressiveness, cfg config.Config) (PolicyReport, error) {
+	// For now, use all IPs (proper domain filtering will be added later)
+	v4Out := o.aggregator.AggregateV4(allIPv4, aggLevel, cfg.Aggregation.V4MaxPrefix)
+	v6Out := o.aggregator.AggregateV6(allIPv6, aggLevel, cfg.Aggregation.V6MaxPrefix)
+
+	expReport, err := o.policyExp.WritePolicy(ctx, policy, v4Out, v6Out)
+	if err != nil {
+		return PolicyReport{}, err
+	}
+
+	if !policy.DryRun {
+		if err := o.policyRtr.ApplyPolicy(ctx, policy, v4Out, v6Out); err != nil {
+			return PolicyReport{}, err
+		}
+	}
+
+	return PolicyReport{
+		Name:    policy.Name,
+		Domains: len(allDomains),
+		IPv4Out: expReport.IPv4Count,
+		IPv6Out: expReport.IPv6Count,
+	}, nil
 }
 
 // Status returns the current or last-completed run status.
