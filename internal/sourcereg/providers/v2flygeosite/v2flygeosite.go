@@ -79,7 +79,6 @@ func New(id string, prefix string, cfg map[string]any) (*Provider, error) {
 		prefix: prefix,
 		config: c,
 		store:  store,
-		dl:     domainlist.NewProvider(),
 	}, nil
 }
 
@@ -108,17 +107,31 @@ func (p *Provider) Categories() []string {
 
 func (p *Provider) Info() sourcereg.SourceInfo {
 	p.mu.RLock()
-	defer p.mu.RUnlock()
+	dl := p.dl
+	lastErr := p.lastErr
+	loadedAt := p.loadedAt
+	p.mu.RUnlock()
+
 	info := sourcereg.SourceInfo{
-		ID:         p.id,
-		Provider:   string(sourcereg.TypeV2flyGeosite),
-		Prefix:     p.prefix,
-		Enabled:    true,
-		Categories: []string{},
-		LastError:  p.lastErr,
+		ID:        p.id,
+		Provider:  string(sourcereg.TypeV2flyGeosite),
+		Prefix:    p.prefix,
+		Enabled:   true,
+		LastError: lastErr,
 	}
-	if p.loadedAt != nil {
-		t := *p.loadedAt
+
+	var cats []string
+	if dl != nil {
+		rawCats := dl.Categories()
+		cats = make([]string, len(rawCats))
+		for i, c := range rawCats {
+			cats[i] = p.prefix + ":" + c
+		}
+	}
+	info.Categories = cats
+
+	if loadedAt != nil {
+		t := *loadedAt
 		info.LastFetched = &t
 	}
 	return info
@@ -131,18 +144,23 @@ func (p *Provider) Load(ctx context.Context) error {
 	if err != nil {
 		p.mu.Lock()
 		p.lastErr = err.Error()
+		p.loadedAt = nil
 		p.mu.Unlock()
 		return fmt.Errorf("v2flygeosite: fetch failed: %w", err)
 	}
 
-	if err := p.dl.Load(path); err != nil {
+	// Load into temporary provider to avoid race
+	tempDL := domainlist.NewProvider()
+	if err := tempDL.Load(path); err != nil {
 		p.mu.Lock()
 		p.lastErr = err.Error()
+		p.loadedAt = nil
 		p.mu.Unlock()
 		return fmt.Errorf("v2flygeosite: load domainlist: %w", err)
 	}
 
 	p.mu.Lock()
+	p.dl = tempDL
 	p.lastErr = ""
 	now := time.Now()
 	p.loadedAt = &now
@@ -156,7 +174,12 @@ func (p *Provider) Close() error { return nil }
 // GetDomains returns domains for a prefixed category like "geosite:ru".
 func (p *Provider) GetDomains(category string) ([]string, error) {
 	p.mu.RLock()
-	defer p.mu.RUnlock()
+	dl := p.dl
+	p.mu.RUnlock()
+
+	if dl == nil {
+		return nil, fmt.Errorf("v2flygeosite: provider not loaded")
+	}
 
 	expectedPrefix := p.prefix + ":"
 	if !strings.HasPrefix(category, expectedPrefix) {
@@ -167,7 +190,7 @@ func (p *Provider) GetDomains(category string) ([]string, error) {
 	// Also handle "geosite:" prefix in the code itself for backward compat
 	code = strings.TrimPrefix(code, "geosite:")
 
-	rules, err := p.dl.Select([]domainlist.CategorySelector{{Code: code}})
+	rules, err := dl.Select([]domainlist.CategorySelector{{Code: code}})
 	if err != nil {
 		return nil, fmt.Errorf("v2flygeosite: select %q: %w", code, err)
 	}

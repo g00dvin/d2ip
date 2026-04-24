@@ -51,6 +51,22 @@ func TestProviderInfo(t *testing.T) {
 	}
 }
 
+func TestProviderCategoriesBeforeLoad(t *testing.T) {
+	p, _ := New("id1", "geosite", map[string]any{})
+	cats := p.Categories()
+	if cats != nil {
+		t.Errorf("expected nil before Load, got %v", cats)
+	}
+}
+
+func TestProviderGetDomainsUnknownCategory(t *testing.T) {
+	p, _ := New("id1", "geosite", map[string]any{})
+	_, err := p.GetDomains("otherprefix:ru")
+	if err == nil {
+		t.Fatal("expected error for unknown category prefix")
+	}
+}
+
 // TestProviderLoadAndGetDomains requires a real dlc.dat file.
 // Use a minimal test fixture or skip if not available.
 func TestProviderLoadAndGetDomains(t *testing.T) {
