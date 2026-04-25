@@ -88,7 +88,7 @@ func (p *Provider) Select(selectors []CategorySelector) ([]Rule, error) {
 	// Deduplicate by (Type, Value).
 	allRules = deduplicate(allRules)
 
-	log.Info().
+	log.Debug().
 		Int("selectors", len(selectors)).
 		Int("rules", len(allRules)).
 		Msg("domainlist: selected")
