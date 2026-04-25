@@ -2,16 +2,61 @@
 
 listen: "127.0.0.1:9099"
 
-source:
-  url: "https://github.com/v2fly/domain-list-community/releases/latest/download/dlc.dat"
-  cache_path: "/tmp/d2ip-dlc.dat"
-  http_timeout: 30s
+sources:
+  - id: v2fly-geosite
+    provider: v2flygeosite
+    prefix: geosite
+    enabled: true
+    config:
+      url: "https://github.com/v2fly/domain-list-community/releases/latest/download/dlc.dat"
+      cache_path: "/tmp/d2ip-dlc.dat"
+      refresh_interval: "24h"
+      http_timeout: "30s"
+
+  - id: v2fly-geoip
+    provider: v2flygeoip
+    prefix: geoip
+    enabled: true
+    config:
+      url: "https://github.com/v2fly/geoip/releases/latest/download/geoip.dat"
+      cache_path: "/tmp/d2ip-geoip.dat"
+      refresh_interval: "24h"
+      http_timeout: "30s"
+
+  - id: ipverse-blocks
+    provider: ipverse
+    prefix: ipverse
+    enabled: true
+    config:
+      base_url: "https://ipverse.net/ipblocks/data/countries/{country}.zone"
+      countries: ["ru", "us", "de", "gb"]
+
+  - id: mmdb-local
+    provider: mmdb
+    prefix: mmdb
+    enabled: true
+    config:
+      file: "/var/lib/d2ip/GeoLite2-Country.mmdb"
+      countries: ["ru", "us", "de"]
+
+  - id: corp-domains
+    provider: plaintext
+    prefix: corp
+    enabled: true
+    config:
+      type: "domains"
+      file: "/var/lib/d2ip/sources/corp.txt"
 
 categories:
-  - code: "cn"
+  - code: "geosite:cn"
     attrs: []
-  - code: "google"
+  - code: "geosite:google"
     attrs: []
+  - code: "geosite:netflix"
+    attrs: []
+  - code: "ipverse:ru"
+  - code: "geoip:us"
+  - code: "corp:default"
 
 resolver:
   upstream: "8.8.8.8:53"

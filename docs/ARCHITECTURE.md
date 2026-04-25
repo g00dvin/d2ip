@@ -1,49 +1,55 @@
 # d2ip — Architecture
 
-`d2ip` resolves curated domain lists (v2fly `dlc.dat`) into deduplicated, CIDR‑aggregated
+`d2ip` resolves curated domain and IP lists from multiple sources into deduplicated, CIDR‑aggregated
 IPv4/IPv6 sets and (optionally) installs them into the host routing/firewall, on a
 schedule, with a controllable HTTP API.
+
+Sources include: v2fly geosite (domains), v2fly geoip (IP prefixes), IPverse (country blocks),
+MaxMind MMDB (GeoIP2), and plaintext files (domains or IPs). Categories are namespaced by
+source prefix (e.g. `geosite:ru`, `ipverse:us`, `mmdb:de`).
 
 ## 1. High‑level component diagram
 
 ```
-                                  ┌───────────────────────────────┐
-                                  │           HTTP API            │
-                                  │      (chi, internal/api)      │
-                                  └───────────────┬───────────────┘
-                                                  │ commands / status
-                                                  ▼
+                                   ┌───────────────────────────────┐
+                                   │           HTTP API            │
+                                   │      (chi, internal/api)      │
+                                   └───────────────┬───────────────┘
+                                                   │ commands / status
+                                                   ▼
 ┌───────────────────┐  schedule  ┌─────────────────────────────────────┐
 │    Scheduler      ├───────────►│            Orchestrator             │
 │  (cron-like)      │            │  pipeline:                          │
-└───────────────────┘            │   fetch→parse→normalize→resolve→    │
-                                  │   cache→aggregate→export→route      │
-                                  └──┬──────┬────┬──────┬─────┬─────┬──┘
-                                     │      │    │      │     │     │
-                                     ▼      ▼    ▼      ▼     ▼     ▼
-                               ┌──────┐ ┌─────┐┌────┐┌─────┐┌────┐┌─────┐
-                               │Source│ │Domn ││Resv││Cache││Aggr││Expt │
-                               │Agent │ │List ││lver││ DB  ││ IP ││File │
-                               └──┬───┘ └──┬──┘└─┬──┘└──┬──┘└──┬─┘└──┬──┘
-                                  │        │     │      │      │     │
-                               dlc.dat   GeoSite worker  SQLite radix ipv4/6.txt
-                                                 pool            tree    (atomic)
-                                                                        │
-                                                                        ▼
-                                                               ┌─────────────────┐
-                                                               │  Routing Agent  │
-                                                               │ nft set / iproute2
-                                                               │  table 100      │
-                                                               └─────────────────┘
+└───────────────────┘            │   load sources → resolve domains +  │
+                                 │   collect IPs → cache → aggregate → │
+                                 │   export → route                    │
+                                 └──┬──────┬────┬──────┬─────┬─────┬──┘
+                                    │      │    │      │     │     │
+                                    ▼      ▼    ▼      ▼     ▼     ▼
+                              ┌────────┐ ┌─────┐┌────┐┌─────┐┌────┐┌─────┐
+                              │Registry│ │Domn ││Resv││Cache││Aggr││Expt │
+                              │Agent   │ │List ││lver││ DB  ││ IP ││File │
+                              └───┬────┘ └──┬──┘└─┬──┘└──┬──┘└──┬─┘└──┬──┘
+                                  │         │     │      │      │     │
+                    v2flygeosite  │      GeoSite worker  SQLite radix ipv4/6.txt
+                    v2flygeoip    │         pool            tree    (atomic)
+                    ipverse       │                                    │
+                    mmdb          │                                    ▼
+                    plaintext     │                           ┌─────────────────┐
+                                 │                           │  Routing Agent  │
+                                 │                           │ nft set / iproute2
+                                 │                           │  table 100      │
+                                 │                           └─────────────────┘
 
-                   cross‑cutting:  Config Agent · Logging · Metrics · Health
+                    cross‑cutting:  Config Agent · Logging · Metrics · Health
 ```
 
 ## 2. Module responsibilities
 
 | # | Agent (Go pkg)                       | Responsibility                                                                                       |
 |---|--------------------------------------|------------------------------------------------------------------------------------------------------|
-| 1 | `internal/source` — Source Agent     | Download/refresh `dlc.dat`, integrity (sha256), atomic replace, ETag caching                          |
+| 1 | `internal/sourcereg` — Registry      | Multi-source registry: load/parse 5 provider types, namespace categories by prefix, health tracking  |
+|   | `internal/sourcereg/providers/...`   | Provider implementations: `v2flygeosite`, `v2flygeoip`, `ipverse`, `mmdb`, `plaintext`               |
 | 2 | `internal/domainlist` — Domain Agent | Parse protobuf, expand `include:`, filter by category + attribute, normalize (lowercase + punycode)   |
 | 3 | `internal/resolver` — Resolver Agent | DNS A/AAAA + CNAME chain, custom upstream, worker pool, retry/backoff, rate limit                    |
 | 4 | `internal/cache` — Cache Agent       | SQLite store, internal TTL only, batch upserts, transactional, idempotent                            |
@@ -53,7 +59,7 @@ schedule, with a controllable HTTP API.
 | 8 | `internal/config` — Config Agent     | ENV > Web UI overrides > defaults; live reload; validation                                           |
 | 9 | `internal/orchestrator`              | Wires pipeline, owns context, fan‑out/fan‑in, run state, single‑flight per pipeline                  |
 |   | `internal/api`                       | chi router; commands + status + UI                                                                   |
-|   | `internal/scheduler`                 | dlc refresh + resolve cycles                                                                         |
+|   | `internal/scheduler`                 | source refresh + resolve cycles                                                                      |
 |   | `internal/metrics`, `internal/logging` | Prometheus, zerolog                                                                                |
 
 ## 3. Inter‑agent contracts (Go interfaces)
@@ -63,11 +69,35 @@ concrete types for `aggregator` and `exporter` because their APIs are stable and
 is no need for runtime polymorphism.
 
 ```go
-// internal/source
-type DLCStore interface {
-    Get(ctx context.Context, maxAge time.Duration) (path string, version Version, err error)
-    ForceRefresh(ctx context.Context) (path string, version Version, err error)
-    Info() Version
+// internal/sourcereg
+// Factory pattern: each provider registers via init() using RegisterFactory()
+type Provider interface {
+    Type() string
+    Init(config map[string]any) error
+    Load(ctx context.Context) error
+    Categories() map[string][]string   // category name -> [domains|prefixes]
+    Prefix() string
+    Enabled() bool
+    SetEnabled(bool)
+    LastFetched() time.Time
+    LastError() string
+}
+
+type Registry interface {
+    Register(source SourceConfig) error
+    Unregister(id string) error
+    Get(id string) (Provider, bool)
+    List() []Provider
+    FindCategory(code string) (Provider, string, bool) // provider, categoryName, ok
+    RefreshSource(ctx context.Context, id string) error
+}
+
+type SourceConfig struct {
+    ID       string
+    Provider string
+    Prefix   string
+    Enabled  bool
+    Config   map[string]any
 }
 
 // internal/domainlist
@@ -160,14 +190,23 @@ See [SCHEMA.md](SCHEMA.md). Highlights:
 ## 5. Pipeline
 
 ```
-fetch(dlc.dat) → parse(protobuf) → expand(include) → filter(category, @attrs)
-→ normalize(lowercase, punycode, dedup)
-→ filter resolvable (Full + RootDomain only; Plain/Regex skipped)
-→ resolve(worker pool, A+AAAA+CNAME, retry/backoff, rate‑limited)
+load sources (registry)
+  ├─ v2flygeosite: fetch dlc.dat → parse protobuf → expand(include)
+  ├─ v2flygeoip:   fetch geoip.dat → parse protobuf → extract country CIDRs
+  ├─ ipverse:      fetch per-country .zone files → parse CIDRs + single IPs
+  ├─ mmdb:         open MaxMind DB → iterate networks → filter by country
+  └─ plaintext:    read local file → parse domains or IPs
+
+filter categories by configured list (prefix:name format)
+  → domain sources: normalize (lowercase, punycode, dedup)
+  → domain sources: filter resolvable (Full + RootDomain only; Plain/Regex skipped)
+  → domain sources: resolve (worker pool, A+AAAA+CNAME, retry/backoff, rate‑limited)
+  → prefix sources: collect IP prefixes directly (no DNS resolution)
+
 → cache(SQLite upsert, internal TTL only — DNS TTL ignored)
 → snapshot(SELECT all valid IPs, by family)
 → aggregate(radix tree CIDR merge per family + aggressiveness)
-→ export(ipv4.txt, ipv6.txt — atomic)
+→ export(ipv4.txt, ipv6.txt — atomic, per policy)
 → route(cap check → plan v4 → plan v6 → apply v4 → apply v6)
 ```
 

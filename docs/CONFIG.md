@@ -8,20 +8,56 @@ Resolution order (highest wins): **ENV** > **Web UI overrides (`kv_settings`)** 
 # config.yaml (defaults; every key is overridable)
 listen: ":9099"
 
-source:
-  url: https://github.com/v2fly/domain-list-community/releases/latest/download/dlc.dat
-  cache_path: /var/lib/d2ip/dlc.dat
-  refresh_interval: 24h
-  http_timeout: 30s
+sources:
+  # Multi-source registry. Each source has a unique prefix that namespaces
+  # its categories. Categories are referenced as "prefix:name" in policies.
+  - id: v2fly-geosite
+    provider: v2flygeosite
+    prefix: geosite
+    enabled: true
+    config:
+      url: https://github.com/v2fly/domain-list-community/releases/latest/download/dlc.dat
+      cache_path: /var/lib/d2ip/dlc.dat
+      refresh_interval: 24h
+      http_timeout: 30s
+
+  - id: v2fly-geoip
+    provider: v2flygeoip
+    prefix: geoip
+    enabled: true
+    config:
+      url: https://github.com/v2fly/geoip/releases/latest/download/geoip.dat
+      cache_path: /var/lib/d2ip/geoip.dat
+      refresh_interval: 24h
+      http_timeout: 30s
+
+  - id: ipverse-ru
+    provider: ipverse
+    prefix: ipverse
+    enabled: true
+    config:
+      base_url: https://ipverse.net/ipblocks/data/countries/{country}.zone
+      countries: ["ru", "us", "de"]
+
+  - id: mmdb-local
+    provider: mmdb
+    prefix: mmdb
+    enabled: true
+    config:
+      file: /var/lib/d2ip/GeoLite2-Country.mmdb
+      countries: ["ru", "us", "de"]
 
 categories:
   # Global categories to resolve and cache.
   # The pipeline resolves ALL of these into the SQLite cache, making them
   # available to any routing policy below. This is the "what domains do we
   # know about?" list — independent of how (or whether) they are routed.
+  # Categories use "prefix:name" format from the source registry.
   - code: geosite:ru
   - code: geosite:google
     attrs: []                    # optional @attribute filter (AND)
+  - code: ipverse:ru            # prefix sources (no DNS resolution needed)
+  - code: geoip:us
 
 resolver:
   upstream: 1.1.1.1:53
@@ -106,11 +142,17 @@ metrics:
 ## Validation rules
 
 * `listen` — non-empty, valid `host:port`
-* `source.url` — non-empty, must start with `http://` or `https://`
-* `source.cache_path` — non-empty
-* `source.refresh_interval` ≥ 1m
-* `source.http_timeout` ≥ 1s
-* `categories[*].code` — non-empty, must contain `:`, must be unique
+* `sources[*].id` — non-empty, unique
+* `sources[*].provider` — one of `v2flygeosite`, `v2flygeoip`, `ipverse`, `mmdb`, `plaintext`
+* `sources[*].prefix` — non-empty, unique across all sources, lowercase alphanumeric + hyphens
+* `sources[*].enabled` — boolean
+* `v2flygeosite.url` — non-empty, must start with `http://` or `https://`
+* `v2flygeosite.cache_path` — non-empty
+* `v2flygeosite.refresh_interval` ≥ 1m
+* `v2flygeosite.http_timeout` ≥ 1s
+* `ipverse.countries` — required, array of country codes
+* `mmdb.file` or `mmdb.url` — at least one required
+* `categories[*].code` — non-empty, must contain `:` (prefix:name format), must be unique
 * `resolver.upstream` — valid `host:port`, port in [1,65535]
 * `resolver.network` — `udp`, `tcp`, or `tcp-tls`
 * `resolver.concurrency` ∈ [1, 4096]

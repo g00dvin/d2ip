@@ -1,8 +1,12 @@
 # d2ip
 
-Resolve curated v2fly `geosite:*` domain lists into deduplicated, CIDR-aggregated
+Resolve curated domain and IP lists from multiple sources into deduplicated, CIDR-aggregated
 IPv4/IPv6 sets and (optionally) install them into the host routing table or
 nftables sets — on a schedule, with an HTTP API.
+
+Supports **5 source types**: v2fly geosite (domains), v2fly geoip (IP prefixes), IPverse (country blocks),
+MaxMind MMDB (GeoIP2), and plaintext files (domains or IPs). Categories are namespaced by source prefix
+(e.g. `geosite:ru`, `ipverse:us`, `mmdb:de`).
 
 > Intended for self-hosted policy routing (e.g. "send `geosite:google` over my
 > VPN"). Not a DNS server, not a proxy.
@@ -10,12 +14,19 @@ nftables sets — on a schedule, with an HTTP API.
 ## What it does
 
 ```
-fetch dlc.dat → parse → filter (categories + @attrs) → normalize (idna)
-→ DNS resolve (worker pool, custom upstream)
-→ SQLite cache (internal TTL only — DNS TTL ignored)
-→ CIDR aggregate (radix tree)
-→ atomic ipv4.txt / ipv6.txt
-→ (optional) nftables set or `ip route` table 100
+Sources (v2fly geosite, geoip, IPverse, MMDB, plaintext)
+  ↓
+Registry loads/parses each source → categories with prefixes
+  ↓
+Pipeline resolves domains (DNS) + collects IP prefixes directly
+  ↓
+SQLite cache (resolved IPs, internal TTL — DNS TTL ignored)
+  ↓
+CIDR aggregate (radix tree) per policy
+  ↓
+atomic ipv4.txt / ipv6.txt per policy
+  ↓
+(optional) nftables set or `ip route` table per policy
 ```
 
 ## Quick start
@@ -85,11 +96,12 @@ d2ip includes a terminal-inspired web interface with sidebar navigation:
   - **Dashboard** — health status, quick actions, last run summary, routing state
   - **Pipeline** — trigger, cancel, run history table
   - **Config** — view/edit all config fields with hot-reload
-  - **Categories** — browse geosite categories, search/filter domains
+  - **Sources** — manage multi-source registry (add/remove/refresh sources)
+  - **Categories** — browse categories grouped by source prefix, search/filter domains
   - **Cache** — statistics, SQLite vacuum
-  - **Source** — dlc.dat metadata (SHA256, size, ETag)
+  - **Policies** — multi-policy routing configuration
   - **Routing** — dry-run, rollback, snapshot view
-- **Tech:** Vue 3 + Tailwind CSS SPA, embedded in binary (~174KB)
+- **Tech:** Vue 3 + Tailwind CSS SPA, embedded in binary (~480KB gzipped)
 
 ## Configuration
 

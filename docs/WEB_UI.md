@@ -52,16 +52,36 @@ The d2ip web UI is a modern, responsive single-page application (SPA) built with
 - Shows current values, defaults, and active overrides
 - Save applies overrides via KV store with hot-reload
 
-### 4. Categories
+### 4. Sources
 
-**Purpose:** Manage geosite categories
+**Purpose:** Manage the multi-source registry
+
+**Components:**
+- **Source List Table:** ID, provider, prefix, enabled status, category count, health indicators
+- **Health Indicators:**
+  - Green "Healthy" tag when `last_fetched` is recent and `last_error` is empty
+  - Red "Error" tag with tooltip showing `last_error` when source failed to load
+  - "Last Fetched" displayed as relative time (e.g. "2 hours ago")
+- **Add/Edit Source Drawer:** Form with provider type selector, prefix input, enabled toggle, provider-specific config fields
+  - **v2flygeosite:** URL, cache path, refresh interval, HTTP timeout
+  - **v2flygeoip:** URL, cache path, refresh interval, HTTP timeout
+  - **ipverse:** Base URL template, country multi-select (50-country dropdown)
+  - **mmdb:** File path or URL, country multi-select
+  - **plaintext:** File upload (`.txt` only), type selector (domains/ips)
+- **Per-Source Actions:** Refresh (manual reload), Edit, Delete
+- **File Upload:** Drag-and-drop or click to upload plaintext files; saved to `/tmp/d2ip-uploads/{uuid}.txt`
+
+### 5. Categories
+
+**Purpose:** Manage categories from all loaded sources
 
 **Components:**
 - **Configured Categories:** Table with domain counts, browse/remove actions
-- **Available Categories:** Searchable list with add button
+- **Available Categories:** Searchable list grouped by source prefix (expandable `n-collapse` panels with count badges)
 - **Domain Browser:** Expandable panel showing up to 500 domains per category
+- **Prefix Grouping:** Categories are visually grouped by their source prefix (e.g. `geosite:`, `ipverse:`, `mmdb:`)
 
-### 5. Cache
+### 6. Cache
 
 **Purpose:** Monitor cache health
 
@@ -70,9 +90,9 @@ The d2ip web UI is a modern, responsive single-page application (SPA) built with
 - Oldest/newest updated timestamps
 - Vacuum action (with confirmation)
 
-### 6. Source
+### 7. Source (Legacy)
 
-**Purpose:** View dlc.dat metadata
+**Purpose:** View legacy dlc.dat metadata (deprecated — use Sources page instead)
 
 **Components:**
 - SHA256 hash (truncated)
@@ -80,16 +100,16 @@ The d2ip web UI is a modern, responsive single-page application (SPA) built with
 - File size
 - ETag
 
-### 7. Policies
+### 8. Policies
 
 **Purpose:** Manage multi-policy routing configuration
 
 **Components:**
 - **Policy List Table:** Name, backend, categories count, table/set, enabled status
-- **Add/Edit Policy Drawer:** Form with category multi-select, backend picker, backend-specific fields (table_id/iface for iproute2, nft_table/set for nftables), export format, dry-run toggle
+- **Add/Edit Policy Drawer:** Form with category multi-select (grouped by source prefix), backend picker, backend-specific fields (table_id/iface for iproute2, nft_table/set for nftables), export format, dry-run toggle
 - **Per-Policy Actions:** Run, dry-run, rollback, enable/disable, delete
 
-### 8. Routing (Legacy)
+### 9. Routing (Legacy)
 
 **Purpose:** Preview and manage single-policy routing table changes (legacy mode)
 
@@ -119,6 +139,7 @@ Adaptive polling via `usePolling` composable (SSE primary, polling fallback):
 | Health status | /healthz | 10s |
 | Pipeline status (dashboard) | /pipeline/status | 10s |
 | Pipeline status (pipeline page) | /pipeline/status | 2s (running) / 10s (idle) |
+| Sources list | /api/sources | 30s |
 | Policies list | /api/policies | 30s |
 | Cache stats | /api/cache/stats | 30s |
 | Routing snapshot | /routing/snapshot | 30s |
@@ -161,10 +182,10 @@ Adaptive polling via `usePolling` composable (SSE primary, polling fallback):
 
 ## Performance
 
-**Size:** ~468KB total gzipped embedded assets (JS + CSS)
+**Size:** ~480KB total gzipped embedded assets (JS + CSS)
 - Naive UI component library: ~425KB gzipped
 - Tailwind CSS: ~3KB gzipped
-- Application code: ~15KB gzipped
+- Application code: ~25KB gzipped (increased with multi-source UI features)
 - Charts: ~25KB gzipped
 
 **Network Usage:**

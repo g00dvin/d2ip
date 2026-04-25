@@ -85,17 +85,85 @@ Cancel the currently running pipeline.
 { "status": "not running" }
 ```
 
+## Sources
+
+### GET /api/sources
+
+List all configured sources.
+
+**Response:**
+```json
+{
+  "sources": [
+    {
+      "id": "v2fly-geosite",
+      "provider": "v2flygeosite",
+      "prefix": "geosite",
+      "enabled": true,
+      "categories": ["geosite:ru", "geosite:us"],
+      "last_fetched": "2026-04-25T10:00:00Z",
+      "last_error": ""
+    }
+  ]
+}
+```
+
+### POST /api/sources
+
+Create a new source.
+
+**Request:**
+```json
+{
+  "id": "my-ipverse",
+  "provider": "ipverse",
+  "prefix": "ipverse",
+  "enabled": true,
+  "config": {
+    "base_url": "https://ipverse.net/ipblocks/data/countries/{country}.zone",
+    "countries": ["ru", "us"]
+  }
+}
+```
+
+### GET /api/sources/{id}
+
+Get a single source.
+
+### PUT /api/sources/{id}
+
+Update a source.
+
+### DELETE /api/sources/{id}
+
+Delete a source.
+
+### POST /api/sources/{id}/refresh
+
+Trigger a manual reload of a source.
+
+### POST /api/sources/upload
+
+Upload a plaintext file. Returns the saved path.
+
+**Request:** `multipart/form-data` with `file` field (`.txt` only)
+
+**Response:**
+```json
+{ "path": "/tmp/d2ip-uploads/abc.txt" }
+```
+
 ## Categories
 
 ### GET /api/categories
 
-List configured and available geosite categories.
+List configured and available categories from all loaded sources.
 
 **Response:**
 ```json
 {
   "configured": [{ "code": "geosite:cn", "attrs": [], "domain_count": 14203 }],
-  "available": ["geosite:google", "geosite:facebook"]
+  "available": ["geosite:google", "geosite:facebook", "ipverse:ru", "mmdb:de"]
 }
 ```
 
@@ -324,6 +392,43 @@ Update an existing policy.
 ### DELETE /api/policies/{name}
 
 Delete a policy.
+
+**Response:**
+```json
+{ "status": "ok" }
+```
+
+### POST /api/policies/{name}/run
+
+Trigger a pipeline run for a single policy.
+
+**Request:**
+```json
+{ "dry_run": false, "force_resolve": false }
+```
+
+**Response:**
+```json
+{ "status": "ok", "run_id": 42 }
+```
+
+### POST /api/policies/{name}/dry-run
+
+Preview routing changes for a single policy without applying.
+
+**Response:**
+```json
+{
+  "v4_plan": { "add": [...], "remove": [...] },
+  "v6_plan": { "add": [...], "remove": [...] },
+  "v4_diff": "+ 1.0.0.0/24\n",
+  "v6_diff": "+ 2001:db8::/32\n"
+}
+```
+
+### POST /api/policies/{name}/rollback
+
+Rollback routing changes for a single policy.
 
 **Response:**
 ```json
