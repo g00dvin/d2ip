@@ -11,6 +11,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/goodvin/d2ip/internal/sourcereg"
+	"github.com/oschwald/maxminddb-golang"
 )
 
 func TestNew_ValidConfig(t *testing.T) {
@@ -152,6 +153,32 @@ func TestFactory_Registered(t *testing.T) {
 	require.NoError(t, err)
 	assert.Equal(t, "mmdb-f", src.ID())
 	assert.Equal(t, sourcereg.TypeMMDB, src.Provider())
+}
+
+type mockReaderWithClose struct {
+	closed bool
+}
+
+func (m *mockReaderWithClose) Networks(_ ...maxminddb.NetworksOption) *maxminddb.Networks {
+	return nil
+}
+
+func (m *mockReaderWithClose) Close() error {
+	m.closed = true
+	return nil
+}
+
+func TestClose(t *testing.T) {
+	p, err := New("mmdb-test", "mmdb", map[string]any{
+		"file": "/tmp/test.mmdb",
+	})
+	require.NoError(t, err)
+
+	mock := &mockReaderWithClose{}
+	p.reader = mock
+
+	require.NoError(t, p.Close())
+	assert.True(t, mock.closed)
 }
 
 func TestLoad_CountriesWhitelist(t *testing.T) {
