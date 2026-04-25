@@ -7,6 +7,35 @@ import type { SourceConfig } from '@/api/types'
 const store = useSourcesStore()
 const message = useMessage()
 
+function getHealth(row: any): { type: 'success' | 'warning' | 'error', label: string } {
+  if (row.last_error) {
+    return { type: 'error', label: 'Error' }
+  }
+  if (!row.last_fetched) {
+    return { type: 'warning', label: 'Not loaded' }
+  }
+  const fetched = new Date(row.last_fetched).getTime()
+  const age = Date.now() - fetched
+  const staleThreshold = 48 * 60 * 60 * 1000
+  if (age > staleThreshold) {
+    return { type: 'warning', label: 'Stale' }
+  }
+  return { type: 'success', label: 'Healthy' }
+}
+
+function formatRelativeTime(dateStr: string | undefined): string {
+  if (!dateStr) return 'Never'
+  const date = new Date(dateStr).getTime()
+  const diff = Date.now() - date
+  const minutes = Math.floor(diff / 60000)
+  if (minutes < 1) return 'Just now'
+  if (minutes < 60) return `${minutes}m ago`
+  const hours = Math.floor(minutes / 60)
+  if (hours < 24) return `${hours}h ago`
+  const days = Math.floor(hours / 24)
+  return `${days}d ago`
+}
+
 const showModal = ref(false)
 const editing = ref<SourceConfig | null>(null)
 
@@ -155,6 +184,28 @@ const columns = [
   { title: 'Provider', key: 'provider' },
   { title: 'Prefix', key: 'prefix' },
   { title: 'Categories', key: 'categories', render: (row: any) => row.categories?.length ?? 0 },
+  {
+    title: 'Health',
+    key: 'health',
+    render: (row: any) => {
+      const h_status = getHealth(row)
+      return h('n-tag', { type: h_status.type, size: 'small' }, () => h_status.label)
+    }
+  },
+  {
+    title: 'Last Fetched',
+    key: 'last_fetched',
+    render: (row: any) => formatRelativeTime(row.last_fetched)
+  },
+  {
+    title: 'Error',
+    key: 'last_error',
+    render: (row: any) => {
+      if (!row.last_error) return '—'
+      return h('span', { title: row.last_error, class: 'text-red-500 truncate max-w-[150px] block' },
+        row.last_error.substring(0, 30) + (row.last_error.length > 30 ? '...' : ''))
+    }
+  },
   { title: 'Status', key: 'enabled', render: (row: any) => row.enabled ? 'Enabled' : 'Disabled' },
   { title: 'Actions', key: 'actions', render: (row: any) => h('div', { class: 'flex gap-2' }, [
     h(NButton, { size: 'small', onClick: () => handleRefresh(row.id) }, () => 'Refresh'),
