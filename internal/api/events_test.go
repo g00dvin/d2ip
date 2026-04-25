@@ -26,12 +26,12 @@ func TestEventStream(t *testing.T) {
 	}()
 
 	time.Sleep(50 * time.Millisecond)
-	bus.Publish("test", events.Event{Type: "test", Data: "hello"})
+	bus.Publish("config", events.Event{Type: "config_changed", Data: "hello"})
 	time.Sleep(100 * time.Millisecond)
 
 	body := rr.Body.String()
-	if !strings.Contains(body, "event: test") {
-		t.Errorf("expected 'event: test' in body, got:\n%s", body)
+	if !strings.Contains(body, "event: config_changed") {
+		t.Errorf("expected 'event: config_changed' in body, got:\n%s", body)
 	}
 	if !strings.Contains(body, "data: hello") {
 		t.Errorf("expected 'data: hello' in body, got:\n%s", body)

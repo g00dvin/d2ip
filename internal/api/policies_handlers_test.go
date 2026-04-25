@@ -73,7 +73,7 @@ func TestPolicyCreate(t *testing.T) {
 	policy := config.PolicyConfig{
 		Name:       "p1",
 		Enabled:    true,
-		Categories: []string{"category1"},
+		Categories: []string{"geosite:ru"},
 		Backend:    config.BackendNFTables,
 		NFTTable:   "inet d2ip",
 		NFTSetV4:   "set_v4",
@@ -110,9 +110,13 @@ func TestPolicyCreate_DuplicateName(t *testing.T) {
 	server, _ := setupPolicyServer(t)
 
 	policy := config.PolicyConfig{
-		Name:    "p1",
-		Enabled: true,
-		Backend: config.BackendNFTables,
+		Name:       "p1",
+		Enabled:    true,
+		Categories: []string{"geosite:ru"},
+		Backend:    config.BackendNFTables,
+		NFTTable:   "inet d2ip",
+		NFTSetV4:   "set_v4",
+		NFTSetV6:   "set_v6",
 	}
 	body := mustMarshal(t, policy)
 
@@ -139,9 +143,13 @@ func TestPolicyUpdate(t *testing.T) {
 
 	// Create initial policy
 	policy := config.PolicyConfig{
-		Name:    "p1",
-		Enabled: true,
-		Backend: config.BackendNFTables,
+		Name:       "p1",
+		Enabled:    true,
+		Categories: []string{"geosite:ru"},
+		Backend:    config.BackendNFTables,
+		NFTTable:   "inet d2ip",
+		NFTSetV4:   "set_v4",
+		NFTSetV6:   "set_v6",
 	}
 	body := mustMarshal(t, policy)
 	req := httptest.NewRequest("POST", "/api/policies", bytes.NewReader(body))
@@ -197,9 +205,13 @@ func TestPolicyUpdate_NotFound(t *testing.T) {
 	server, _ := setupPolicyServer(t)
 
 	updated := config.PolicyConfig{
-		Name:    "nonexistent",
-		Enabled: true,
-		Backend: config.BackendNFTables,
+		Name:       "nonexistent",
+		Enabled:    true,
+		Categories: []string{"geosite:ru"},
+		Backend:    config.BackendNFTables,
+		NFTTable:   "inet d2ip",
+		NFTSetV4:   "set_v4",
+		NFTSetV6:   "set_v6",
 	}
 	body := mustMarshal(t, updated)
 	req := httptest.NewRequest("PUT", "/api/policies/nonexistent", bytes.NewReader(body))
@@ -217,9 +229,13 @@ func TestPolicyDelete(t *testing.T) {
 
 	// Create policy
 	policy := config.PolicyConfig{
-		Name:    "p1",
-		Enabled: true,
-		Backend: config.BackendNFTables,
+		Name:       "p1",
+		Enabled:    true,
+		Categories: []string{"geosite:ru"},
+		Backend:    config.BackendNFTables,
+		NFTTable:   "inet d2ip",
+		NFTSetV4:   "set_v4",
+		NFTSetV6:   "set_v6",
 	}
 	body := mustMarshal(t, policy)
 	req := httptest.NewRequest("POST", "/api/policies", bytes.NewReader(body))
