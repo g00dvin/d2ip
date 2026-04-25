@@ -20,10 +20,63 @@ const providerOptions = [
   { label: 'MaxMind MMDB', value: 'mmdb' },
 ]
 
+const countryOptions = [
+  { label: 'Argentina (AR)', value: 'ar' },
+  { label: 'Australia (AU)', value: 'au' },
+  { label: 'Austria (AT)', value: 'at' },
+  { label: 'Bangladesh (BD)', value: 'bd' },
+  { label: 'Belgium (BE)', value: 'be' },
+  { label: 'Brazil (BR)', value: 'br' },
+  { label: 'Canada (CA)', value: 'ca' },
+  { label: 'Chile (CL)', value: 'cl' },
+  { label: 'China (CN)', value: 'cn' },
+  { label: 'Colombia (CO)', value: 'co' },
+  { label: 'Czech Republic (CZ)', value: 'cz' },
+  { label: 'Denmark (DK)', value: 'dk' },
+  { label: 'Egypt (EG)', value: 'eg' },
+  { label: 'Finland (FI)', value: 'fi' },
+  { label: 'France (FR)', value: 'fr' },
+  { label: 'Germany (DE)', value: 'de' },
+  { label: 'Greece (GR)', value: 'gr' },
+  { label: 'Hungary (HU)', value: 'hu' },
+  { label: 'India (IN)', value: 'in' },
+  { label: 'Indonesia (ID)', value: 'id' },
+  { label: 'Iran (IR)', value: 'ir' },
+  { label: 'Ireland (IE)', value: 'ie' },
+  { label: 'Israel (IL)', value: 'il' },
+  { label: 'Italy (IT)', value: 'it' },
+  { label: 'Japan (JP)', value: 'jp' },
+  { label: 'Kenya (KE)', value: 'ke' },
+  { label: 'Malaysia (MY)', value: 'my' },
+  { label: 'Mexico (MX)', value: 'mx' },
+  { label: 'Netherlands (NL)', value: 'nl' },
+  { label: 'Nigeria (NG)', value: 'ng' },
+  { label: 'Norway (NO)', value: 'no' },
+  { label: 'Pakistan (PK)', value: 'pk' },
+  { label: 'Philippines (PH)', value: 'ph' },
+  { label: 'Poland (PL)', value: 'pl' },
+  { label: 'Portugal (PT)', value: 'pt' },
+  { label: 'Romania (RO)', value: 'ro' },
+  { label: 'Russia (RU)', value: 'ru' },
+  { label: 'Saudi Arabia (SA)', value: 'sa' },
+  { label: 'Singapore (SG)', value: 'sg' },
+  { label: 'South Africa (ZA)', value: 'za' },
+  { label: 'South Korea (KR)', value: 'kr' },
+  { label: 'Spain (ES)', value: 'es' },
+  { label: 'Sweden (SE)', value: 'se' },
+  { label: 'Switzerland (CH)', value: 'ch' },
+  { label: 'Thailand (TH)', value: 'th' },
+  { label: 'Turkey (TR)', value: 'tr' },
+  { label: 'Ukraine (UA)', value: 'ua' },
+  { label: 'United Kingdom (GB)', value: 'gb' },
+  { label: 'United States (US)', value: 'us' },
+  { label: 'Vietnam (VN)', value: 'vn' },
+].sort((a, b) => a.label.localeCompare(b.label))
+
 function resetConfig(provider: string) {
   if (!editing.value) return
   if (provider === 'ipverse') {
-    editing.value.config = { base_url: 'https://ipverse.net/ipblocks/data/countries/{country}.zone', countries: '' }
+    editing.value.config = { base_url: 'https://ipverse.net/ipblocks/data/countries/{country}.zone', countries: [] }
   } else if (provider === 'plaintext') {
     editing.value.config = { type: 'domains', file: '' }
   } else if (provider === 'v2flygeosite') {
@@ -31,7 +84,7 @@ function resetConfig(provider: string) {
   } else if (provider === 'v2flygeoip') {
     editing.value.config = { url: '', cache_path: '' }
   } else if (provider === 'mmdb') {
-    editing.value.config = { file: '', url: '', countries: '' }
+    editing.value.config = { file: '', url: '', countries: [] }
   }
 }
 
@@ -58,23 +111,16 @@ async function handleSave() {
   }
   const payload = { ...editing.value }
   if (payload.provider === 'ipverse') {
-    const countries = (payload.config.countries as string)
-      .split(',')
-      .map((s: string) => s.trim())
-      .filter((s: string) => s.length > 0)
     payload.config = {
       base_url: payload.config.base_url,
-      countries,
+      countries: payload.config.countries || [],
     }
   } else if (payload.provider === 'mmdb') {
-    const countries = (payload.config.countries as string)
-      .split(',')
-      .map((s: string) => s.trim())
-      .filter((s: string) => s.length > 0)
     const cfg: Record<string, unknown> = {}
     if (payload.config.file) cfg.file = payload.config.file
     if (payload.config.url) cfg.url = payload.config.url
-    if (countries.length > 0) cfg.countries = countries
+    const countries = payload.config.countries as string[]
+    if (countries?.length > 0) cfg.countries = countries
     payload.config = cfg
   }
   try {
@@ -167,8 +213,14 @@ const columns = [
         <n-form-item v-if="editing.provider === 'ipverse'" label="Base URL">
           <n-input v-model:value="editing.config.base_url" placeholder="https://ipverse.net/ipblocks/data/countries/{country}.zone" />
         </n-form-item>
-        <n-form-item v-if="editing.provider === 'ipverse'" label="Countries (comma-separated)" required>
-          <n-input v-model:value="editing.config.countries" placeholder="ru, us, de, gb" />
+        <n-form-item v-if="editing.provider === 'ipverse'" label="Countries" required>
+          <n-select
+            v-model:value="editing.config.countries"
+            multiple
+            filterable
+            :options="countryOptions"
+            placeholder="Select countries..."
+          />
         </n-form-item>
         <n-form-item v-if="editing.provider === 'mmdb'" label="MMDB File Path">
           <n-input v-model:value="editing.config.file" placeholder="/var/lib/d2ip/GeoLite2-Country.mmdb" />
@@ -177,7 +229,13 @@ const columns = [
           <n-input v-model:value="editing.config.url" placeholder="https://download.maxmind.com/..." />
         </n-form-item>
         <n-form-item v-if="editing.provider === 'mmdb'" label="Countries Whitelist (optional)">
-          <n-input v-model:value="editing.config.countries" placeholder="ru, us, de (empty = all)" />
+          <n-select
+            v-model:value="editing.config.countries"
+            multiple
+            filterable
+            :options="countryOptions"
+            placeholder="Select countries to include (empty = all)..."
+          />
         </n-form-item>
       </n-form>
       <template #footer>
