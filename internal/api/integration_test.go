@@ -3,6 +3,7 @@ package api
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"net/netip"
@@ -17,6 +18,7 @@ import (
 	"github.com/goodvin/d2ip/internal/config"
 	"github.com/goodvin/d2ip/internal/domainlist"
 	"github.com/goodvin/d2ip/internal/routing"
+	"github.com/goodvin/d2ip/internal/sourcereg"
 	"github.com/goodvin/d2ip/internal/source"
 )
 
@@ -68,6 +70,35 @@ func (m *mockListProvider) Select(sel []domainlist.CategorySelector) ([]domainli
 }
 func (m *mockListProvider) Categories() []string { return m.categories }
 
+type mockRegistry struct {
+	sources    []sourcereg.SourceInfo
+	categories []sourcereg.CategoryInfo
+	domains    map[string][]string
+}
+
+func (m *mockRegistry) AddSource(ctx context.Context, cfg sourcereg.SourceConfig) error { return nil }
+func (m *mockRegistry) RemoveSource(ctx context.Context, id string) error               { return nil }
+func (m *mockRegistry) LoadAll(ctx context.Context) error                               { return nil }
+func (m *mockRegistry) Close() error                                                    { return nil }
+func (m *mockRegistry) ListSources() []sourcereg.SourceInfo                             { return m.sources }
+func (m *mockRegistry) GetSource(id string) (sourcereg.Source, bool)                    { return nil, false }
+func (m *mockRegistry) ListCategories() []sourcereg.CategoryInfo                        { return m.categories }
+func (m *mockRegistry) GetDomains(category string) ([]string, error) {
+	if d, ok := m.domains[category]; ok {
+		return d, nil
+	}
+	return nil, fmt.Errorf("category not found: %s", category)
+}
+func (m *mockRegistry) GetPrefixes(category string) ([]netip.Prefix, error) { return nil, nil }
+func (m *mockRegistry) ResolveCategory(category string) (string, string, bool) {
+	for _, c := range m.categories {
+		if c.Name == category {
+			return "mock", string(c.Type), true
+		}
+	}
+	return "", "", false
+}
+
 func newTestServer(t *testing.T, opts ...func(*Server)) *Server {
 	t.Helper()
 	cfg := config.Defaults()
@@ -94,6 +125,10 @@ func withRouter(r routing.Router) func(*Server) {
 
 func withSource(st source.DLCStore) func(*Server) {
 	return func(s *Server) { s.sourceStore = st }
+}
+
+func withRegistry(r sourcereg.Registry) func(*Server) {
+	return func(s *Server) { s.registry = r }
 }
 
 func TestHealthz_ReturnsOK(t *testing.T) {
@@ -310,34 +345,43 @@ func TestCacheStats_NilCache_Returns503(t *testing.T) {
 	assert.Equal(t, http.StatusServiceUnavailable, resp.StatusCode)
 }
 
-func TestSourceInfo_NilStore_ReturnsNotAvailable(t *testing.T) {
+func TestSourcesList_NilRegistry_ReturnsEmpty(t *testing.T) {
 	s := newTestServer(t)
 	srv := httptest.NewServer(s.Handler())
 	defer srv.Close()
 
-	resp, err := http.Get(srv.URL + "/api/source/info")
+	resp, err := http.Get(srv.URL + "/api/sources")
 	require.NoError(t, err)
 	defer resp.Body.Close()
 	assert.Equal(t, http.StatusOK, resp.StatusCode)
 
 	var body map[string]interface{}
 	require.NoError(t, json.NewDecoder(resp.Body).Decode(&body))
-	assert.Equal(t, false, body["available"])
+	sources, ok := body["sources"].([]interface{})
+	require.True(t, ok)
+	assert.Empty(t, sources)
 }
 
-func TestSourceInfo_WithMockStore(t *testing.T) {
-	s := newTestServer(t, withSource(&mockDLCStore{}))
+func TestSourcesList_WithMockRegistry(t *testing.T) {
+	reg := &mockRegistry{
+		sources: []sourcereg.SourceInfo{
+			{ID: "src1", Provider: "plaintext", Prefix: "corp"},
+		},
+	}
+	s := newTestServer(t, withRegistry(reg))
 	srv := httptest.NewServer(s.Handler())
 	defer srv.Close()
 
-	resp, err := http.Get(srv.URL + "/api/source/info")
+	resp, err := http.Get(srv.URL + "/api/sources")
 	require.NoError(t, err)
 	defer resp.Body.Close()
 	assert.Equal(t, http.StatusOK, resp.StatusCode)
 
 	var body map[string]interface{}
 	require.NoError(t, json.NewDecoder(resp.Body).Decode(&body))
-	assert.Equal(t, true, body["available"])
+	sources, ok := body["sources"].([]interface{})
+	require.True(t, ok)
+	assert.Len(t, sources, 1)
 }
 
 func TestRoutingSnapshot_WithMockRouter(t *testing.T) {
@@ -450,17 +494,14 @@ func TestRoutingRollback_DisabledRouter_Returns503(t *testing.T) {
 	assert.Equal(t, http.StatusServiceUnavailable, resp.StatusCode)
 }
 
-func TestCategoriesList_WithProvider(t *testing.T) {
-	cfg := config.Defaults()
-	cfg.Categories = []config.CategoryConfig{{Code: "geosite:ru"}}
-	watcher := config.NewWatcher(cfg, 1, nil)
-
-	provider := &mockListProvider{
-		rules:      []domainlist.Rule{{Type: domainlist.RuleFull, Value: "example.ru"}},
-		categories: []string{"ru", "google", "facebook"},
+func TestCategoriesList_WithRegistry(t *testing.T) {
+	reg := &mockRegistry{
+		categories: []sourcereg.CategoryInfo{
+			{Name: "geosite:ru", Type: sourcereg.CategoryDomain},
+			{Name: "geosite:google", Type: sourcereg.CategoryDomain},
+		},
 	}
-
-	s := &Server{cfgWatcher: watcher, dlProvider: provider}
+	s := &Server{registry: reg}
 	srv := httptest.NewServer(s.Handler())
 	defer srv.Close()
 
@@ -471,16 +512,11 @@ func TestCategoriesList_WithProvider(t *testing.T) {
 
 	var body map[string]interface{}
 	require.NoError(t, json.NewDecoder(resp.Body).Decode(&body))
-	assert.Contains(t, body, "configured")
 	assert.Contains(t, body, "available")
-
-	configured, ok := body["configured"].([]interface{})
-	require.True(t, ok)
-	assert.NotEmpty(t, configured, "should have configured categories")
 
 	available, ok := body["available"].([]interface{})
 	require.True(t, ok)
-	assert.NotEmpty(t, available, "should have available categories")
+	assert.Len(t, available, 2, "should have available categories")
 }
 
 func TestCategoriesAdd_AddsWithPrefix(t *testing.T) {
@@ -579,39 +615,37 @@ func TestCategoriesDelete_NotFound_Returns404(t *testing.T) {
 	assert.Equal(t, http.StatusNotFound, resp.StatusCode)
 }
 
-func TestCategoryDomains_WithProvider(t *testing.T) {
-	rules := []domainlist.Rule{
-		{Type: domainlist.RuleFull, Value: "example.com"},
-		{Type: domainlist.RuleFull, Value: "test.ru"},
+func TestCategoryDomains_WithRegistry(t *testing.T) {
+	reg := &mockRegistry{
+		categories: []sourcereg.CategoryInfo{
+			{Name: "geosite:ru", Type: sourcereg.CategoryDomain},
+		},
+		domains: map[string][]string{
+			"geosite:ru": {"example.com", "test.ru"},
+		},
 	}
-	provider := &mockListProvider{rules: rules, categories: []string{"ru"}}
-	cfg := config.Defaults()
-	watcher := config.NewWatcher(cfg, 1, nil)
-
-	s := &Server{cfgWatcher: watcher, dlProvider: provider}
+	s := &Server{registry: reg}
 	srv := httptest.NewServer(s.Handler())
 	defer srv.Close()
 
-	resp, err := http.Get(srv.URL + "/api/categories/ru/domains")
+	resp, err := http.Get(srv.URL + "/api/categories/geosite:ru/domains")
 	require.NoError(t, err)
 	defer resp.Body.Close()
 	assert.Equal(t, http.StatusOK, resp.StatusCode)
 
 	var body map[string]interface{}
 	require.NoError(t, json.NewDecoder(resp.Body).Decode(&body))
-	assert.Equal(t, "ru", body["code"])
+	assert.Equal(t, "geosite:ru", body["code"])
 	assert.Contains(t, body, "domains")
 	assert.Contains(t, body, "total")
 }
 
-func TestCategoryDomains_NilProvider_Returns503(t *testing.T) {
-	cfg := config.Defaults()
-	watcher := config.NewWatcher(cfg, 1, nil)
-	s := &Server{cfgWatcher: watcher, dlProvider: nil}
+func TestCategoryDomains_NilRegistry_Returns503(t *testing.T) {
+	s := &Server{registry: nil}
 	srv := httptest.NewServer(s.Handler())
 	defer srv.Close()
 
-	resp, err := http.Get(srv.URL + "/api/categories/ru/domains")
+	resp, err := http.Get(srv.URL + "/api/categories/geosite:ru/domains")
 	require.NoError(t, err)
 	defer resp.Body.Close()
 	assert.Equal(t, http.StatusServiceUnavailable, resp.StatusCode)

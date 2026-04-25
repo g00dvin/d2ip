@@ -283,8 +283,11 @@ func TestHandleSourcesList_ReturnsEmpty(t *testing.T) {
 		t.Fatalf("failed to parse JSON: %v", err)
 	}
 
-	if available, ok := resp["available"].(bool); !ok || available {
-		t.Errorf("expected available=false, got %v", resp["available"])
+	sources, ok := resp["sources"].([]interface{})
+	if !ok {
+		t.Errorf("expected sources array, got %T", resp["sources"])
+	} else if len(sources) != 0 {
+		t.Errorf("expected empty sources, got %d", len(sources))
 	}
 }
 
