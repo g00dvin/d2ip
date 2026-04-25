@@ -265,12 +265,12 @@ func TestHandleCacheStats_ReturnsStats(t *testing.T) {
 	}
 }
 
-func TestHandleSourceInfo_ReturnsInfo(t *testing.T) {
-	s := &Server{sourceStore: nil}
+func TestHandleSourcesList_ReturnsEmpty(t *testing.T) {
+	s := &Server{registry: nil}
 	r := chi.NewRouter()
-	r.Get("/api/source/info", s.handleSourceInfo)
+	r.Get("/api/sources", s.handleSourcesList)
 
-	req := httptest.NewRequest(http.MethodGet, "/api/source/info", nil)
+	req := httptest.NewRequest(http.MethodGet, "/api/sources", nil)
 	rec := httptest.NewRecorder()
 	r.ServeHTTP(rec, req)
 
