@@ -302,3 +302,9 @@ func (p *Provider) Close() error {
 	}
 	return nil
 }
+
+func init() {
+	sourcereg.RegisterFactory(sourcereg.TypeMMDB, func(id, prefix string, cfg map[string]any) (sourcereg.Source, error) {
+		return New(id, prefix, cfg)
+	})
+}

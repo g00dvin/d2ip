@@ -142,6 +142,18 @@ func TestGetPrefixes_UnknownCategory(t *testing.T) {
 	assert.Contains(t, err.Error(), "unknown country")
 }
 
+func TestFactory_Registered(t *testing.T) {
+	factory := sourcereg.GetFactory(sourcereg.TypeMMDB)
+	require.NotNil(t, factory, "mmdb factory should be registered")
+
+	src, err := factory("mmdb-f", "mmdb", map[string]any{
+		"file": "/tmp/test.mmdb",
+	})
+	require.NoError(t, err)
+	assert.Equal(t, "mmdb-f", src.ID())
+	assert.Equal(t, sourcereg.TypeMMDB, src.Provider())
+}
+
 func TestLoad_CountriesWhitelist(t *testing.T) {
 	p, err := New("mmdb-test", "mmdb", map[string]any{
 		"file":      "/tmp/test.mmdb",
