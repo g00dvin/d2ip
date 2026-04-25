@@ -1,9 +1,11 @@
 package mmdb
 
 import (
+	"context"
 	"net"
 	"net/netip"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -101,4 +103,69 @@ func TestLoad_MockIterator(t *testing.T) {
 	usPrefixes, err := p.GetPrefixes("mmdb:us")
 	require.NoError(t, err)
 	require.Len(t, usPrefixes, 1)
+}
+
+func TestLoad_FileNotFound(t *testing.T) {
+	p, err := New("mmdb-test", "mmdb", map[string]any{
+		"file": "/nonexistent/path/test.mmdb",
+	})
+	require.NoError(t, err)
+
+	ctx := context.Background()
+	err = p.Load(ctx)
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "open")
+}
+
+func TestGetPrefixes_NotLoaded(t *testing.T) {
+	p, err := New("mmdb-test", "mmdb", map[string]any{
+		"file": "/tmp/test.mmdb",
+	})
+	require.NoError(t, err)
+
+	_, err = p.GetPrefixes("mmdb:ru")
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "not loaded")
+}
+
+func TestGetPrefixes_UnknownCategory(t *testing.T) {
+	p, err := New("mmdb-test", "mmdb", map[string]any{
+		"file": "/tmp/test.mmdb",
+	})
+	require.NoError(t, err)
+	p.prefixes = map[string][]netip.Prefix{"ru": {netip.MustParsePrefix("1.2.3.0/24")}}
+	now := time.Now()
+	p.loadedAt = &now
+
+	_, err = p.GetPrefixes("mmdb:xx")
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "unknown country")
+}
+
+func TestLoad_CountriesWhitelist(t *testing.T) {
+	p, err := New("mmdb-test", "mmdb", map[string]any{
+		"file":      "/tmp/test.mmdb",
+		"countries": []any{"ru"},
+	})
+	require.NoError(t, err)
+
+	_, ipNet1, _ := net.ParseCIDR("1.2.3.0/24")
+	_, ipNet2, _ := net.ParseCIDR("5.6.7.0/24")
+
+	iter := &mockNetworkIterator{
+		networks: []struct {
+			ipNet  *net.IPNet
+			record map[string]interface{}
+		}{
+			{ipNet1, map[string]interface{}{"country": map[string]interface{}{"iso_code": "ru"}}},
+			{ipNet2, map[string]interface{}{"country": map[string]interface{}{"iso_code": "us"}}},
+		},
+	}
+
+	require.NoError(t, p.loadFromIterator(iter))
+
+	cats := p.Categories()
+	require.Len(t, cats, 1)
+	assert.Contains(t, cats, "mmdb:ru")
+	assert.NotContains(t, cats, "mmdb:us")
 }
