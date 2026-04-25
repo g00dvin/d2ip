@@ -26,7 +26,7 @@ func TestEventStream(t *testing.T) {
 	}()
 
 	time.Sleep(50 * time.Millisecond)
-	bus.Publish(events.Event{Type: "test", Data: "hello"})
+	bus.Publish("test", events.Event{Type: "test", Data: "hello"})
 	time.Sleep(100 * time.Millisecond)
 
 	body := rr.Body.String()
