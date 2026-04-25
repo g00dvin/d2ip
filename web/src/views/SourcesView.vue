@@ -15,6 +15,7 @@ onMounted(() => store.fetchSources())
 const providerOptions = [
   { label: 'Plaintext (domains/IPs)', value: 'plaintext' },
   { label: 'V2fly Geosite', value: 'v2flygeosite' },
+  { label: 'V2fly GeoIP', value: 'v2flygeoip' },
   { label: 'IPverse (country blocks)', value: 'ipverse' },
   { label: 'MaxMind MMDB', value: 'mmdb' },
 ]
@@ -26,6 +27,8 @@ function resetConfig(provider: string) {
   } else if (provider === 'plaintext') {
     editing.value.config = { type: 'domains', file: '' }
   } else if (provider === 'v2flygeosite') {
+    editing.value.config = { url: '', cache_path: '' }
+  } else if (provider === 'v2flygeoip') {
     editing.value.config = { url: '', cache_path: '' }
   } else if (provider === 'mmdb') {
     editing.value.config = { file: '', url: '', countries: '' }
@@ -154,6 +157,12 @@ const columns = [
         </n-form-item>
         <n-form-item v-if="editing.provider === 'v2flygeosite'" label="Cache Path">
           <n-input v-model:value="editing.config.cache_path" placeholder="/var/lib/d2ip/dlc.dat" />
+        </n-form-item>
+        <n-form-item v-if="editing.provider === 'v2flygeoip'" label="URL">
+          <n-input v-model:value="editing.config.url" placeholder="https://github.com/v2fly/geoip/releases/latest/download/geoip.dat" />
+        </n-form-item>
+        <n-form-item v-if="editing.provider === 'v2flygeoip'" label="Cache Path">
+          <n-input v-model:value="editing.config.cache_path" placeholder="/var/lib/d2ip/geoip.dat" />
         </n-form-item>
         <n-form-item v-if="editing.provider === 'ipverse'" label="Base URL">
           <n-input v-model:value="editing.config.base_url" placeholder="https://ipverse.net/ipblocks/data/countries/{country}.zone" />
