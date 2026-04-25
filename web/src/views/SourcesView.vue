@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { onMounted, ref, h } from 'vue'
+import { onMounted, ref, h, watch } from 'vue'
 import { useSourcesStore } from '@/stores/sources'
 import { useMessage, NButton } from 'naive-ui'
 import type { SourceConfig } from '@/api/types'
@@ -15,7 +15,23 @@ onMounted(() => store.fetchSources())
 const providerOptions = [
   { label: 'Plaintext (domains/IPs)', value: 'plaintext' },
   { label: 'V2fly Geosite', value: 'v2flygeosite' },
+  { label: 'IPverse (country blocks)', value: 'ipverse' },
 ]
+
+function resetConfig(provider: string) {
+  if (!editing.value) return
+  if (provider === 'ipverse') {
+    editing.value.config = { base_url: 'https://ipverse.net/ipblocks/data/countries/{country}.zone', countries: '' }
+  } else if (provider === 'plaintext') {
+    editing.value.config = { type: 'domains', file: '' }
+  } else if (provider === 'v2flygeosite') {
+    editing.value.config = { url: '', cache_path: '' }
+  }
+}
+
+watch(() => editing.value?.provider, (provider) => {
+  if (provider) resetConfig(provider)
+})
 
 function openAdd() {
   editing.value = {
@@ -34,8 +50,19 @@ async function handleSave() {
     message.error('ID and prefix are required')
     return
   }
+  const payload = { ...editing.value }
+  if (payload.provider === 'ipverse') {
+    const countries = (payload.config.countries as string)
+      .split(',')
+      .map((s: string) => s.trim())
+      .filter((s: string) => s.length > 0)
+    payload.config = {
+      base_url: payload.config.base_url,
+      countries,
+    }
+  }
   try {
-    await store.addSource(editing.value)
+    await store.addSource(payload)
     message.success('Source added')
     showModal.value = false
   } catch (e) {
@@ -114,6 +141,12 @@ const columns = [
         </n-form-item>
         <n-form-item v-if="editing.provider === 'v2flygeosite'" label="Cache Path">
           <n-input v-model:value="editing.config.cache_path" placeholder="/var/lib/d2ip/dlc.dat" />
+        </n-form-item>
+        <n-form-item v-if="editing.provider === 'ipverse'" label="Base URL">
+          <n-input v-model:value="editing.config.base_url" placeholder="https://ipverse.net/ipblocks/data/countries/{country}.zone" />
+        </n-form-item>
+        <n-form-item v-if="editing.provider === 'ipverse'" label="Countries (comma-separated)" required>
+          <n-input v-model:value="editing.config.countries" placeholder="ru, us, de, gb" />
         </n-form-item>
       </n-form>
       <template #footer>
