@@ -42,13 +42,6 @@ func setupSettingsTestServer(t *testing.T) (*Server, *config.Watcher, *settingsT
 	return server, watcher, kv
 }
 
-func withChiParam(t *testing.T, req *http.Request, key, value string) *http.Request {
-	t.Helper()
-	rctx := chi.NewRouteContext()
-	rctx.URLParams.Add(key, value)
-	return req.WithContext(context.WithValue(req.Context(), chi.RouteCtxKey, rctx))
-}
-
 func TestHandleSettingsGet_WithNilKVStore(t *testing.T) {
 	cfg := config.Defaults()
 	watcher := config.NewWatcher(cfg, 1, nil)

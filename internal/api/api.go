@@ -37,9 +37,17 @@ import (
 //go:embed web
 var webFS embed.FS
 
+// pipelineOrchestrator defines the methods the API needs from the pipeline orchestrator.
+type pipelineOrchestrator interface {
+	Run(ctx context.Context, req orchestrator.PipelineRequest) (orchestrator.PipelineReport, error)
+	Cancel() error
+	Status() orchestrator.RunStatus
+	History() []orchestrator.PipelineReport
+}
+
 // Server wraps the HTTP API with dependencies.
 type Server struct {
-	orch        *orchestrator.Orchestrator
+	orch        pipelineOrchestrator
 	router      routing.Router
 	policyRtr   routing.PolicyRouter
 	cfgWatcher  *config.Watcher
@@ -55,7 +63,7 @@ type Server struct {
 
 // New creates an API server with dependencies.
 func New(
-	orch *orchestrator.Orchestrator,
+	orch pipelineOrchestrator,
 	router routing.Router,
 	cfgWatcher *config.Watcher,
 	kvStore config.KVStore,

@@ -9,7 +9,6 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/go-chi/chi/v5"
 	"github.com/goodvin/d2ip/internal/config"
 	"github.com/goodvin/d2ip/internal/events"
 )
@@ -49,13 +48,6 @@ func setupPolicyServer(t *testing.T) (*Server, *policyTestKVStore) {
 	watcher := config.NewWatcher(cfg, 1, bus)
 	server := New(nil, nil, watcher, kv, nil, nil, nil, bus, nil)
 	return server, kv
-}
-
-func withChiParam(t *testing.T, r *http.Request, key, value string) *http.Request {
-	t.Helper()
-	rctx := chi.NewRouteContext()
-	rctx.URLParams.Add(key, value)
-	return r.WithContext(context.WithValue(r.Context(), chi.RouteCtxKey, rctx))
 }
 
 func mustMarshal(t *testing.T, v interface{}) []byte {

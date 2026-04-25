@@ -1,6 +1,7 @@
 package api
 
 import (
+	"context"
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
@@ -14,7 +15,7 @@ import (
 
 func setupCacheTestServer(t *testing.T) (*Server, *cache.SQLiteCache) {
 	t.Helper()
-	ctx := t.Context()
+	ctx := context.Background()
 	db, err := cache.Open(ctx, ":memory:")
 	if err != nil {
 		t.Fatal(err)
