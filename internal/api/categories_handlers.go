@@ -120,9 +120,10 @@ func (s *Server) handleCategoriesAdd(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Normalize: ensure "geosite:" prefix
+	// Normalize: if code has no prefix (no colon), add "geosite:" prefix.
+	// If code already has a colon (e.g. "ipverse:cn"), use it as-is.
 	code := req.Code
-	if !strings.HasPrefix(code, "geosite:") {
+	if !strings.Contains(code, ":") {
 		code = "geosite:" + code
 	}
 
@@ -159,8 +160,9 @@ func (s *Server) handleCategoriesDelete(w http.ResponseWriter, r *http.Request) 
 		return
 	}
 
-	// Normalize: ensure "geosite:" prefix
-	if !strings.HasPrefix(code, "geosite:") {
+	// Normalize: if code has no prefix (no colon), add "geosite:" prefix.
+	// If code already has a colon (e.g. "ipverse:cn"), use it as-is.
+	if !strings.Contains(code, ":") {
 		code = "geosite:" + code
 	}
 

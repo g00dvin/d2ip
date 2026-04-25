@@ -10,7 +10,11 @@ import (
 
 func (s *Server) handlePoliciesList(w http.ResponseWriter, r *http.Request) {
 	cfg := s.cfgWatcher.Current()
-	s.jsonOK(w, map[string]interface{}{"policies": cfg.Config.Routing.Policies})
+	policies := cfg.Config.Routing.Policies
+	if policies == nil {
+		policies = []config.PolicyConfig{}
+	}
+	s.jsonOK(w, map[string]interface{}{"policies": policies})
 }
 
 func (s *Server) handlePolicyGet(w http.ResponseWriter, r *http.Request) {

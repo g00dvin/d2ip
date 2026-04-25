@@ -11,7 +11,7 @@ export const usePoliciesStore = defineStore('policies', () => {
     loading.value = true
     try {
       const resp = await api.getPolicies()
-      policies.value = resp.policies
+      policies.value = resp.policies ?? []
     } finally {
       loading.value = false
     }

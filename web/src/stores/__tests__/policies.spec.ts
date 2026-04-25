@@ -36,6 +36,16 @@ describe('policies store', () => {
     expect(store.loading).toBe(false)
   })
 
+  it('defaults to empty array when API returns null policies', async () => {
+    vi.mocked(api.getPolicies).mockResolvedValue({ policies: null as any })
+
+    const store = usePoliciesStore()
+    await store.fetchPolicies()
+
+    expect(store.policies).toEqual([])
+    expect(store.loading).toBe(false)
+  })
+
   it('creates policy and refreshes list', async () => {
     const newPolicy = { name: 'test', enabled: true, categories: [], backend: 'none' as const, dry_run: false, export_format: 'plain' }
     vi.mocked(api.createPolicy).mockResolvedValue(undefined)
