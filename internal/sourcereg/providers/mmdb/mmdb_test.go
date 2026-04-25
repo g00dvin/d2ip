@@ -4,6 +4,7 @@ import (
 	"context"
 	"net"
 	"net/netip"
+	"sync"
 	"testing"
 	"time"
 
@@ -179,6 +180,33 @@ func TestClose(t *testing.T) {
 
 	require.NoError(t, p.Close())
 	assert.True(t, mock.closed)
+}
+
+func TestLoad_Concurrent(t *testing.T) {
+	p, err := New("mmdb-test", "mmdb", map[string]any{
+		"file": "/tmp/test.mmdb",
+	})
+	require.NoError(t, err)
+
+	p.prefixes = map[string][]netip.Prefix{
+		"ru": {netip.MustParsePrefix("10.0.0.0/8")},
+	}
+	now := time.Now()
+	p.loadedAt = &now
+
+	var wg sync.WaitGroup
+	for i := 0; i < 10; i++ {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			_, _ = p.GetPrefixes("mmdb:ru")
+		}()
+	}
+	wg.Wait()
+
+	prefixes, err := p.GetPrefixes("mmdb:ru")
+	require.NoError(t, err)
+	assert.Len(t, prefixes, 1)
 }
 
 func TestLoad_CountriesWhitelist(t *testing.T) {
