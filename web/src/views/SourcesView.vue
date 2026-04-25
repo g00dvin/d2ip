@@ -16,6 +16,7 @@ const providerOptions = [
   { label: 'Plaintext (domains/IPs)', value: 'plaintext' },
   { label: 'V2fly Geosite', value: 'v2flygeosite' },
   { label: 'IPverse (country blocks)', value: 'ipverse' },
+  { label: 'MaxMind MMDB', value: 'mmdb' },
 ]
 
 function resetConfig(provider: string) {
@@ -26,6 +27,8 @@ function resetConfig(provider: string) {
     editing.value.config = { type: 'domains', file: '' }
   } else if (provider === 'v2flygeosite') {
     editing.value.config = { url: '', cache_path: '' }
+  } else if (provider === 'mmdb') {
+    editing.value.config = { file: '', url: '', countries: '' }
   }
 }
 
@@ -60,6 +63,16 @@ async function handleSave() {
       base_url: payload.config.base_url,
       countries,
     }
+  } else if (payload.provider === 'mmdb') {
+    const countries = (payload.config.countries as string)
+      .split(',')
+      .map((s: string) => s.trim())
+      .filter((s: string) => s.length > 0)
+    const cfg: Record<string, unknown> = {}
+    if (payload.config.file) cfg.file = payload.config.file
+    if (payload.config.url) cfg.url = payload.config.url
+    if (countries.length > 0) cfg.countries = countries
+    payload.config = cfg
   }
   try {
     await store.addSource(payload)
@@ -147,6 +160,15 @@ const columns = [
         </n-form-item>
         <n-form-item v-if="editing.provider === 'ipverse'" label="Countries (comma-separated)" required>
           <n-input v-model:value="editing.config.countries" placeholder="ru, us, de, gb" />
+        </n-form-item>
+        <n-form-item v-if="editing.provider === 'mmdb'" label="MMDB File Path">
+          <n-input v-model:value="editing.config.file" placeholder="/var/lib/d2ip/GeoLite2-Country.mmdb" />
+        </n-form-item>
+        <n-form-item v-if="editing.provider === 'mmdb'" label="Download URL (optional)">
+          <n-input v-model:value="editing.config.url" placeholder="https://download.maxmind.com/..." />
+        </n-form-item>
+        <n-form-item v-if="editing.provider === 'mmdb'" label="Countries Whitelist (optional)">
+          <n-input v-model:value="editing.config.countries" placeholder="ru, us, de (empty = all)" />
         </n-form-item>
       </n-form>
       <template #footer>
