@@ -14,16 +14,16 @@ import (
 	"github.com/goodvin/d2ip/internal/events"
 )
 
-// mockKVStore implements config.KVStore for testing.
-type mockKVStore struct {
+// policyTestKVStore implements config.KVStore for testing.
+type policyTestKVStore struct {
 	data map[string]string
 }
 
-func newMockKVStore() *mockKVStore {
-	return &mockKVStore{data: make(map[string]string)}
+func newPolicyTestKVStore() *policyTestKVStore {
+	return &policyTestKVStore{data: make(map[string]string)}
 }
 
-func (m *mockKVStore) GetAll(ctx context.Context) (map[string]string, error) {
+func (m *policyTestKVStore) GetAll(ctx context.Context) (map[string]string, error) {
 	out := make(map[string]string, len(m.data))
 	for k, v := range m.data {
 		out[k] = v
@@ -31,19 +31,19 @@ func (m *mockKVStore) GetAll(ctx context.Context) (map[string]string, error) {
 	return out, nil
 }
 
-func (m *mockKVStore) Set(ctx context.Context, key, value string) error {
+func (m *policyTestKVStore) Set(ctx context.Context, key, value string) error {
 	m.data[key] = value
 	return nil
 }
 
-func (m *mockKVStore) Delete(ctx context.Context, key string) error {
+func (m *policyTestKVStore) Delete(ctx context.Context, key string) error {
 	delete(m.data, key)
 	return nil
 }
 
-func setupPolicyServer(t *testing.T) (*Server, *mockKVStore) {
+func setupPolicyServer(t *testing.T) (*Server, *policyTestKVStore) {
 	t.Helper()
-	kv := newMockKVStore()
+	kv := newPolicyTestKVStore()
 	cfg := config.Defaults()
 	bus := events.NewBus()
 	watcher := config.NewWatcher(cfg, 1, bus)

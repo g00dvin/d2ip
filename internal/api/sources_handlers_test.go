@@ -14,37 +14,37 @@ import (
 	"github.com/goodvin/d2ip/internal/sourcereg"
 )
 
-// mockRegistry implements sourcereg.Registry for testing.
-type mockRegistry struct {
+// sourceTestRegistry implements sourcereg.Registry for testing.
+type sourceTestRegistry struct {
 	sources []sourcereg.SourceInfo
 	added   []sourcereg.SourceConfig
 }
 
-func (m *mockRegistry) ListSources() []sourcereg.SourceInfo {
+func (m *sourceTestRegistry) ListSources() []sourcereg.SourceInfo {
 	return m.sources
 }
 
-func (m *mockRegistry) AddSource(ctx context.Context, cfg sourcereg.SourceConfig) error {
+func (m *sourceTestRegistry) AddSource(ctx context.Context, cfg sourcereg.SourceConfig) error {
 	m.added = append(m.added, cfg)
 	return nil
 }
 
-func (m *mockRegistry) RemoveSource(ctx context.Context, id string) error { return nil }
-func (m *mockRegistry) LoadAll(ctx context.Context) error                 { return nil }
-func (m *mockRegistry) Close() error                                      { return nil }
-func (m *mockRegistry) GetSource(id string) (sourcereg.Source, bool)      { return nil, false }
-func (m *mockRegistry) ListCategories() []sourcereg.CategoryInfo          { return nil }
-func (m *mockRegistry) GetDomains(category string) ([]string, error)      { return nil, nil }
-func (m *mockRegistry) GetPrefixes(category string) ([]netip.Prefix, error) {
+func (m *sourceTestRegistry) RemoveSource(ctx context.Context, id string) error { return nil }
+func (m *sourceTestRegistry) LoadAll(ctx context.Context) error                 { return nil }
+func (m *sourceTestRegistry) Close() error                                      { return nil }
+func (m *sourceTestRegistry) GetSource(id string) (sourcereg.Source, bool)      { return nil, false }
+func (m *sourceTestRegistry) ListCategories() []sourcereg.CategoryInfo          { return nil }
+func (m *sourceTestRegistry) GetDomains(category string) ([]string, error)      { return nil, nil }
+func (m *sourceTestRegistry) GetPrefixes(category string) ([]netip.Prefix, error) {
 	return nil, nil
 }
-func (m *mockRegistry) ResolveCategory(category string) (sourceID string, catType string, found bool) {
+func (m *sourceTestRegistry) ResolveCategory(category string) (sourceID string, catType string, found bool) {
 	return "", "", false
 }
 
-func setupSourceServer(t *testing.T) (*Server, *mockRegistry) {
+func setupSourceServer(t *testing.T) (*Server, *sourceTestRegistry) {
 	t.Helper()
-	reg := &mockRegistry{}
+	reg := &sourceTestRegistry{}
 	cfg := config.Defaults()
 	bus := events.NewBus()
 	watcher := config.NewWatcher(cfg, 1, bus)
