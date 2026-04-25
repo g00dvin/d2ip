@@ -4,11 +4,15 @@ import (
 	"context"
 	"fmt"
 	"net/netip"
+	"os"
+	"strings"
 	"sync"
 	"time"
 
+	"github.com/goodvin/d2ip/internal/domainlist/dlcpb"
 	"github.com/goodvin/d2ip/internal/sourcereg"
 	"github.com/goodvin/d2ip/internal/source"
+	"google.golang.org/protobuf/proto"
 )
 
 // Config is the provider-specific configuration.
@@ -114,13 +118,106 @@ func (p *Provider) Info() sourcereg.SourceInfo {
 
 // Load fetches the geoip.dat file and parses it.
 func (p *Provider) Load(ctx context.Context) error {
-	return fmt.Errorf("not implemented")
+	p.mu.Lock()
+	defer p.mu.Unlock()
+
+	p.prefixes = make(map[string][]netip.Prefix)
+	p.lastErr = ""
+	p.loadedAt = nil
+
+	refreshInterval, _ := time.ParseDuration(p.config.RefreshInterval)
+	path, _, err := p.store.Get(ctx, refreshInterval)
+	if err != nil {
+		p.lastErr = err.Error()
+		return fmt.Errorf("v2flygeoip: fetch failed: %w", err)
+	}
+
+	data, err := os.ReadFile(path)
+	if err != nil {
+		p.lastErr = err.Error()
+		return fmt.Errorf("v2flygeoip: read file: %w", err)
+	}
+
+	if err := p.loadFromData(data); err != nil {
+		p.lastErr = err.Error()
+		return err
+	}
+
+	return nil
 }
 
-// GetPrefixes returns prefixes for the given category.
+func (p *Provider) loadFromData(data []byte) error {
+	p.prefixes = make(map[string][]netip.Prefix)
+	p.lastErr = ""
+	p.loadedAt = nil
+
+	var list dlcpb.GeoIPList
+	if err := proto.Unmarshal(data, &list); err != nil {
+		return fmt.Errorf("v2flygeoip: unmarshal: %w", err)
+	}
+
+	for _, entry := range list.Entry {
+		country := strings.ToLower(entry.CountryCode)
+		if country == "" {
+			continue
+		}
+		for _, cidr := range entry.Cidr {
+			prefix, ok := cidrToPrefix(cidr)
+			if !ok {
+				continue
+			}
+			p.prefixes[country] = append(p.prefixes[country], prefix)
+		}
+	}
+
+	now := time.Now()
+	p.loadedAt = &now
+	return nil
+}
+
+func cidrToPrefix(c *dlcpb.CIDR) (netip.Prefix, bool) {
+	if c == nil || len(c.Ip) == 0 {
+		return netip.Prefix{}, false
+	}
+	addr, ok := netip.AddrFromSlice(c.Ip)
+	if !ok {
+		return netip.Prefix{}, false
+	}
+	return netip.PrefixFrom(addr, int(c.Prefix)), true
+}
+
+func marshalGeoIPList(list *dlcpb.GeoIPList) ([]byte, error) {
+	return proto.Marshal(list)
+}
+
+// GetPrefixes returns prefixes for the given category (e.g., "geoip:ru").
 func (p *Provider) GetPrefixes(category string) ([]netip.Prefix, error) {
-	return nil, fmt.Errorf("not implemented")
+	p.mu.RLock()
+	defer p.mu.RUnlock()
+
+	if p.loadedAt == nil {
+		return nil, fmt.Errorf("v2flygeoip: not loaded")
+	}
+
+	expectedPrefix := p.prefix + ":"
+	if !strings.HasPrefix(category, expectedPrefix) {
+		return nil, fmt.Errorf("v2flygeoip: unknown category %q", category)
+	}
+	country := strings.TrimPrefix(category, expectedPrefix)
+	prefixes, ok := p.prefixes[country]
+	if !ok {
+		return nil, fmt.Errorf("v2flygeoip: unknown country %q", country)
+	}
+	out := make([]netip.Prefix, len(prefixes))
+	copy(out, prefixes)
+	return out, nil
 }
 
 // Close is a no-op for this provider.
 func (p *Provider) Close() error { return nil }
+
+func init() {
+	sourcereg.RegisterFactory(sourcereg.TypeV2flyGeoIP, func(id, prefix string, cfg map[string]any) (sourcereg.Source, error) {
+		return New(id, prefix, cfg)
+	})
+}

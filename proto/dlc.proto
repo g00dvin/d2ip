@@ -38,3 +38,18 @@ message Domain {
 
   repeated Attribute attribute = 3;
 }
+
+// GeoIPList is the root message in geoip.dat (v2fly/geoip format).
+message GeoIPList {
+  repeated GeoIP entry = 1;
+}
+
+message GeoIP {
+  string country_code = 1;
+  repeated CIDR cidr = 2;
+}
+
+message CIDR {
+  bytes ip = 1;
+  uint32 prefix = 2;
+}

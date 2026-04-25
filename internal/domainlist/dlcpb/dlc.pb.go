@@ -253,6 +253,164 @@ func (x *Domain) GetAttribute() []*Domain_Attribute {
 	return nil
 }
 
+// GeoIPList is the root message in geoip.dat (v2fly/geoip format).
+type GeoIPList struct {
+	state         protoimpl.MessageState
+	sizeCache     protoimpl.SizeCache
+	unknownFields protoimpl.UnknownFields
+
+	Entry []*GeoIP `protobuf:"bytes,1,rep,name=entry,proto3" json:"entry,omitempty"`
+}
+
+func (x *GeoIPList) Reset() {
+	*x = GeoIPList{}
+	if protoimpl.UnsafeEnabled {
+		mi := &file_proto_dlc_proto_msgTypes[3]
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		ms.StoreMessageInfo(mi)
+	}
+}
+
+func (x *GeoIPList) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*GeoIPList) ProtoMessage() {}
+
+func (x *GeoIPList) ProtoReflect() protoreflect.Message {
+	mi := &file_proto_dlc_proto_msgTypes[3]
+	if protoimpl.UnsafeEnabled && x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use GeoIPList.ProtoReflect.Descriptor instead.
+func (*GeoIPList) Descriptor() ([]byte, []int) {
+	return file_proto_dlc_proto_rawDescGZIP(), []int{3}
+}
+
+func (x *GeoIPList) GetEntry() []*GeoIP {
+	if x != nil {
+		return x.Entry
+	}
+	return nil
+}
+
+type GeoIP struct {
+	state         protoimpl.MessageState
+	sizeCache     protoimpl.SizeCache
+	unknownFields protoimpl.UnknownFields
+
+	CountryCode string  `protobuf:"bytes,1,opt,name=country_code,json=countryCode,proto3" json:"country_code,omitempty"`
+	Cidr        []*CIDR `protobuf:"bytes,2,rep,name=cidr,proto3" json:"cidr,omitempty"`
+}
+
+func (x *GeoIP) Reset() {
+	*x = GeoIP{}
+	if protoimpl.UnsafeEnabled {
+		mi := &file_proto_dlc_proto_msgTypes[4]
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		ms.StoreMessageInfo(mi)
+	}
+}
+
+func (x *GeoIP) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*GeoIP) ProtoMessage() {}
+
+func (x *GeoIP) ProtoReflect() protoreflect.Message {
+	mi := &file_proto_dlc_proto_msgTypes[4]
+	if protoimpl.UnsafeEnabled && x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use GeoIP.ProtoReflect.Descriptor instead.
+func (*GeoIP) Descriptor() ([]byte, []int) {
+	return file_proto_dlc_proto_rawDescGZIP(), []int{4}
+}
+
+func (x *GeoIP) GetCountryCode() string {
+	if x != nil {
+		return x.CountryCode
+	}
+	return ""
+}
+
+func (x *GeoIP) GetCidr() []*CIDR {
+	if x != nil {
+		return x.Cidr
+	}
+	return nil
+}
+
+type CIDR struct {
+	state         protoimpl.MessageState
+	sizeCache     protoimpl.SizeCache
+	unknownFields protoimpl.UnknownFields
+
+	Ip     []byte `protobuf:"bytes,1,opt,name=ip,proto3" json:"ip,omitempty"`
+	Prefix uint32 `protobuf:"varint,2,opt,name=prefix,proto3" json:"prefix,omitempty"`
+}
+
+func (x *CIDR) Reset() {
+	*x = CIDR{}
+	if protoimpl.UnsafeEnabled {
+		mi := &file_proto_dlc_proto_msgTypes[5]
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		ms.StoreMessageInfo(mi)
+	}
+}
+
+func (x *CIDR) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*CIDR) ProtoMessage() {}
+
+func (x *CIDR) ProtoReflect() protoreflect.Message {
+	mi := &file_proto_dlc_proto_msgTypes[5]
+	if protoimpl.UnsafeEnabled && x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use CIDR.ProtoReflect.Descriptor instead.
+func (*CIDR) Descriptor() ([]byte, []int) {
+	return file_proto_dlc_proto_rawDescGZIP(), []int{5}
+}
+
+func (x *CIDR) GetIp() []byte {
+	if x != nil {
+		return x.Ip
+	}
+	return nil
+}
+
+func (x *CIDR) GetPrefix() uint32 {
+	if x != nil {
+		return x.Prefix
+	}
+	return 0
+}
+
 type Domain_Attribute struct {
 	state         protoimpl.MessageState
 	sizeCache     protoimpl.SizeCache
@@ -269,7 +427,7 @@ type Domain_Attribute struct {
 func (x *Domain_Attribute) Reset() {
 	*x = Domain_Attribute{}
 	if protoimpl.UnsafeEnabled {
-		mi := &file_proto_dlc_proto_msgTypes[3]
+		mi := &file_proto_dlc_proto_msgTypes[6]
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		ms.StoreMessageInfo(mi)
 	}
@@ -282,7 +440,7 @@ func (x *Domain_Attribute) String() string {
 func (*Domain_Attribute) ProtoMessage() {}
 
 func (x *Domain_Attribute) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_dlc_proto_msgTypes[3]
+	mi := &file_proto_dlc_proto_msgTypes[6]
 	if protoimpl.UnsafeEnabled && x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -378,10 +536,22 @@ var file_proto_dlc_proto_rawDesc = []byte{
 	0x65, 0x12, 0x09, 0x0a, 0x05, 0x50, 0x6c, 0x61, 0x69, 0x6e, 0x10, 0x00, 0x12, 0x09, 0x0a, 0x05,
 	0x52, 0x65, 0x67, 0x65, 0x78, 0x10, 0x01, 0x12, 0x0e, 0x0a, 0x0a, 0x52, 0x6f, 0x6f, 0x74, 0x44,
 	0x6f, 0x6d, 0x61, 0x69, 0x6e, 0x10, 0x02, 0x12, 0x08, 0x0a, 0x04, 0x46, 0x75, 0x6c, 0x6c, 0x10,
-	0x03, 0x42, 0x33, 0x5a, 0x31, 0x67, 0x69, 0x74, 0x68, 0x75, 0x62, 0x2e, 0x63, 0x6f, 0x6d, 0x2f,
-	0x67, 0x6f, 0x6f, 0x64, 0x76, 0x69, 0x6e, 0x2f, 0x64, 0x32, 0x69, 0x70, 0x2f, 0x69, 0x6e, 0x74,
-	0x65, 0x72, 0x6e, 0x61, 0x6c, 0x2f, 0x64, 0x6f, 0x6d, 0x61, 0x69, 0x6e, 0x6c, 0x69, 0x73, 0x74,
-	0x2f, 0x64, 0x6c, 0x63, 0x70, 0x62, 0x62, 0x06, 0x70, 0x72, 0x6f, 0x74, 0x6f, 0x33,
+	0x03, 0x22, 0x32, 0x0a, 0x09, 0x47, 0x65, 0x6f, 0x49, 0x50, 0x4c, 0x69, 0x73, 0x74, 0x12, 0x25,
+	0x0a, 0x05, 0x65, 0x6e, 0x74, 0x72, 0x79, 0x18, 0x01, 0x20, 0x03, 0x28, 0x0b, 0x32, 0x0f, 0x2e,
+	0x64, 0x32, 0x69, 0x70, 0x2e, 0x64, 0x6c, 0x63, 0x2e, 0x47, 0x65, 0x6f, 0x49, 0x50, 0x52, 0x05,
+	0x65, 0x6e, 0x74, 0x72, 0x79, 0x22, 0x4e, 0x0a, 0x05, 0x47, 0x65, 0x6f, 0x49, 0x50, 0x12, 0x21,
+	0x0a, 0x0c, 0x63, 0x6f, 0x75, 0x6e, 0x74, 0x72, 0x79, 0x5f, 0x63, 0x6f, 0x64, 0x65, 0x18, 0x01,
+	0x20, 0x01, 0x28, 0x09, 0x52, 0x0b, 0x63, 0x6f, 0x75, 0x6e, 0x74, 0x72, 0x79, 0x43, 0x6f, 0x64,
+	0x65, 0x12, 0x22, 0x0a, 0x04, 0x63, 0x69, 0x64, 0x72, 0x18, 0x02, 0x20, 0x03, 0x28, 0x0b, 0x32,
+	0x0e, 0x2e, 0x64, 0x32, 0x69, 0x70, 0x2e, 0x64, 0x6c, 0x63, 0x2e, 0x43, 0x49, 0x44, 0x52, 0x52,
+	0x04, 0x63, 0x69, 0x64, 0x72, 0x22, 0x2e, 0x0a, 0x04, 0x43, 0x49, 0x44, 0x52, 0x12, 0x0e, 0x0a,
+	0x02, 0x69, 0x70, 0x18, 0x01, 0x20, 0x01, 0x28, 0x0c, 0x52, 0x02, 0x69, 0x70, 0x12, 0x16, 0x0a,
+	0x06, 0x70, 0x72, 0x65, 0x66, 0x69, 0x78, 0x18, 0x02, 0x20, 0x01, 0x28, 0x0d, 0x52, 0x06, 0x70,
+	0x72, 0x65, 0x66, 0x69, 0x78, 0x42, 0x33, 0x5a, 0x31, 0x67, 0x69, 0x74, 0x68, 0x75, 0x62, 0x2e,
+	0x63, 0x6f, 0x6d, 0x2f, 0x67, 0x6f, 0x6f, 0x64, 0x76, 0x69, 0x6e, 0x2f, 0x64, 0x32, 0x69, 0x70,
+	0x2f, 0x69, 0x6e, 0x74, 0x65, 0x72, 0x6e, 0x61, 0x6c, 0x2f, 0x64, 0x6f, 0x6d, 0x61, 0x69, 0x6e,
+	0x6c, 0x69, 0x73, 0x74, 0x2f, 0x64, 0x6c, 0x63, 0x70, 0x62, 0x62, 0x06, 0x70, 0x72, 0x6f, 0x74,
+	0x6f, 0x33,
 }
 
 var (
@@ -397,24 +567,29 @@ func file_proto_dlc_proto_rawDescGZIP() []byte {
 }
 
 var file_proto_dlc_proto_enumTypes = make([]protoimpl.EnumInfo, 1)
-var file_proto_dlc_proto_msgTypes = make([]protoimpl.MessageInfo, 4)
+var file_proto_dlc_proto_msgTypes = make([]protoimpl.MessageInfo, 7)
 var file_proto_dlc_proto_goTypes = []interface{}{
 	(Domain_Type)(0),         // 0: d2ip.dlc.Domain.Type
 	(*GeoSiteList)(nil),      // 1: d2ip.dlc.GeoSiteList
 	(*GeoSite)(nil),          // 2: d2ip.dlc.GeoSite
 	(*Domain)(nil),           // 3: d2ip.dlc.Domain
-	(*Domain_Attribute)(nil), // 4: d2ip.dlc.Domain.Attribute
+	(*GeoIPList)(nil),        // 4: d2ip.dlc.GeoIPList
+	(*GeoIP)(nil),            // 5: d2ip.dlc.GeoIP
+	(*CIDR)(nil),             // 6: d2ip.dlc.CIDR
+	(*Domain_Attribute)(nil), // 7: d2ip.dlc.Domain.Attribute
 }
 var file_proto_dlc_proto_depIdxs = []int32{
 	2, // 0: d2ip.dlc.GeoSiteList.entry:type_name -> d2ip.dlc.GeoSite
 	3, // 1: d2ip.dlc.GeoSite.domain:type_name -> d2ip.dlc.Domain
 	0, // 2: d2ip.dlc.Domain.type:type_name -> d2ip.dlc.Domain.Type
-	4, // 3: d2ip.dlc.Domain.attribute:type_name -> d2ip.dlc.Domain.Attribute
-	4, // [4:4] is the sub-list for method output_type
-	4, // [4:4] is the sub-list for method input_type
-	4, // [4:4] is the sub-list for extension type_name
-	4, // [4:4] is the sub-list for extension extendee
-	0, // [0:4] is the sub-list for field type_name
+	7, // 3: d2ip.dlc.Domain.attribute:type_name -> d2ip.dlc.Domain.Attribute
+	5, // 4: d2ip.dlc.GeoIPList.entry:type_name -> d2ip.dlc.GeoIP
+	6, // 5: d2ip.dlc.GeoIP.cidr:type_name -> d2ip.dlc.CIDR
+	6, // [6:6] is the sub-list for method output_type
+	6, // [6:6] is the sub-list for method input_type
+	6, // [6:6] is the sub-list for extension type_name
+	6, // [6:6] is the sub-list for extension extendee
+	0, // [0:6] is the sub-list for field type_name
 }
 
 func init() { file_proto_dlc_proto_init() }
@@ -460,6 +635,42 @@ func file_proto_dlc_proto_init() {
 			}
 		}
 		file_proto_dlc_proto_msgTypes[3].Exporter = func(v interface{}, i int) interface{} {
+			switch v := v.(*GeoIPList); i {
+			case 0:
+				return &v.state
+			case 1:
+				return &v.sizeCache
+			case 2:
+				return &v.unknownFields
+			default:
+				return nil
+			}
+		}
+		file_proto_dlc_proto_msgTypes[4].Exporter = func(v interface{}, i int) interface{} {
+			switch v := v.(*GeoIP); i {
+			case 0:
+				return &v.state
+			case 1:
+				return &v.sizeCache
+			case 2:
+				return &v.unknownFields
+			default:
+				return nil
+			}
+		}
+		file_proto_dlc_proto_msgTypes[5].Exporter = func(v interface{}, i int) interface{} {
+			switch v := v.(*CIDR); i {
+			case 0:
+				return &v.state
+			case 1:
+				return &v.sizeCache
+			case 2:
+				return &v.unknownFields
+			default:
+				return nil
+			}
+		}
+		file_proto_dlc_proto_msgTypes[6].Exporter = func(v interface{}, i int) interface{} {
 			switch v := v.(*Domain_Attribute); i {
 			case 0:
 				return &v.state
@@ -472,7 +683,7 @@ func file_proto_dlc_proto_init() {
 			}
 		}
 	}
-	file_proto_dlc_proto_msgTypes[3].OneofWrappers = []interface{}{
+	file_proto_dlc_proto_msgTypes[6].OneofWrappers = []interface{}{
 		(*Domain_Attribute_BoolValue)(nil),
 		(*Domain_Attribute_IntValue)(nil),
 	}
@@ -482,7 +693,7 @@ func file_proto_dlc_proto_init() {
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: file_proto_dlc_proto_rawDesc,
 			NumEnums:      1,
-			NumMessages:   4,
+			NumMessages:   7,
 			NumExtensions: 0,
 			NumServices:   0,
 		},
