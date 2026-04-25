@@ -117,7 +117,7 @@ func (m *mockCache) SnapshotForDomains(ctx context.Context, domains []string) ([
 	return []netip.Addr{netip.MustParseAddr("1.2.3.4")}, nil, nil
 }
 func (m *mockCache) Stats(ctx context.Context) (cache.Stats, error) { return cache.Stats{}, nil }
-func (m *mockCache) Vacuum(ctx context.Context, olderThan time.Duration) (int64, error) {
+func (m *mockCache) Vacuum(ctx context.Context, olderThan time.Duration) (int, error) {
 	return 0, nil
 }
 func (m *mockCache) Close() error { return nil }
