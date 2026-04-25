@@ -33,7 +33,7 @@ func TestEventStream(t *testing.T) {
 	if !strings.Contains(body, "event: config_changed") {
 		t.Errorf("expected 'event: config_changed' in body, got:\n%s", body)
 	}
-	if !strings.Contains(body, "data: hello") {
-		t.Errorf("expected 'data: hello' in body, got:\n%s", body)
+	if !strings.Contains(body, "data: \"hello\"") {
+		t.Errorf("expected 'data: \"hello\"' in body, got:\n%s", body)
 	}
 }
