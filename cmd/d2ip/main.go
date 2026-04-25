@@ -24,6 +24,11 @@ import (
 	"github.com/goodvin/d2ip/internal/routing"
 	"github.com/goodvin/d2ip/internal/scheduler"
 	"github.com/goodvin/d2ip/internal/sourcereg"
+	_ "github.com/goodvin/d2ip/internal/sourcereg/providers/ipverse"
+	_ "github.com/goodvin/d2ip/internal/sourcereg/providers/mmdb"
+	_ "github.com/goodvin/d2ip/internal/sourcereg/providers/plaintext"
+	_ "github.com/goodvin/d2ip/internal/sourcereg/providers/v2flygeosite"
+	_ "github.com/goodvin/d2ip/internal/sourcereg/providers/v2flygeoip"
 	"github.com/goodvin/d2ip/internal/source"
 	"github.com/rs/zerolog/log"
 )
