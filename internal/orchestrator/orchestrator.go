@@ -449,14 +449,6 @@ func (o *Orchestrator) runPolicy(ctx context.Context, policy config.PolicyConfig
 		}
 	}
 
-	// Convert resolved addresses to prefixes
-	for _, addr := range ipv4Addrs {
-		ipv4Prefixes = append(ipv4Prefixes, netip.PrefixFrom(addr, 32))
-	}
-	for _, addr := range ipv6Addrs {
-		ipv6Prefixes = append(ipv6Prefixes, netip.PrefixFrom(addr, 128))
-	}
-
 	// Aggregate per policy
 	var v4Out, v6Out []netip.Prefix
 	if policy.Aggregation != nil && policy.Aggregation.Enabled {
@@ -471,15 +463,24 @@ func (o *Orchestrator) runPolicy(ctx context.Context, policy config.PolicyConfig
 		case config.AggAggressive:
 			level = aggregator.AggAggressive
 		}
-		v4Out = o.aggregator.AggregateV4(ipv4Prefixes, level, policy.Aggregation.V4MaxPrefix)
-		v6Out = o.aggregator.AggregateV6(ipv6Prefixes, level, policy.Aggregation.V6MaxPrefix)
+		v4Out = o.aggregator.AggregateV4(ipv4Addrs, level, policy.Aggregation.V4MaxPrefix)
+		v6Out = o.aggregator.AggregateV6(ipv6Addrs, level, policy.Aggregation.V6MaxPrefix)
 	} else if cfg.Aggregation.Enabled {
-		v4Out = o.aggregator.AggregateV4(ipv4Prefixes, aggLevel, cfg.Aggregation.V4MaxPrefix)
-		v6Out = o.aggregator.AggregateV6(ipv6Prefixes, aggLevel, cfg.Aggregation.V6MaxPrefix)
+		v4Out = o.aggregator.AggregateV4(ipv4Addrs, aggLevel, cfg.Aggregation.V4MaxPrefix)
+		v6Out = o.aggregator.AggregateV6(ipv6Addrs, aggLevel, cfg.Aggregation.V6MaxPrefix)
 	} else {
-		v4Out = ipv4Prefixes
-		v6Out = ipv6Prefixes
+		// No aggregation: convert addresses to /32 and /128
+		for _, addr := range ipv4Addrs {
+			v4Out = append(v4Out, netip.PrefixFrom(addr, 32))
+		}
+		for _, addr := range ipv6Addrs {
+			v6Out = append(v6Out, netip.PrefixFrom(addr, 128))
+		}
 	}
+
+	// Merge in direct IP prefixes from prefix sources
+	v4Out = append(v4Out, ipv4Prefixes...)
+	v6Out = append(v6Out, ipv6Prefixes...)
 
 	// Dry run: compute outputs but skip export and routing
 	if req.DryRun || policy.DryRun {
