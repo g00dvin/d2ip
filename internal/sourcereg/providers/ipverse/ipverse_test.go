@@ -70,3 +70,62 @@ func TestLoad_HappyPath(t *testing.T) {
 	require.Len(t, usPrefixes, 1)
 	assert.Equal(t, "5.6.7.8/32", usPrefixes[0].String())
 }
+
+func TestLoad_HTTPError(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusNotFound)
+	}))
+	defer server.Close()
+
+	p, err := New("ipverse-test", "ipverse", map[string]any{
+		"base_url":  server.URL + "/{country}.zone",
+		"countries": []any{"ru"},
+	})
+	require.NoError(t, err)
+
+	ctx := context.Background()
+	err = p.Load(ctx)
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "HTTP 404")
+
+	info := p.Info()
+	assert.NotEmpty(t, info.LastError)
+	assert.Nil(t, info.LastFetched)
+}
+
+func TestNew_EmptyCountries(t *testing.T) {
+	_, err := New("ipverse-test", "ipverse", map[string]any{})
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "countries is required")
+}
+
+func TestGetPrefixes_NotLoaded(t *testing.T) {
+	p, err := New("ipverse-test", "ipverse", map[string]any{
+		"countries": []any{"ru"},
+	})
+	require.NoError(t, err)
+
+	_, err = p.GetPrefixes("ipverse:ru")
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "not loaded")
+}
+
+func TestGetPrefixes_UnknownCategory(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		fmt.Fprintln(w, "10.0.0.0/8")
+	}))
+	defer server.Close()
+
+	p, err := New("ipverse-test", "ipverse", map[string]any{
+		"base_url":  server.URL + "/{country}.zone",
+		"countries": []any{"ru"},
+	})
+	require.NoError(t, err)
+
+	ctx := context.Background()
+	require.NoError(t, p.Load(ctx))
+
+	_, err = p.GetPrefixes("ipverse:xx")
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "unknown country")
+}

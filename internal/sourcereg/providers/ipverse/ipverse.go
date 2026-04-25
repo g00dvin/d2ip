@@ -165,6 +165,10 @@ func (p *Provider) GetPrefixes(category string) ([]netip.Prefix, error) {
 	p.mu.RLock()
 	defer p.mu.RUnlock()
 
+	if p.loadedAt == nil {
+		return nil, fmt.Errorf("ipverse: not loaded")
+	}
+
 	expectedPrefix := p.prefix + ":"
 	if !strings.HasPrefix(category, expectedPrefix) {
 		return nil, fmt.Errorf("ipverse: unknown category %q", category)
@@ -173,9 +177,6 @@ func (p *Provider) GetPrefixes(category string) ([]netip.Prefix, error) {
 	prefixes, ok := p.prefixes[country]
 	if !ok {
 		return nil, fmt.Errorf("ipverse: unknown country %q", country)
-	}
-	if p.loadedAt == nil {
-		return nil, fmt.Errorf("ipverse: not loaded")
 	}
 	out := make([]netip.Prefix, len(prefixes))
 	copy(out, prefixes)
