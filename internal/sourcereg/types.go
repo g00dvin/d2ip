@@ -96,6 +96,10 @@ type Source interface {
 // Registry manages the lifecycle of all configured sources.
 // Implementations must be safe for concurrent use.
 type Registry interface {
+	// AddSource creates or updates a source and persists it.
+	AddSource(ctx context.Context, cfg SourceConfig) error
+	// RemoveSource deletes a source by ID.
+	RemoveSource(ctx context.Context, id string) error
 	// LoadAll loads/reloads all enabled sources.
 	LoadAll(ctx context.Context) error
 	// Close releases all resources held by the registry and its sources.
