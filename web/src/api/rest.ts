@@ -83,6 +83,15 @@ export async function refreshSource(id: string): Promise<{ status: string; info:
   return data
 }
 
+export async function uploadSourceFile(file: File): Promise<{ path: string }> {
+  const formData = new FormData()
+  formData.append('file', file)
+  const { data } = await client.post('/api/sources/upload', formData, {
+    headers: { 'Content-Type': 'multipart/form-data' },
+  })
+  return data
+}
+
 // Settings
 export async function getSettings(): Promise<SettingsResponse> {
   const { data } = await client.get<SettingsResponse>('/api/settings')

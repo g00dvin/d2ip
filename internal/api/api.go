@@ -142,6 +142,7 @@ func (s *Server) Handler() http.Handler {
 		cr.Put("/api/sources/{id}", s.handleSourceUpdate)
 		cr.Delete("/api/sources/{id}", s.handleSourceDelete)
 		cr.Post("/api/sources/{id}/refresh", s.handleSourceRefresh)
+		cr.Post("/api/sources/upload", s.handleSourceUpload)
 
 		// Legacy source endpoints (redirect to registry)
 		cr.Get("/api/source/info", s.handleSourcesList)

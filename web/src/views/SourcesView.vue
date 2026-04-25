@@ -1,7 +1,8 @@
 <script setup lang="ts">
 import { onMounted, ref, h, watch } from 'vue'
 import { useSourcesStore } from '@/stores/sources'
-import { useMessage, NButton } from 'naive-ui'
+import { useMessage, NButton, NUpload } from 'naive-ui'
+import * as api from '@/api/rest'
 import type { SourceConfig } from '@/api/types'
 
 const store = useSourcesStore()
@@ -179,6 +180,20 @@ async function handleRefresh(id: string) {
   }
 }
 
+async function handleFileUpload({ file, onFinish, onError }: any) {
+  try {
+    const result = await api.uploadSourceFile(file.file)
+    if (editing.value) {
+      editing.value.config.file = result.path
+    }
+    message.success('File uploaded')
+    onFinish()
+  } catch (e) {
+    message.error('Upload failed')
+    onError()
+  }
+}
+
 const columns = [
   { title: 'ID', key: 'id' },
   { title: 'Provider', key: 'provider' },
@@ -248,6 +263,15 @@ const columns = [
         </n-form-item>
         <n-form-item v-if="editing.provider === 'plaintext'" label="File Path">
           <n-input v-model:value="editing.config.file" placeholder="/var/lib/d2ip/sources/mylist.txt" />
+        </n-form-item>
+        <n-form-item v-if="editing.provider === 'plaintext'" label="Or Upload File">
+          <n-upload
+            :custom-request="handleFileUpload"
+            :max="1"
+            accept=".txt"
+          >
+            <n-button>Click to Upload</n-button>
+          </n-upload>
         </n-form-item>
         <n-form-item v-if="editing.provider === 'v2flygeosite'" label="URL">
           <n-input v-model:value="editing.config.url" placeholder="https://github.com/..." />

@@ -2,9 +2,15 @@ package api
 
 import (
 	"encoding/json"
+	"fmt"
+	"io"
 	"net/http"
+	"os"
+	"path/filepath"
+	"strings"
 
 	"github.com/go-chi/chi/v5"
+	"github.com/google/uuid"
 	"github.com/goodvin/d2ip/internal/sourcereg"
 	"github.com/rs/zerolog/log"
 )
@@ -153,4 +159,46 @@ func (s *Server) handleSourceFetchLegacy(w http.ResponseWriter, r *http.Request)
 		return
 	}
 	s.jsonOK(w, map[string]string{"status": "ok"})
+}
+
+// handleSourceUpload accepts a plaintext file upload and returns the saved path.
+func (s *Server) handleSourceUpload(w http.ResponseWriter, r *http.Request) {
+	if err := r.ParseMultipartForm(10 << 20); err != nil {
+		s.jsonError(w, http.StatusBadRequest, fmt.Sprintf("parse form: %v", err))
+		return
+	}
+
+	file, header, err := r.FormFile("file")
+	if err != nil {
+		s.jsonError(w, http.StatusBadRequest, fmt.Sprintf("get file: %v", err))
+		return
+	}
+	defer file.Close()
+
+	if !strings.HasSuffix(strings.ToLower(header.Filename), ".txt") {
+		s.jsonError(w, http.StatusBadRequest, "only .txt files allowed")
+		return
+	}
+
+	dir := "/tmp/d2ip-uploads"
+	if err := os.MkdirAll(dir, 0755); err != nil {
+		s.jsonError(w, http.StatusInternalServerError, fmt.Sprintf("mkdir: %v", err))
+		return
+	}
+
+	path := filepath.Join(dir, fmt.Sprintf("%s.txt", uuid.NewString()))
+	f, err := os.Create(path)
+	if err != nil {
+		s.jsonError(w, http.StatusInternalServerError, fmt.Sprintf("create file: %v", err))
+		return
+	}
+	defer f.Close()
+
+	if _, err := io.Copy(f, file); err != nil {
+		os.Remove(path)
+		s.jsonError(w, http.StatusInternalServerError, fmt.Sprintf("copy: %v", err))
+		return
+	}
+
+	s.jsonOK(w, map[string]string{"path": path})
 }
