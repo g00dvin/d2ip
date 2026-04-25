@@ -142,6 +142,18 @@ func serveCmd() {
 	defer cacheDB.Close()
 	log.Info().Str("db", dbPath).Msg("Cache database ready")
 
+	// Apply KV overrides from cache database (highest priority)
+	kvOverrides, err := cacheDB.GetAll(ctx)
+	if err != nil {
+		log.Warn().Err(err).Msg("Failed to load KV overrides from cache")
+	} else if len(kvOverrides) > 0 {
+		if err := config.ApplyOverrides(cfg, kvOverrides); err != nil {
+			log.Warn().Err(err).Msg("Failed to apply KV overrides from cache")
+		} else {
+			log.Info().Int("overrides", len(kvOverrides)).Msg("Applied KV overrides from cache")
+		}
+	}
+
 	// Create source registry
 	registry, err := sourcereg.NewDBRegistry(cacheDB.DB())
 	if err != nil {

@@ -257,5 +257,20 @@ func (c Config) Clone() Config {
 			out.Sources[i] = s
 		}
 	}
+	if c.Routing.Policies != nil {
+		out.Routing.Policies = make([]PolicyConfig, len(c.Routing.Policies))
+		for i, pol := range c.Routing.Policies {
+			p := pol
+			if pol.Categories != nil {
+				p.Categories = make([]string, len(pol.Categories))
+				copy(p.Categories, pol.Categories)
+			}
+			if pol.Aggregation != nil {
+				agg := *pol.Aggregation
+				p.Aggregation = &agg
+			}
+			out.Routing.Policies[i] = p
+		}
+	}
 	return out
 }

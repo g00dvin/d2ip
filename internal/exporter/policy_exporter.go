@@ -46,8 +46,8 @@ func (e *PolicyExporter) WritePolicy(ctx context.Context, policy config.PolicyCo
 	v4Path := filepath.Join(dir, "ipv4."+extForFormat(format))
 	v6Path := filepath.Join(dir, "ipv6."+extForFormat(format))
 
-	v4Data := formatPrefixes(format, policy.Name, v4, "v4")
-	v6Data := formatPrefixes(format, policy.Name, v6, "v6")
+	v4Data := formatPrefixesForPolicy(format, policy.Name, v4, "v4")
+	v6Data := formatPrefixesForPolicy(format, policy.Name, v6, "v6")
 
 	if err := os.WriteFile(v4Path, []byte(v4Data), 0644); err != nil {
 		return PolicyExportReport{}, fmt.Errorf("write v4: %w", err)
@@ -85,7 +85,7 @@ func extForFormat(format string) string {
 	}
 }
 
-func formatPrefixes(format, policyName string, prefixes []netip.Prefix, family string) string {
+func formatPrefixesForPolicy(format, policyName string, prefixes []netip.Prefix, family string) string {
 	switch format {
 	case "ipset":
 		return formatIPSet(policyName, family, prefixes)
@@ -101,6 +101,34 @@ func formatPrefixes(format, policyName string, prefixes []netip.Prefix, family s
 		return formatYAML(policyName, family, prefixes)
 	default:
 		return formatPlain(prefixes)
+	}
+}
+
+func formatPrefixes(prefixes []string, format string) (string, error) {
+	var parsed []netip.Prefix
+	for _, s := range prefixes {
+		p, err := netip.ParsePrefix(s)
+		if err != nil {
+			return "", err
+		}
+		parsed = append(parsed, p)
+	}
+
+	switch format {
+	case "ipset":
+		return formatIPSet("policy", "v4", parsed), nil
+	case "json":
+		return formatJSON("policy", "v4", parsed), nil
+	case "nft":
+		return formatNFT("policy", "v4", parsed), nil
+	case "iptables":
+		return formatIPTables("v4", parsed), nil
+	case "bgp":
+		return formatBGP("policy", parsed), nil
+	case "yaml":
+		return formatYAML("policy", "v4", parsed), nil
+	default:
+		return formatPlain(parsed), nil
 	}
 }
 
@@ -134,7 +162,7 @@ func formatJSON(policyName, family string, prefixes []netip.Prefix) string {
 func formatNFT(policyName, family string, prefixes []netip.Prefix) string {
 	var lines []string
 	for _, p := range prefixes {
-		lines = append(lines, fmt.Sprintf("add element inet d2ip %s_%s { %s }", policyName, family, p.String()))
+		lines = append(lines, fmt.Sprintf("add elements inet d2ip %s_%s { %s }", policyName, family, p.String()))
 	}
 	return strings.Join(lines, "\n") + "\n"
 }
@@ -154,7 +182,7 @@ func formatIPTables(family string, prefixes []netip.Prefix) string {
 func formatBGP(policyName string, prefixes []netip.Prefix) string {
 	var lines []string
 	for _, p := range prefixes {
-		lines = append(lines, fmt.Sprintf("%s\t%s", p.String(), policyName))
+		lines = append(lines, fmt.Sprintf("network %s", p.String()))
 	}
 	return strings.Join(lines, "\n") + "\n"
 }

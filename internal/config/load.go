@@ -254,6 +254,7 @@ func applyDefaultsToViper(v *viper.Viper, d Config) {
 
 	v.SetDefault("routing.enabled", d.Routing.Enabled)
 	v.SetDefault("routing.state_dir", d.Routing.StateDir)
+	v.SetDefault("routing.policies", []map[string]any{})
 
 	v.SetDefault("scheduler.dlc_refresh", d.Scheduler.DLCRefresh)
 	v.SetDefault("scheduler.resolve_cycle", d.Scheduler.ResolveCycle)

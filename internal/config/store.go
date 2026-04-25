@@ -125,6 +125,13 @@ func coerceKVValue(key, raw string) (any, error) {
 		}
 		return items, nil
 	}
+	if key == "routing.policies" {
+		var items []PolicyConfig
+		if err := json.Unmarshal([]byte(raw), &items); err != nil {
+			return nil, err
+		}
+		return items, nil
+	}
 	switch key {
 	// Durations.
 	case "source.refresh_interval", "source.http_timeout",
@@ -225,6 +232,34 @@ func seedViperFromConfig(v *viper.Viper, c Config) {
 
 	v.Set("routing.enabled", c.Routing.Enabled)
 	v.Set("routing.state_dir", c.Routing.StateDir)
+	if len(c.Routing.Policies) > 0 {
+		pols := make([]map[string]any, 0, len(c.Routing.Policies))
+		for _, pol := range c.Routing.Policies {
+			pm := map[string]any{
+				"name":          pol.Name,
+				"enabled":       pol.Enabled,
+				"categories":    pol.Categories,
+				"backend":       string(pol.Backend),
+				"table_id":      pol.TableID,
+				"iface":         pol.Iface,
+				"nft_table":     pol.NFTTable,
+				"nft_set_v4":    pol.NFTSetV4,
+				"nft_set_v6":    pol.NFTSetV6,
+				"dry_run":       pol.DryRun,
+				"export_format": pol.ExportFormat,
+			}
+			if pol.Aggregation != nil {
+				pm["aggregation"] = map[string]any{
+					"enabled":      pol.Aggregation.Enabled,
+					"level":        string(pol.Aggregation.Level),
+					"v4_max_prefix": pol.Aggregation.V4MaxPrefix,
+					"v6_max_prefix": pol.Aggregation.V6MaxPrefix,
+				}
+			}
+			pols = append(pols, pm)
+		}
+		v.Set("routing.policies", pols)
+	}
 
 	v.Set("scheduler.dlc_refresh", c.Scheduler.DLCRefresh)
 	v.Set("scheduler.resolve_cycle", c.Scheduler.ResolveCycle)

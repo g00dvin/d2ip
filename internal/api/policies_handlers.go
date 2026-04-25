@@ -1,7 +1,9 @@
 package api
 
 import (
+	"context"
 	"encoding/json"
+	"fmt"
 	"net/http"
 	"strings"
 
@@ -34,6 +36,18 @@ func (s *Server) handlePolicyGet(w http.ResponseWriter, r *http.Request) {
 	s.jsonError(w, http.StatusNotFound, "policy not found: "+name)
 }
 
+// persistPolicies writes the current routing policies to kvStore for durability.
+func (s *Server) persistPolicies(ctx context.Context, cfg config.Config) error {
+	if s.kvStore == nil {
+		return nil
+	}
+	data, err := json.Marshal(cfg.Routing.Policies)
+	if err != nil {
+		return fmt.Errorf("marshal policies: %w", err)
+	}
+	return s.kvStore.Set(ctx, "routing.policies", string(data))
+}
+
 func (s *Server) handlePolicyCreate(w http.ResponseWriter, r *http.Request) {
 	var policy config.PolicyConfig
 	if err := json.NewDecoder(r.Body).Decode(&policy); err != nil {
@@ -60,6 +74,9 @@ func (s *Server) handlePolicyCreate(w http.ResponseWriter, r *http.Request) {
 		log.Error().Err(err).Str("name", policy.Name).Msg("api: failed to create policy")
 		s.jsonError(w, http.StatusInternalServerError, "failed to update config: "+err.Error())
 		return
+	}
+	if err := s.persistPolicies(r.Context(), cfg); err != nil {
+		log.Error().Err(err).Str("name", policy.Name).Msg("api: failed to persist policies to KV")
 	}
 
 	log.Info().Str("name", policy.Name).Str("backend", string(policy.Backend)).Int("categories", len(policy.Categories)).Msg("api: policy created")
@@ -103,6 +120,9 @@ func (s *Server) handlePolicyUpdate(w http.ResponseWriter, r *http.Request) {
 		s.jsonError(w, http.StatusInternalServerError, "failed to update config: "+err.Error())
 		return
 	}
+	if err := s.persistPolicies(r.Context(), cfg); err != nil {
+		log.Error().Err(err).Str("name", name).Msg("api: failed to persist policies to KV")
+	}
 
 	log.Info().Str("name", name).Str("backend", string(policy.Backend)).Int("categories", len(policy.Categories)).Msg("api: policy updated")
 	s.jsonOK(w, map[string]string{"status": "ok"})
@@ -133,6 +153,9 @@ func (s *Server) handlePolicyDelete(w http.ResponseWriter, r *http.Request) {
 		log.Error().Err(err).Str("name", name).Msg("api: failed to delete policy")
 		s.jsonError(w, http.StatusInternalServerError, "failed to update config: "+err.Error())
 		return
+	}
+	if err := s.persistPolicies(r.Context(), cfg); err != nil {
+		log.Error().Err(err).Str("name", name).Msg("api: failed to persist policies to KV")
 	}
 
 	log.Info().Str("name", name).Msg("api: policy deleted")
