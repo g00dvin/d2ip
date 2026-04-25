@@ -1,9 +1,13 @@
 package ipverse
 
 import (
+	"bufio"
 	"context"
 	"fmt"
+	"io"
+	"net/http"
 	"net/netip"
+	"strings"
 	"sync"
 	"time"
 
@@ -87,12 +91,95 @@ func (p *Provider) Info() sourcereg.SourceInfo {
 
 // Load fetches IP block lists for all configured countries.
 func (p *Provider) Load(ctx context.Context) error {
-	return fmt.Errorf("not implemented")
+	p.mu.Lock()
+	defer p.mu.Unlock()
+
+	p.prefixes = make(map[string][]netip.Prefix)
+	p.lastErr = ""
+	p.loadedAt = nil
+
+	client := &http.Client{Timeout: 30 * time.Second}
+
+	for _, country := range p.config.Countries {
+		url := strings.ReplaceAll(p.config.BaseURL, "{country}", country)
+		prefixes, err := fetchCountry(ctx, client, url)
+		if err != nil {
+			p.lastErr = err.Error()
+			return fmt.Errorf("ipverse: fetch %s: %w", country, err)
+		}
+		p.prefixes[country] = prefixes
+	}
+
+	now := time.Now()
+	p.loadedAt = &now
+	return nil
 }
 
-// GetPrefixes returns prefixes for the given category.
+func fetchCountry(ctx context.Context, client *http.Client, url string) ([]netip.Prefix, error) {
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
+	if err != nil {
+		return nil, err
+	}
+	resp, err := client.Do(req)
+	if err != nil {
+		return nil, err
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		return nil, fmt.Errorf("HTTP %d", resp.StatusCode)
+	}
+	return parsePrefixes(resp.Body)
+}
+
+func parsePrefixes(r io.Reader) ([]netip.Prefix, error) {
+	var prefixes []netip.Prefix
+	scanner := bufio.NewScanner(r)
+	for scanner.Scan() {
+		line := strings.TrimSpace(scanner.Text())
+		if line == "" || strings.HasPrefix(line, "#") {
+			continue
+		}
+		prefix, err := netip.ParsePrefix(line)
+		if err != nil {
+			addr, err2 := netip.ParseAddr(line)
+			if err2 == nil {
+				if addr.Is4() {
+					prefix = netip.PrefixFrom(addr, 32)
+				} else {
+					prefix = netip.PrefixFrom(addr, 128)
+				}
+			} else {
+				continue // skip invalid lines
+			}
+		}
+		prefixes = append(prefixes, prefix)
+	}
+	if err := scanner.Err(); err != nil {
+		return nil, err
+	}
+	return prefixes, nil
+}
+
+// GetPrefixes returns prefixes for the given category (e.g., "ipverse:ru").
 func (p *Provider) GetPrefixes(category string) ([]netip.Prefix, error) {
-	return nil, fmt.Errorf("not implemented")
+	p.mu.RLock()
+	defer p.mu.RUnlock()
+
+	expectedPrefix := p.prefix + ":"
+	if !strings.HasPrefix(category, expectedPrefix) {
+		return nil, fmt.Errorf("ipverse: unknown category %q", category)
+	}
+	country := strings.TrimPrefix(category, expectedPrefix)
+	prefixes, ok := p.prefixes[country]
+	if !ok {
+		return nil, fmt.Errorf("ipverse: unknown country %q", country)
+	}
+	if p.loadedAt == nil {
+		return nil, fmt.Errorf("ipverse: not loaded")
+	}
+	out := make([]netip.Prefix, len(prefixes))
+	copy(out, prefixes)
+	return out, nil
 }
 
 // Close is a no-op for IPverse provider.
