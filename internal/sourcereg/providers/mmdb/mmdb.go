@@ -3,7 +3,12 @@ package mmdb
 import (
 	"context"
 	"fmt"
+	"io"
+	"net"
+	"net/http"
 	"net/netip"
+	"os"
+	"strings"
 	"sync"
 	"time"
 
@@ -20,7 +25,7 @@ type Config struct {
 
 // mmdbReader is the subset of maxminddb.Reader we use.
 type mmdbReader interface {
-	Networks(skipAliasedNetworks bool) (*maxminddb.Networks, error)
+	Networks(options ...maxminddb.NetworksOption) *maxminddb.Networks
 	Close() error
 }
 
@@ -94,14 +99,198 @@ func (p *Provider) Info() sourcereg.SourceInfo {
 	}
 }
 
-// Load reads the MMDB file and groups prefixes by country.
-func (p *Provider) Load(ctx context.Context) error {
-	return fmt.Errorf("not implemented")
+// networkIterator abstracts maxminddb network iteration for testability.
+type networkIterator interface {
+	Next() bool
+	Network() *net.IPNet
+	Record() interface{}
 }
 
-// GetPrefixes returns prefixes for the given category.
+// loadFromIterator extracts prefixes from a network iterator.
+func (p *Provider) loadFromIterator(iter networkIterator) error {
+	p.prefixes = make(map[string][]netip.Prefix)
+	p.lastErr = ""
+	p.loadedAt = nil
+
+	whitelist := make(map[string]bool)
+	for _, c := range p.config.Countries {
+		whitelist[c] = true
+	}
+
+	for iter.Next() {
+		ipNet := iter.Network()
+		prefix, ok := netipPrefixFromIPNet(ipNet)
+		if !ok {
+			continue
+		}
+
+		country := extractCountry(iter.Record())
+		if country == "" {
+			continue
+		}
+		if len(whitelist) > 0 && !whitelist[country] {
+			continue
+		}
+		p.prefixes[country] = append(p.prefixes[country], prefix)
+	}
+
+	now := time.Now()
+	p.loadedAt = &now
+	return nil
+}
+
+func extractCountry(record interface{}) string {
+	m, ok := record.(map[string]interface{})
+	if !ok {
+		return ""
+	}
+	country, ok := m["country"].(map[string]interface{})
+	if !ok {
+		return ""
+	}
+	iso, ok := country["iso_code"].(string)
+	if !ok {
+		return ""
+	}
+	return iso
+}
+
+func netipPrefixFromIPNet(ipNet *net.IPNet) (netip.Prefix, bool) {
+	if ipNet == nil {
+		return netip.Prefix{}, false
+	}
+	ones, bits := ipNet.Mask.Size()
+	if ones == 0 && bits == 0 {
+		return netip.Prefix{}, false
+	}
+	addr, ok := netip.AddrFromSlice(ipNet.IP)
+	if !ok {
+		return netip.Prefix{}, false
+	}
+	return netip.PrefixFrom(addr, ones), true
+}
+
+// Load opens the MMDB file and extracts prefixes by country.
+func (p *Provider) Load(ctx context.Context) error {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+
+	p.prefixes = make(map[string][]netip.Prefix)
+	p.lastErr = ""
+	p.loadedAt = nil
+
+	path := p.config.File
+	if path == "" && p.config.URL != "" {
+		tmpPath, err := downloadToTemp(ctx, p.config.URL)
+		if err != nil {
+			p.lastErr = err.Error()
+			return fmt.Errorf("mmdb: download: %w", err)
+		}
+		defer os.Remove(tmpPath)
+		path = tmpPath
+	}
+
+	reader, err := maxminddb.Open(path)
+	if err != nil {
+		p.lastErr = err.Error()
+		return fmt.Errorf("mmdb: open %q: %w", path, err)
+	}
+
+	if p.reader != nil {
+		_ = p.reader.Close()
+	}
+	p.reader = reader
+
+	whitelist := make(map[string]bool)
+	for _, c := range p.config.Countries {
+		whitelist[c] = true
+	}
+
+	networks := reader.Networks(maxminddb.SkipAliasedNetworks)
+
+	var record struct {
+		Country struct {
+			ISOCode string `maxminddb:"iso_code"`
+		} `maxminddb:"country"`
+	}
+
+	for networks.Next() {
+		ipNet, err := networks.Network(&record)
+		if err != nil {
+			continue
+		}
+		prefix, ok := netipPrefixFromIPNet(ipNet)
+		if !ok {
+			continue
+		}
+		country := record.Country.ISOCode
+		if country == "" {
+			continue
+		}
+		if len(whitelist) > 0 && !whitelist[country] {
+			continue
+		}
+		p.prefixes[country] = append(p.prefixes[country], prefix)
+	}
+	if err := networks.Err(); err != nil {
+		p.lastErr = err.Error()
+		return fmt.Errorf("mmdb: iterate: %w", err)
+	}
+
+	now := time.Now()
+	p.loadedAt = &now
+	return nil
+}
+
+func downloadToTemp(ctx context.Context, url string) (string, error) {
+	client := &http.Client{Timeout: 30 * time.Second}
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
+	if err != nil {
+		return "", err
+	}
+	resp, err := client.Do(req)
+	if err != nil {
+		return "", err
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		return "", fmt.Errorf("HTTP %d", resp.StatusCode)
+	}
+
+	f, err := os.CreateTemp("", "mmdb-*.mmdb")
+	if err != nil {
+		return "", err
+	}
+	defer f.Close()
+
+	if _, err := io.Copy(f, resp.Body); err != nil {
+		os.Remove(f.Name())
+		return "", err
+	}
+	return f.Name(), nil
+}
+
+// GetPrefixes returns prefixes for the given category (e.g., "mmdb:ru").
 func (p *Provider) GetPrefixes(category string) ([]netip.Prefix, error) {
-	return nil, fmt.Errorf("not implemented")
+	p.mu.RLock()
+	defer p.mu.RUnlock()
+
+	if p.loadedAt == nil {
+		return nil, fmt.Errorf("mmdb: not loaded")
+	}
+
+	expectedPrefix := p.prefix + ":"
+	if !strings.HasPrefix(category, expectedPrefix) {
+		return nil, fmt.Errorf("mmdb: unknown category %q", category)
+	}
+	country := strings.TrimPrefix(category, expectedPrefix)
+	prefixes, ok := p.prefixes[country]
+	if !ok {
+		return nil, fmt.Errorf("mmdb: unknown country %q", country)
+	}
+	out := make([]netip.Prefix, len(prefixes))
+	copy(out, prefixes)
+	return out, nil
 }
 
 // Close closes the MMDB reader.
