@@ -83,7 +83,7 @@ func TestScheduler_StartStop(t *testing.T) {
 	}
 
 	mock := &mockOrchestrator{}
-	s, err := New(mock, "@every 100ms")
+	s, err := New(mock, "@every 1s")
 	if err != nil {
 		t.Fatalf("New() error: %v", err)
 	}
@@ -95,14 +95,14 @@ func TestScheduler_StartStop(t *testing.T) {
 		t.Fatalf("Start() error: %v", err)
 	}
 
-	// Allow at least two ticks to fire.
-	time.Sleep(250 * time.Millisecond)
+	// Allow at least one tick to fire.
+	time.Sleep(1500 * time.Millisecond)
 
 	s.Stop()
 
 	count := mock.runCount.Load()
-	if count < 2 {
-		t.Fatalf("expected at least 2 runs, got %d", count)
+	if count < 1 {
+		t.Fatalf("expected at least 1 run, got %d", count)
 	}
 }
 

@@ -10,8 +10,8 @@ func TestSetup(t *testing.T) {
 	if err := Setup(); err != nil {
 		t.Fatalf("Setup error: %v", err)
 	}
-	if registry == nil {
-		t.Error("registry is nil after Setup")
+	if Registry == nil {
+		t.Error("Registry is nil after Setup")
 	}
 }
 

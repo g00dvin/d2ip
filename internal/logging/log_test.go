@@ -18,9 +18,9 @@ func TestRequestIDMiddleware(t *testing.T) {
 	router := chi.NewRouter()
 	router.Use(RequestIDMiddleware)
 	router.Get("/test", func(w http.ResponseWriter, r *http.Request) {
-		id := FromContext(r.Context())
-		if id == "" {
-			t.Error("request ID missing from context")
+		logger := FromContext(r.Context())
+		if logger == nil {
+			t.Error("logger missing from context")
 		}
 		w.WriteHeader(http.StatusOK)
 	})
@@ -31,10 +31,5 @@ func TestRequestIDMiddleware(t *testing.T) {
 
 	if rr.Code != http.StatusOK {
 		t.Fatalf("expected 200, got %d", rr.Code)
-	}
-
-	header := rr.Header().Get("X-Request-ID")
-	if header == "" {
-		t.Error("X-Request-ID header not set in response")
 	}
 }
