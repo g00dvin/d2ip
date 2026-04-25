@@ -85,73 +85,68 @@ Cancel the currently running pipeline.
 { "status": "not running" }
 ```
 
-## Sources
+## Policies
 
-### GET /api/sources
+### GET /api/policies
 
-List all configured sources.
+List all routing policies.
 
-**Response:**
+**Response (200):**
 ```json
 {
-  "sources": [
+  "policies": [
     {
-      "id": "v2fly-geosite",
-      "provider": "v2flygeosite",
-      "prefix": "geosite",
+      "name": "streaming",
       "enabled": true,
-      "categories": ["geosite:ru", "geosite:us"],
-      "last_fetched": "2026-04-25T10:00:00Z",
-      "last_error": ""
+      "categories": ["geosite:netflix", "geosite:youtube"],
+      "backend": "nftables",
+      "nft_table": "inet d2ip",
+      "nft_set_v4": "streaming_v4",
+      "nft_set_v6": "streaming_v6",
+      "dry_run": false
     }
   ]
 }
 ```
 
-### POST /api/sources
+### POST /api/policies
 
-Create a new source.
+Create a new policy.
 
 **Request:**
 ```json
 {
-  "id": "my-ipverse",
-  "provider": "ipverse",
-  "prefix": "ipverse",
+  "name": "gaming",
   "enabled": true,
-  "config": {
-    "base_url": "https://ipverse.net/ipblocks/data/countries/{country}.zone",
-    "countries": ["ru", "us"]
-  }
+  "categories": ["geosite:steam"],
+  "backend": "nftables",
+  "nft_table": "inet d2ip",
+  "nft_set_v4": "gaming_v4",
+  "nft_set_v6": "gaming_v6"
 }
 ```
 
-### GET /api/sources/{id}
+**Response (200):** `{"status":"ok"}`
 
-Get a single source.
+**Error (409):** Policy already exists.
 
-### PUT /api/sources/{id}
+### PUT /api/policies/:name
 
-Update a source.
+Update an existing policy.
 
-### DELETE /api/sources/{id}
+**Request:** Same as POST, with `name` matching the URL parameter.
 
-Delete a source.
+**Response (200):** `{"status":"ok"}`
 
-### POST /api/sources/{id}/refresh
+**Error (404):** Policy not found.
 
-Trigger a manual reload of a source.
+### DELETE /api/policies/:name
 
-### POST /api/sources/upload
+Delete a policy.
 
-Upload a plaintext file. Returns the saved path.
+**Response (200):** `{"status":"ok"}`
 
-**Request:** `multipart/form-data` with `file` field (`.txt` only)
-
-**Response:**
-```json
-{ "path": "/tmp/d2ip-uploads/abc.txt" }
-```
+**Error (404):** Policy not found.
 
 ## Categories
 
@@ -285,6 +280,58 @@ Search cached entries by domain (not yet implemented).
 { "error": "domain-level lookup not yet implemented" }
 ```
 
+## Sources
+
+### GET /api/sources
+
+List all configured sources.
+
+**Response (200):**
+```json
+{
+  "sources": [
+    {
+      "id": "v2fly-geosite",
+      "provider": "v2flygeosite",
+      "prefix": "geosite",
+      "enabled": true,
+      "status": "ok",
+      "last_load": "2026-04-25T12:00:00Z"
+    }
+  ]
+}
+```
+
+### POST /api/sources
+
+Add a new source.
+
+**Request:**
+```json
+{
+  "id": "my-plaintext",
+  "provider": "plaintext",
+  "prefix": "custom",
+  "enabled": true,
+  "config": {
+    "file": "/var/lib/d2ip/custom.txt"
+  }
+}
+```
+
+**Response (200):** `{"status":"ok"}`
+
+### POST /api/sources/upload
+
+Upload a plaintext file for use as a source.
+
+**Request:** `multipart/form-data` with a `file` field.
+
+**Response (200):**
+```json
+{"path": "/tmp/d2ip-uploads/upload-1234567890.txt"}
+```
+
 ## Settings
 
 ### GET /api/settings
@@ -317,118 +364,6 @@ Set config overrides. Hot-reloads via Watcher.
 ### DELETE /api/settings/{key}
 
 Remove a config override, reverting to default.
-
-**Response:**
-```json
-{ "status": "ok" }
-```
-
-## Policies
-
-### GET /api/policies
-
-List all configured routing policies.
-
-**Response:**
-```json
-{
-  "policies": [
-    {
-      "name": "streaming",
-      "enabled": true,
-      "categories": ["geosite:netflix", "geosite:youtube"],
-      "backend": "iproute2",
-      "table_id": 200,
-      "iface": "eth1",
-      "dry_run": false,
-      "export_format": "plain"
-    }
-  ]
-}
-```
-
-### GET /api/policies/{name}
-
-Get a single policy by name.
-
-**Response (200):**
-```json
-{ "name": "streaming", "enabled": true, "categories": ["geosite:netflix"], "backend": "iproute2", "table_id": 200, "iface": "eth1" }
-```
-
-**Error (404):**
-```json
-{ "error": "policy not found: streaming" }
-```
-
-### POST /api/policies
-
-Create a new policy.
-
-**Request:**
-```json
-{ "name": "corporate", "enabled": true, "categories": ["geosite:google"], "backend": "iproute2", "table_id": 300, "iface": "wg0" }
-```
-
-**Response:**
-```json
-{ "status": "ok" }
-```
-
-### PUT /api/policies/{name}
-
-Update an existing policy.
-
-**Request:**
-```json
-{ "name": "corporate", "enabled": true, "categories": ["geosite:google", "geosite:microsoft"], "backend": "iproute2", "table_id": 300, "iface": "wg0" }
-```
-
-**Response:**
-```json
-{ "status": "ok" }
-```
-
-### DELETE /api/policies/{name}
-
-Delete a policy.
-
-**Response:**
-```json
-{ "status": "ok" }
-```
-
-### POST /api/policies/{name}/run
-
-Trigger a pipeline run for a single policy.
-
-**Request:**
-```json
-{ "dry_run": false, "force_resolve": false }
-```
-
-**Response:**
-```json
-{ "status": "ok", "run_id": 42 }
-```
-
-### POST /api/policies/{name}/dry-run
-
-Preview routing changes for a single policy without applying.
-
-**Response:**
-```json
-{
-  "v4_plan": { "add": [...], "remove": [...] },
-  "v6_plan": { "add": [...], "remove": [...] },
-  "v4_diff": "+ 1.0.0.0/24\n",
-  "v6_diff": "+ 2001:db8::/32\n"
-}
-```
-
-### POST /api/policies/{name}/rollback
-
-Rollback routing changes for a single policy.
 
 **Response:**
 ```json
