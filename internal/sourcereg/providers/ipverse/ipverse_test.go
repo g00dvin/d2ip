@@ -6,6 +6,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"strings"
+	"sync"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -140,4 +141,37 @@ func TestFactory_Registered(t *testing.T) {
 	require.NoError(t, err)
 	assert.Equal(t, "ipverse-f", src.ID())
 	assert.Equal(t, sourcereg.TypeIPverse, src.Provider())
+}
+
+func TestLoad_Concurrent(t *testing.T) {
+	callCount := 0
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		callCount++
+		fmt.Fprintln(w, "10.0.0.0/8")
+	}))
+	defer server.Close()
+
+	p, err := New("ipverse-test", "ipverse", map[string]any{
+		"base_url":  server.URL + "/{country}.zone",
+		"countries": []any{"ru"},
+	})
+	require.NoError(t, err)
+
+	ctx := context.Background()
+	require.NoError(t, p.Load(ctx))
+
+	var wg sync.WaitGroup
+	for i := 0; i < 10; i++ {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			_, _ = p.GetPrefixes("ipverse:ru")
+		}()
+	}
+	wg.Wait()
+
+	// Should not panic or data race
+	prefixes, err := p.GetPrefixes("ipverse:ru")
+	require.NoError(t, err)
+	assert.Len(t, prefixes, 1)
 }
