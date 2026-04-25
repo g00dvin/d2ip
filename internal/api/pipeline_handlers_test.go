@@ -152,3 +152,31 @@ func TestHandlePipelineCancel_NilOrchestrator(t *testing.T) {
 		t.Fatalf("expected 503, got %d", rec.Code)
 	}
 }
+
+func TestHandlePipelineRun_NilOrchestrator(t *testing.T) {
+	s := setupPipelineTestServer(t, nil)
+	r := chi.NewRouter()
+	r.Post("/pipeline/run", s.handlePipelineRun)
+
+	req := httptest.NewRequest(http.MethodPost, "/pipeline/run", nil)
+	rec := httptest.NewRecorder()
+	r.ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusServiceUnavailable {
+		t.Fatalf("expected 503, got %d", rec.Code)
+	}
+}
+
+func TestHandlePipelineStatus_NilOrchestrator(t *testing.T) {
+	s := setupPipelineTestServer(t, nil)
+	r := chi.NewRouter()
+	r.Get("/pipeline/status", s.handlePipelineStatus)
+
+	req := httptest.NewRequest(http.MethodGet, "/pipeline/status", nil)
+	rec := httptest.NewRecorder()
+	r.ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusServiceUnavailable {
+		t.Fatalf("expected 503, got %d", rec.Code)
+	}
+}

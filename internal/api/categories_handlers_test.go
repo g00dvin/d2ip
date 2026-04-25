@@ -371,3 +371,53 @@ func TestHandleCategoriesDelete_MissingCode(t *testing.T) {
 		t.Fatalf("expected 400, got %d: %s", rec.Code, rec.Body.String())
 	}
 }
+
+func TestHandleCategoriesList_NilRegistry(t *testing.T) {
+	server, _ := setupCategoriesTestServer(t)
+	server.registry = nil
+
+	req := httptest.NewRequest(http.MethodGet, "/api/categories", nil)
+	rec := httptest.NewRecorder()
+	server.handleCategoriesList(rec, req)
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d: %s", rec.Code, rec.Body.String())
+	}
+
+	var resp map[string]interface{}
+	if err := json.Unmarshal(rec.Body.Bytes(), &resp); err != nil {
+		t.Fatalf("failed to parse JSON: %v", err)
+	}
+
+	configured, ok := resp["configured"].([]interface{})
+	if !ok {
+		t.Fatalf("expected configured array, got %T", resp["configured"])
+	}
+	if len(configured) != 0 {
+		t.Errorf("expected empty configured, got %d", len(configured))
+	}
+
+	available, ok := resp["available"].([]interface{})
+	if !ok {
+		t.Fatalf("expected available array, got %T", resp["available"])
+	}
+	if len(available) != 0 {
+		t.Errorf("expected empty available, got %d", len(available))
+	}
+}
+
+func TestHandleCategoryDomains_MissingSource(t *testing.T) {
+	reg := &catTestRegistry{}
+	server, _ := setupCategoriesTestServer(t)
+	server.registry = reg
+
+	req := httptest.NewRequest(http.MethodGet, "/api/categories/nonexistent/domains", nil)
+	req = withChiParam(t, req, "code", "nonexistent")
+	rec := httptest.NewRecorder()
+
+	server.handleCategoryDomains(rec, req)
+
+	if rec.Code != http.StatusNotFound {
+		t.Fatalf("expected 404, got %d: %s", rec.Code, rec.Body.String())
+	}
+}
