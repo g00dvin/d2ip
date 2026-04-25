@@ -21,6 +21,13 @@ func RegisterFactory(t SourceType, fn FactoryFunc) {
 	factories[t] = fn
 }
 
+// GetFactory returns the registered factory for the given type, or nil.
+func GetFactory(t SourceType) FactoryFunc {
+	factoriesMu.RLock()
+	defer factoriesMu.RUnlock()
+	return factories[t]
+}
+
 func createSource(cfg SourceConfig) (Source, error) {
 	factoriesMu.RLock()
 	defer factoriesMu.RUnlock()

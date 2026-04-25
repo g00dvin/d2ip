@@ -129,3 +129,15 @@ func TestGetPrefixes_UnknownCategory(t *testing.T) {
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "unknown country")
 }
+
+func TestFactory_Registered(t *testing.T) {
+	factory := sourcereg.GetFactory(sourcereg.TypeIPverse)
+	require.NotNil(t, factory, "ipverse factory should be registered")
+
+	src, err := factory("ipverse-f", "ipverse", map[string]any{
+		"countries": []any{"ru"},
+	})
+	require.NoError(t, err)
+	assert.Equal(t, "ipverse-f", src.ID())
+	assert.Equal(t, sourcereg.TypeIPverse, src.Provider())
+}

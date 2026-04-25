@@ -185,3 +185,9 @@ func (p *Provider) GetPrefixes(category string) ([]netip.Prefix, error) {
 
 // Close is a no-op for IPverse provider.
 func (p *Provider) Close() error { return nil }
+
+func init() {
+	sourcereg.RegisterFactory(sourcereg.TypeIPverse, func(id, prefix string, cfg map[string]any) (sourcereg.Source, error) {
+		return New(id, prefix, cfg)
+	})
+}
