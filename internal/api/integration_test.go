@@ -16,10 +16,8 @@ import (
 
 	"github.com/goodvin/d2ip/internal/cache"
 	"github.com/goodvin/d2ip/internal/config"
-	"github.com/goodvin/d2ip/internal/domainlist"
 	"github.com/goodvin/d2ip/internal/routing"
 	"github.com/goodvin/d2ip/internal/sourcereg"
-	"github.com/goodvin/d2ip/internal/source"
 )
 
 type mockRouter struct {
@@ -46,29 +44,6 @@ func (m *mockRouter) DryRun(_ context.Context, desired []netip.Prefix, f routing
 	}
 	return routing.Plan{Family: f, Add: desired}, "mock diff output", nil
 }
-
-type mockDLCStore struct{}
-
-func (m *mockDLCStore) Get(_ context.Context, _ time.Duration) (string, source.Version, error) {
-	return "", source.Version{}, nil
-}
-func (m *mockDLCStore) ForceRefresh(_ context.Context) (string, source.Version, error) {
-	return "", source.Version{}, nil
-}
-func (m *mockDLCStore) Info() source.Version {
-	return source.Version{FetchedAt: time.Now(), Size: 42}
-}
-
-type mockListProvider struct {
-	rules      []domainlist.Rule
-	categories []string
-}
-
-func (m *mockListProvider) Load(_ string) error { return nil }
-func (m *mockListProvider) Select(sel []domainlist.CategorySelector) ([]domainlist.Rule, error) {
-	return m.rules, nil
-}
-func (m *mockListProvider) Categories() []string { return m.categories }
 
 type mockRegistry struct {
 	sources    []sourcereg.SourceInfo
@@ -121,10 +96,6 @@ func withCache(c cache.Cache) func(*Server) {
 
 func withRouter(r routing.Router) func(*Server) {
 	return func(s *Server) { s.router = r }
-}
-
-func withSource(st source.DLCStore) func(*Server) {
-	return func(s *Server) { s.sourceStore = st }
 }
 
 func withRegistry(r sourcereg.Registry) func(*Server) {
