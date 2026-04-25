@@ -155,10 +155,15 @@ func TestHandleSettingsDelete_MissingKey(t *testing.T) {
 	r := chi.NewRouter()
 	r.Delete("/api/settings/{key}", s.handleSettingsDelete)
 
-	// Hit the route with an empty key parameter.
 	req := httptest.NewRequest(http.MethodDelete, "/api/settings/", nil)
 	rec := httptest.NewRecorder()
-	r.ServeHTTP(rec, req)
+
+	// Inject empty key into chi route context so handler is reached
+	rctx := chi.NewRouteContext()
+	rctx.URLParams.Add("key", "")
+	req = req.WithContext(context.WithValue(req.Context(), chi.RouteCtxKey, rctx))
+
+	s.handleSettingsDelete(rec, req)
 
 	if rec.Code != http.StatusBadRequest {
 		t.Fatalf("expected 400, got %d", rec.Code)
