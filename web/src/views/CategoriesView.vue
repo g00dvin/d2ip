@@ -19,6 +19,19 @@ const filteredAvailable = computed(() => {
   return categories.available.filter(c => c.toLowerCase().includes(q))
 })
 
+const groupedCategories = computed(() => {
+  const groups: Record<string, string[]> = {}
+  for (const cat of filteredAvailable.value) {
+    const prefix = cat.split(':')[0] || 'unknown'
+    if (!groups[prefix]) groups[prefix] = []
+    groups[prefix].push(cat)
+  }
+  for (const prefix in groups) {
+    groups[prefix].sort()
+  }
+  return groups
+})
+
 async function handleAdd(code: string) {
   await categories.addCategory(code)
 }
@@ -60,16 +73,24 @@ async function handleBrowse(code: string) {
       <n-gi>
         <n-card title="Available Categories">
           <n-input v-model:value="searchTerm" placeholder="Filter categories..." clearable class="mb-3" />
-          <n-list hoverable clickable>
-            <n-list-item v-for="cat in filteredAvailable.slice(0, 50)" :key="cat">
-              <template #suffix>
-                <n-button size="tiny" type="primary" @click="handleAdd(cat)">Add</n-button>
-              </template>
-              {{ cat }}
-            </n-list-item>
-          </n-list>
-          <n-text v-if="filteredAvailable.length > 50" type="info">
-            ... and {{ filteredAvailable.length - 50 }} more
+          <n-collapse>
+            <n-collapse-item
+              v-for="(cats, prefix) in groupedCategories"
+              :key="prefix"
+              :title="`${prefix} (${cats.length})`"
+            >
+              <n-list hoverable clickable>
+                <n-list-item v-for="cat in cats" :key="cat">
+                  <template #suffix>
+                    <n-button size="tiny" type="primary" @click="handleAdd(cat)">Add</n-button>
+                  </template>
+                  {{ cat }}
+                </n-list-item>
+              </n-list>
+            </n-collapse-item>
+          </n-collapse>
+          <n-text v-if="filteredAvailable.length === 0" type="info">
+            No categories match your filter
           </n-text>
         </n-card>
       </n-gi>
