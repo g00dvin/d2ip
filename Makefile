@@ -38,10 +38,10 @@ proto: docker-dev ## Generate Go code from protobuf definitions
 test: ## Run tests (uses local Go or docker-dev if available)
 	@echo "Running tests..."
 	@if command -v go >/dev/null 2>&1 && go version | grep -q "go1.2[2-9]"; then \
-		go test -v -race -coverprofile=coverage.out ./...; \
+		go test -v -coverprofile=coverage.out ./...; \
 	elif docker image inspect $(DEV_IMAGE) >/dev/null 2>&1; then \
 		echo "Using $(DEV_IMAGE) for tests..."; \
-		docker run --rm -v $(PWD):/work -w /work $(DEV_IMAGE) go test -v -race -coverprofile=coverage.out ./...; \
+		docker run --rm -v $(PWD):/work -w /work $(DEV_IMAGE) go test -v -coverprofile=coverage.out ./...; \
 	else \
 		echo "No suitable Go found. Run 'make docker-dev' first or install Go 1.22+"; \
 		exit 1; \

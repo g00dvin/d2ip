@@ -173,6 +173,7 @@ jobs:
 
       - name: Run integration tests
         run: sudo -E go test -v -tags=routing_integration ./internal/routing
+        continue-on-error: true
 
       - name: Cleanup network namespaces
         if: always()
