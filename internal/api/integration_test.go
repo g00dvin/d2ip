@@ -496,7 +496,7 @@ func TestCategoriesList_WithRegistry(t *testing.T) {
 	assert.Len(t, available, 2, "should have available categories")
 }
 
-func TestCategoriesAdd_AddsWithPrefix(t *testing.T) {
+func TestCategoriesAdd_Returns405(t *testing.T) {
 	cfg := config.Defaults()
 	watcher := config.NewWatcher(cfg, 1, nil)
 	kv := &mockKVStore{data: make(map[string]string)}
@@ -509,54 +509,11 @@ func TestCategoriesAdd_AddsWithPrefix(t *testing.T) {
 	resp, err := http.Post(srv.URL+"/api/categories", "application/json", strings.NewReader(body))
 	require.NoError(t, err)
 	defer resp.Body.Close()
-	assert.Equal(t, http.StatusOK, resp.StatusCode)
-
-	snap := watcher.Current()
-	found := false
-	for _, cat := range snap.Config.Categories {
-		if cat.Code == "geosite:google" {
-			found = true
-		}
-	}
-	assert.True(t, found, "geosite:google should be in config categories after add")
+	assert.Equal(t, http.StatusMethodNotAllowed, resp.StatusCode)
 }
 
-func TestCategoriesAdd_Duplicate_ReturnsConflict(t *testing.T) {
+func TestCategoriesDelete_Returns405(t *testing.T) {
 	cfg := config.Defaults()
-	cfg.Categories = []config.CategoryConfig{{Code: "geosite:google"}}
-	watcher := config.NewWatcher(cfg, 1, nil)
-	kv := &mockKVStore{data: make(map[string]string)}
-
-	s := &Server{cfgWatcher: watcher, kvStore: kv}
-	srv := httptest.NewServer(s.Handler())
-	defer srv.Close()
-
-	body := `{"code": "geosite:google"}`
-	resp, err := http.Post(srv.URL+"/api/categories", "application/json", strings.NewReader(body))
-	require.NoError(t, err)
-	defer resp.Body.Close()
-	assert.Equal(t, http.StatusConflict, resp.StatusCode)
-}
-
-func TestCategoriesAdd_EmptyCode_Returns400(t *testing.T) {
-	cfg := config.Defaults()
-	watcher := config.NewWatcher(cfg, 1, nil)
-	kv := &mockKVStore{data: make(map[string]string)}
-
-	s := &Server{cfgWatcher: watcher, kvStore: kv}
-	srv := httptest.NewServer(s.Handler())
-	defer srv.Close()
-
-	body := `{"code": ""}`
-	resp, err := http.Post(srv.URL+"/api/categories", "application/json", strings.NewReader(body))
-	require.NoError(t, err)
-	defer resp.Body.Close()
-	assert.Equal(t, http.StatusBadRequest, resp.StatusCode)
-}
-
-func TestCategoriesDelete_RemovesCategory(t *testing.T) {
-	cfg := config.Defaults()
-	cfg.Categories = []config.CategoryConfig{{Code: "geosite:ru"}}
 	watcher := config.NewWatcher(cfg, 1, nil)
 	kv := &mockKVStore{data: make(map[string]string)}
 
@@ -568,28 +525,7 @@ func TestCategoriesDelete_RemovesCategory(t *testing.T) {
 	resp, err := http.DefaultClient.Do(req)
 	require.NoError(t, err)
 	defer resp.Body.Close()
-	assert.Equal(t, http.StatusOK, resp.StatusCode)
-
-	snap := watcher.Current()
-	for _, cat := range snap.Config.Categories {
-		assert.NotEqual(t, "geosite:ru", cat.Code, "geosite:ru should be removed")
-	}
-}
-
-func TestCategoriesDelete_NotFound_Returns404(t *testing.T) {
-	cfg := config.Defaults()
-	watcher := config.NewWatcher(cfg, 1, nil)
-	kv := &mockKVStore{data: make(map[string]string)}
-
-	s := &Server{cfgWatcher: watcher, kvStore: kv}
-	srv := httptest.NewServer(s.Handler())
-	defer srv.Close()
-
-	req, _ := http.NewRequest(http.MethodDelete, srv.URL+"/api/categories/geosite:nonexistent", nil)
-	resp, err := http.DefaultClient.Do(req)
-	require.NoError(t, err)
-	defer resp.Body.Close()
-	assert.Equal(t, http.StatusNotFound, resp.StatusCode)
+	assert.Equal(t, http.StatusMethodNotAllowed, resp.StatusCode)
 }
 
 func TestCategoryDomains_WithRegistry(t *testing.T) {

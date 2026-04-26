@@ -8,6 +8,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/rs/zerolog/log"
 	"github.com/spf13/viper"
 )
 
@@ -92,13 +93,10 @@ func Load(opts LoadOptions) (*Config, error) {
 		v.Set("sources", []map[string]any{})
 	}
 
-	// Categories require special handling: ENV var contains JSON that Viper
-	// can't unmarshal into []CategoryConfig. Temporarily clear the categories
-	// key so Unmarshal doesn't fail, then parse manually.
+	// Deprecated: D2IP_CATEGORIES is no longer used. Log warning if set.
 	categoriesEnv := os.Getenv(EnvPrefix + "_CATEGORIES")
 	if categoriesEnv != "" {
-		// Prevent Viper from trying to parse the JSON array as a string slice.
-		v.Set("categories", []map[string]any{})
+		log.Warn().Str("env_var", EnvPrefix+"_CATEGORIES").Msg("config: D2IP_CATEGORIES is deprecated and ignored; categories are now managed via routing policies")
 	}
 
 	cfg := Defaults()
@@ -116,16 +114,6 @@ func Load(opts LoadOptions) (*Config, error) {
 			return nil, fmt.Errorf("config: parse %s_SOURCES: %w", EnvPrefix, err)
 		}
 		cfg.Sources = sources
-	}
-
-	// Categories can arrive from ENV as JSON (D2IP_CATEGORIES='[{"code":"geosite:ru"}]').
-	// Parse it manually after Unmarshal completes.
-	if categoriesEnv != "" {
-		cats, err := parseCategoriesEnv(categoriesEnv)
-		if err != nil {
-			return nil, fmt.Errorf("config: parse %s_CATEGORIES: %w", EnvPrefix, err)
-		}
-		cfg.Categories = cats
 	}
 
 	if errs := cfg.Validate(); len(errs) > 0 {
@@ -155,9 +143,6 @@ func bindAllEnvKeys(v *viper.Viper) {
 	// Sources: bound to ENV but handled manually after Unmarshal because it
 	// requires JSON parsing.
 	_ = v.BindEnv("sources", "D2IP_SOURCES")
-
-	// Categories: NOT bound to ENV because it requires JSON parsing.
-	// The D2IP_CATEGORIES env var is handled manually after Unmarshal.
 
 	// Resolver
 	_ = v.BindEnv("resolver.upstream")
@@ -222,9 +207,6 @@ func applyDefaultsToViper(v *viper.Viper, d Config) {
 	v.SetDefault("source.cache_path", d.Source.CachePath)
 	v.SetDefault("source.refresh_interval", d.Source.RefreshInterval)
 	v.SetDefault("source.http_timeout", d.Source.HTTPTimeout)
-
-	// Categories: leave empty default; operator must configure at least one.
-	v.SetDefault("categories", []map[string]any{})
 
 	v.SetDefault("resolver.upstream", d.Resolver.Upstream)
 	v.SetDefault("resolver.network", d.Resolver.Network)

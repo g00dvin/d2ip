@@ -3,7 +3,7 @@ import { onMounted, ref, h, watch } from 'vue'
 import { useSourcesStore } from '@/stores/sources'
 import { useMessage, NButton, NUpload } from 'naive-ui'
 import * as api from '@/api/rest'
-import type { SourceConfig } from '@/api/types'
+import type { SourceConfig, SourceInfo } from '@/api/types'
 
 const store = useSourcesStore()
 const message = useMessage()
@@ -38,6 +38,7 @@ function formatRelativeTime(dateStr: string | undefined): string {
 }
 
 const showModal = ref(false)
+const modalMode = ref<'add' | 'edit'>('add')
 const editing = ref<SourceConfig | null>(null)
 
 onMounted(() => store.fetchSources())
@@ -119,10 +120,15 @@ function resetConfig(provider: string) {
 }
 
 watch(() => editing.value?.provider, (provider) => {
-  if (provider) resetConfig(provider)
+  if (provider && modalMode.value === 'add') resetConfig(provider)
+})
+
+watch(showModal, (val) => {
+  if (!val) modalMode.value = 'add'
 })
 
 function openAdd() {
+  modalMode.value = 'add'
   editing.value = {
     id: '',
     provider: 'plaintext',
@@ -131,6 +137,23 @@ function openAdd() {
     config: { type: 'domains', file: '' },
   }
   showModal.value = true
+}
+
+async function openEdit(source: SourceInfo) {
+  try {
+    const result = await api.getSource(source.id)
+    modalMode.value = 'edit'
+    editing.value = {
+      id: result.id,
+      provider: result.provider,
+      prefix: result.prefix,
+      enabled: result.enabled,
+      config: (result as any).config ?? {},
+    }
+    showModal.value = true
+  } catch (e) {
+    message.error('Failed to load source config')
+  }
 }
 
 async function handleSave() {
@@ -154,11 +177,16 @@ async function handleSave() {
     payload.config = cfg
   }
   try {
-    await store.addSource(payload)
-    message.success('Source added')
+    if (modalMode.value === 'edit') {
+      await store.updateSource(editing.value.id, payload)
+      message.success('Source updated')
+    } else {
+      await store.addSource(payload)
+      message.success('Source added')
+    }
     showModal.value = false
   } catch (e) {
-    message.error('Failed to add source')
+    message.error(modalMode.value === 'edit' ? 'Failed to update source' : 'Failed to add source')
   }
 }
 
@@ -224,6 +252,7 @@ const columns = [
   { title: 'Status', key: 'enabled', render: (row: any) => row.enabled ? 'Enabled' : 'Disabled' },
   { title: 'Actions', key: 'actions', render: (row: any) => h('div', { class: 'flex gap-2' }, [
     h(NButton, { size: 'small', onClick: () => handleRefresh(row.id) }, () => 'Refresh'),
+    h(NButton, { size: 'small', onClick: () => openEdit(row) }, () => 'Edit'),
     h(NButton, { size: 'small', type: 'error', onClick: () => handleDelete(row.id) }, () => 'Delete'),
   ]) },
 ]
@@ -244,16 +273,16 @@ const columns = [
       />
     </n-card>
 
-    <n-modal v-model:show="showModal" title="Add Source" preset="card" style="width: 500px">
+    <n-modal v-model:show="showModal" :title="modalMode === 'edit' ? 'Edit Source' : 'Add Source'" preset="card" style="width: 500px">
       <n-form v-if="editing" :model="editing">
         <n-form-item label="ID" required>
-          <n-input v-model:value="editing.id" placeholder="my-source" />
+          <n-input v-model:value="editing.id" placeholder="my-source" :disabled="modalMode === 'edit'" />
         </n-form-item>
         <n-form-item label="Prefix" required>
           <n-input v-model:value="editing.prefix" placeholder="corp" />
         </n-form-item>
         <n-form-item label="Provider" required>
-          <n-select v-model:value="editing.provider" :options="providerOptions" />
+          <n-select v-model:value="editing.provider" :options="providerOptions" :disabled="modalMode === 'edit'" />
         </n-form-item>
         <n-form-item v-if="editing.provider === 'plaintext'" label="Type">
           <n-select v-model:value="editing.config.type" :options="[
@@ -264,7 +293,7 @@ const columns = [
         <n-form-item v-if="editing.provider === 'plaintext'" label="File Path">
           <n-input v-model:value="editing.config.file" placeholder="/var/lib/d2ip/sources/mylist.txt" />
         </n-form-item>
-        <n-form-item v-if="editing.provider === 'plaintext'" label="Or Upload File">
+        <n-form-item v-if="editing.provider === 'plaintext' && modalMode !== 'edit'" label="Or Upload File">
           <n-upload
             :custom-request="handleFileUpload"
             :max="1"

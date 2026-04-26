@@ -187,42 +187,6 @@ func TestCoerceKVValue_Sources(t *testing.T) {
 	}
 }
 
-func TestParseCategoriesEnv_JSON(t *testing.T) {
-	raw := `[{"code":"geosite:ru","attrs":["cn"]},{"code":"geosite:google","attrs":["@ads"]}]`
-
-	got, err := parseCategoriesEnv(raw)
-	if err != nil {
-		t.Fatalf("parseCategoriesEnv(%q) error = %v", raw, err)
-	}
-
-	want := []CategoryConfig{
-		{Code: "geosite:ru", Attrs: []string{"cn"}},
-		{Code: "geosite:google", Attrs: []string{"@ads"}},
-	}
-
-	if !reflect.DeepEqual(got, want) {
-		t.Fatalf("parseCategoriesEnv(%q) = %+v, want %+v", raw, got, want)
-	}
-}
-
-func TestParseCategoriesEnv_CSV(t *testing.T) {
-	raw := "geosite:ru, geosite:google"
-
-	got, err := parseCategoriesEnv(raw)
-	if err != nil {
-		t.Fatalf("parseCategoriesEnv(%q) error = %v", raw, err)
-	}
-
-	want := []CategoryConfig{
-		{Code: "geosite:ru"},
-		{Code: "geosite:google"},
-	}
-
-	if !reflect.DeepEqual(got, want) {
-		t.Fatalf("parseCategoriesEnv(%q) = %+v, want %+v", raw, got, want)
-	}
-}
-
 func TestSeedViperFromConfig_PreservesPolicies(t *testing.T) {
 	cfg := Defaults()
 	cfg.Routing.Policies = []PolicyConfig{

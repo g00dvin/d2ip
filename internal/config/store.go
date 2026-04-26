@@ -69,15 +69,6 @@ func ApplyOverrides(cfg *Config, kv map[string]string) error {
 		return fmt.Errorf("config: unmarshal after kv overrides: %w", err)
 	}
 
-	// Categories require special handling: a "categories" row carries JSON.
-	if raw, ok := kv["categories"]; ok && strings.TrimSpace(raw) != "" {
-		cats, err := parseCategoriesEnv(raw)
-		if err != nil {
-			return fmt.Errorf("config: parse categories override: %w", err)
-		}
-		next.Categories = cats
-	}
-
 	*cfg = next
 	return nil
 }
@@ -93,10 +84,6 @@ func applyKVToViper(v *viper.Viper, kv map[string]string) error {
 	for key, raw := range kv {
 		key = strings.ToLower(strings.TrimSpace(key))
 		if key == "" {
-			continue
-		}
-		// "categories" is handled by the caller as JSON; skip here.
-		if key == "categories" {
 			continue
 		}
 		// Skip if ENV var is set (ENV beats KV).
@@ -194,16 +181,6 @@ func seedViperFromConfig(v *viper.Viper, c Config) {
 		v.Set("sources", srcs)
 	}
 
-	// Preserve categories as a slice of maps viper can re-encode.
-	cats := make([]map[string]any, 0, len(c.Categories))
-	for _, cat := range c.Categories {
-		cats = append(cats, map[string]any{
-			"code":  cat.Code,
-			"attrs": cat.Attrs,
-		})
-	}
-	v.Set("categories", cats)
-
 	v.Set("resolver.upstream", c.Resolver.Upstream)
 	v.Set("resolver.network", c.Resolver.Network)
 	v.Set("resolver.concurrency", c.Resolver.Concurrency)
@@ -271,32 +248,4 @@ func seedViperFromConfig(v *viper.Viper, c Config) {
 	v.Set("metrics.path", c.Metrics.Path)
 }
 
-// parseCategoriesEnv decodes either:
-//   - a JSON array: `[{"code":"geosite:ru","attrs":["cn"]},...]`
-//   - or a comma-separated list of codes: `geosite:ru,geosite:google`
-//
-// It is used for both the D2IP_CATEGORIES env var and the `categories` kv row.
-func parseCategoriesEnv(raw string) ([]CategoryConfig, error) {
-	raw = strings.TrimSpace(raw)
-	if raw == "" {
-		return []CategoryConfig{}, nil
-	}
-	if strings.HasPrefix(raw, "[") {
-		var cats []CategoryConfig
-		if err := json.Unmarshal([]byte(raw), &cats); err != nil {
-			return nil, fmt.Errorf("categories json: %w", err)
-		}
-		return cats, nil
-	}
-	// Comma-separated codes.
-	parts := strings.Split(raw, ",")
-	out := make([]CategoryConfig, 0, len(parts))
-	for _, p := range parts {
-		code := strings.TrimSpace(p)
-		if code == "" {
-			continue
-		}
-		out = append(out, CategoryConfig{Code: code})
-	}
-	return out, nil
-}
+

@@ -55,18 +55,6 @@ describe('REST API', () => {
     expect(result).toEqual({ configured: [], available: [] })
   })
 
-  it('addCategory', async () => {
-    vi.mocked(client.post).mockResolvedValue({})
-    await api.addCategory('geosite:ru')
-    expect(client.post).toHaveBeenCalledWith('/api/categories', { code: 'geosite:ru' })
-  })
-
-  it('removeCategory', async () => {
-    vi.mocked(client.delete).mockResolvedValue({})
-    await api.removeCategory('geosite:ru')
-    expect(client.delete).toHaveBeenCalledWith('/api/categories/geosite:ru')
-  })
-
   it('getCategoryDomains', async () => {
     vi.mocked(client.get).mockResolvedValue({ data: { code: 'test', domains: [], page: 1, per_page: 100, total: 0, has_more: false } })
     const result = await api.getCategoryDomains('test', { page: 1, per_page: 10 })

@@ -91,25 +91,18 @@ func TestLoad_EnvOverride(t *testing.T) {
 	}
 }
 
-func TestLoad_CategoriesFromEnvJSON(t *testing.T) {
+func TestLoad_D2IPCategoriesDeprecated(t *testing.T) {
 	clearEnv(t)
 
-	t.Setenv("D2IP_CATEGORIES", `[{"code":"geosite:ru"},{"code":"geosite:google","attrs":["cn"]}]`)
+	// D2IP_CATEGORIES is deprecated and should be ignored.
+	t.Setenv("D2IP_CATEGORIES", `[{"code":"geosite:ru"}]`)
 
 	cfg, err := Load(LoadOptions{})
 	if err != nil {
 		t.Fatalf("Load: %v", err)
 	}
-	if len(cfg.Categories) != 2 {
-		t.Fatalf("Categories: got %d entries want 2", len(cfg.Categories))
-	}
-	if cfg.Categories[0].Code != "geosite:ru" {
-		t.Errorf("Categories[0].Code: %q", cfg.Categories[0].Code)
-	}
-	if cfg.Categories[1].Code != "geosite:google" ||
-		len(cfg.Categories[1].Attrs) != 1 || cfg.Categories[1].Attrs[0] != "cn" {
-		t.Errorf("Categories[1]: %+v", cfg.Categories[1])
-	}
+	// Config no longer has a Categories field; the env var is ignored.
+	_ = cfg
 }
 
 func TestLoad_YAMLSeed(t *testing.T) {
@@ -124,8 +117,6 @@ resolver:
   timeout: 4s
 cache:
   ttl: 2h
-categories:
-  - code: geosite:ru
 `
 	if err := os.WriteFile(yaml, []byte(body), 0o600); err != nil {
 		t.Fatalf("write yaml: %v", err)
@@ -146,9 +137,6 @@ categories:
 	}
 	if cfg.Cache.TTL != 2*time.Hour {
 		t.Errorf("Cache.TTL: %s", cfg.Cache.TTL)
-	}
-	if len(cfg.Categories) != 1 || cfg.Categories[0].Code != "geosite:ru" {
-		t.Errorf("Categories: %+v", cfg.Categories)
 	}
 }
 
@@ -328,20 +316,6 @@ func TestValidate(t *testing.T) {
 			wantErr: "listen",
 		},
 		{
-			name: "duplicate categories",
-			mutate: func(c *Config) {
-				c.Categories = []CategoryConfig{{Code: "geosite:ru"}, {Code: "geosite:ru"}}
-			},
-			wantErr: "duplicate",
-		},
-		{
-			name: "category missing colon",
-			mutate: func(c *Config) {
-				c.Categories = []CategoryConfig{{Code: "ru"}}
-			},
-			wantErr: "categories[0]",
-		},
-		{
 			name:    "ipv4 equals ipv6 filename",
 			mutate:  func(c *Config) { c.Export.IPv6File = c.Export.IPv4File },
 			wantErr: "export.ipv",
@@ -444,7 +418,6 @@ func TestApplyOverrides(t *testing.T) {
 		"resolver.timeout":    "7s",
 		"cache.ttl":           "90m",
 		"aggregation.enabled": "false",
-		"categories":          `[{"code":"geosite:ru"}]`,
 	}
 	if err := ApplyOverrides(&cfg, kv); err != nil {
 		t.Fatalf("ApplyOverrides: %v", err)
@@ -460,9 +433,6 @@ func TestApplyOverrides(t *testing.T) {
 	}
 	if cfg.Aggregation.Enabled {
 		t.Errorf("Aggregation.Enabled: expected false")
-	}
-	if len(cfg.Categories) != 1 || cfg.Categories[0].Code != "geosite:ru" {
-		t.Errorf("Categories: %+v", cfg.Categories)
 	}
 }
 

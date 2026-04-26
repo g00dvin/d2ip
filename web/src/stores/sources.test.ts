@@ -52,6 +52,21 @@ describe('Sources Store', () => {
     expect(store.sources).toEqual(newSources)
   })
 
+  it('updates source and refreshes list', async () => {
+    vi.mocked(api.updateSource).mockResolvedValue(undefined)
+    const updatedSources = [
+      { id: 'v2fly-geosite', provider: 'v2flygeosite', prefix: 'geosite', enabled: true, categories: ['geosite:ru', 'geosite:us'] },
+    ]
+    vi.mocked(api.getSources).mockResolvedValue({ sources: updatedSources })
+
+    const store = useSourcesStore()
+    const sourceConfig = { id: 'v2fly-geosite', provider: 'v2flygeosite', prefix: 'geosite', enabled: true, config: { url: 'https://example.com/dlc.dat' } }
+    await store.updateSource('v2fly-geosite', sourceConfig)
+
+    expect(api.updateSource).toHaveBeenCalledWith('v2fly-geosite', sourceConfig)
+    expect(store.sources).toEqual(updatedSources)
+  })
+
   it('removes source from local state', async () => {
     vi.mocked(api.deleteSource).mockResolvedValue(undefined)
 

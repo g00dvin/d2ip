@@ -1,14 +1,10 @@
 package api
 
 import (
-	"encoding/json"
 	"fmt"
 	"net/http"
-	"strings"
 
 	"github.com/go-chi/chi/v5"
-	"github.com/goodvin/d2ip/internal/config"
-	"github.com/rs/zerolog/log"
 )
 
 // handleCategoriesList returns configured and available geosite categories.
@@ -36,16 +32,26 @@ func (s *Server) handleCategoriesList(w http.ResponseWriter, r *http.Request) {
 	if s.cfgWatcher != nil {
 		snapshot := s.cfgWatcher.Current()
 		cfg := snapshot.Config.Clone()
-		for _, c := range cfg.Categories {
-			domains, err := s.registry.GetDomains(c.Code)
-			count := 0
-			if err == nil {
-				count = len(domains)
+		seen := make(map[string]struct{})
+		for _, pol := range cfg.Routing.Policies {
+			if !pol.Enabled {
+				continue
 			}
-			configured = append(configured, catInfo{
-				Code:        c.Code,
-				DomainCount: count,
-			})
+			for _, cat := range pol.Categories {
+				if _, ok := seen[cat]; ok {
+					continue
+				}
+				seen[cat] = struct{}{}
+				domains, err := s.registry.GetDomains(cat)
+				count := 0
+				if err == nil {
+					count = len(domains)
+				}
+				configured = append(configured, catInfo{
+					Code:        cat,
+					DomainCount: count,
+				})
+			}
 		}
 	}
 
@@ -128,88 +134,13 @@ func (s *Server) handleCategoryDomains(w http.ResponseWriter, r *http.Request) {
 }
 
 // handleCategoriesAdd adds a new category to the config.
+// Deprecated: categories are now managed via routing policies.
 func (s *Server) handleCategoriesAdd(w http.ResponseWriter, r *http.Request) {
-	var req struct {
-		Code  string   `json:"code"`
-		Attrs []string `json:"attrs,omitempty"`
-	}
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		s.jsonError(w, http.StatusBadRequest, "invalid JSON: "+err.Error())
-		return
-	}
-	if req.Code == "" {
-		s.jsonError(w, http.StatusBadRequest, "code is required")
-		return
-	}
-
-	// Normalize: if code has no prefix (no colon), add "geosite:" prefix.
-	// If code already has a colon (e.g. "ipverse:cn"), use it as-is.
-	code := req.Code
-	if !strings.Contains(code, ":") {
-		code = "geosite:" + code
-	}
-
-	snapshot := s.cfgWatcher.Current()
-	cfg := snapshot.Config.Clone()
-
-	// Check for duplicate (case-insensitive)
-	for _, cat := range cfg.Categories {
-		if strings.EqualFold(cat.Code, code) {
-			s.jsonError(w, http.StatusConflict, "category already exists: "+code)
-			return
-		}
-	}
-
-	cfg.Categories = append(cfg.Categories, config.CategoryConfig{
-		Code:  code,
-		Attrs: req.Attrs,
-	})
-
-	if err := s.cfgWatcher.Publish(cfg); err != nil {
-		log.Error().Err(err).Str("code", req.Code).Msg("api: failed to add category")
-		s.jsonError(w, http.StatusInternalServerError, "failed to update config: "+err.Error())
-		return
-	}
-
-	s.jsonOK(w, map[string]string{"status": "ok"})
+	s.jsonError(w, http.StatusNotFound, "POST /api/categories is no longer supported; categories are managed via routing policies")
 }
 
 // handleCategoriesDelete removes a category from the config.
+// Deprecated: categories are now managed via routing policies.
 func (s *Server) handleCategoriesDelete(w http.ResponseWriter, r *http.Request) {
-	code := chi.URLParam(r, "code")
-	if code == "" {
-		s.jsonError(w, http.StatusBadRequest, "code is required")
-		return
-	}
-
-	// Normalize: if code has no prefix (no colon), add "geosite:" prefix.
-	// If code already has a colon (e.g. "ipverse:cn"), use it as-is.
-	if !strings.Contains(code, ":") {
-		code = "geosite:" + code
-	}
-
-	snapshot := s.cfgWatcher.Current()
-	cfg := snapshot.Config.Clone()
-
-	found := false
-	for i, cat := range cfg.Categories {
-		if strings.EqualFold(cat.Code, code) {
-			cfg.Categories = append(cfg.Categories[:i], cfg.Categories[i+1:]...)
-			found = true
-			break
-		}
-	}
-
-	if !found {
-		s.jsonError(w, http.StatusNotFound, "category not found: "+code)
-		return
-	}
-
-	if err := s.cfgWatcher.Publish(cfg); err != nil {
-		log.Error().Err(err).Str("code", code).Msg("api: failed to delete category")
-		s.jsonError(w, http.StatusInternalServerError, "failed to update config: "+err.Error())
-		return
-	}
-
-	s.jsonOK(w, map[string]string{"status": "ok"})
+	s.jsonError(w, http.StatusNotFound, "DELETE /api/categories/{code} is no longer supported; categories are managed via routing policies")
 }

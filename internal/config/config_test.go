@@ -89,18 +89,11 @@ func TestDefaults(t *testing.T) {
 		t.Errorf("expected source Config %v, got %v", expectedConfig, src.Config)
 	}
 
-	// Categories should be empty (non-nil check not required by implementation).
-	if len(cfg.Categories) != 0 {
-		t.Errorf("expected empty Categories, got %d", len(cfg.Categories))
-	}
 }
 
 func TestClone_Independent(t *testing.T) {
 	original := Defaults()
-	// Ensure we have Categories and Sources to mutate.
-	original.Categories = []CategoryConfig{
-		{Code: "geosite:google", Attrs: []string{"@cn"}},
-	}
+	// Ensure we have Sources to mutate.
 	original.Sources = []SourceItemConfig{
 		{
 			ID:       "src1",
@@ -112,27 +105,12 @@ func TestClone_Independent(t *testing.T) {
 
 	cloned := original.Clone()
 
-	// Mutate Categories in clone.
-	cloned.Categories[0].Code = "geosite:ru"
-	cloned.Categories[0].Attrs[0] = "@ru"
-	cloned.Categories = append(cloned.Categories, CategoryConfig{Code: "geosite:extra"})
-
 	// Mutate Sources in clone.
 	cloned.Sources[0].Config["key"] = "mutated"
 	cloned.Sources[0].Config["newkey"] = "newvalue"
 	cloned.Sources = append(cloned.Sources, SourceItemConfig{ID: "src2"})
 
 	// Verify original is unaffected.
-	if original.Categories[0].Code != "geosite:google" {
-		t.Errorf("original Categories[0].Code was mutated: %s", original.Categories[0].Code)
-	}
-	if original.Categories[0].Attrs[0] != "@cn" {
-		t.Errorf("original Categories[0].Attrs was mutated: %v", original.Categories[0].Attrs)
-	}
-	if len(original.Categories) != 1 {
-		t.Errorf("original Categories length changed: %d", len(original.Categories))
-	}
-
 	if original.Sources[0].Config["key"] != "value" {
 		t.Errorf("original Sources[0].Config was mutated: %v", original.Sources[0].Config)
 	}
@@ -203,9 +181,8 @@ func TestClone_PoliciesDeepCopy(t *testing.T) {
 
 func TestClone_NilSlices(t *testing.T) {
 	original := Config{
-		Listen:     ":9099",
-		Categories: nil,
-		Sources:    nil,
+		Listen:  ":9099",
+		Sources: nil,
 		Routing: RoutingConfig{
 			Policies: nil,
 		},
@@ -216,9 +193,6 @@ func TestClone_NilSlices(t *testing.T) {
 	// Verify no panic and clone is usable.
 	if cloned.Listen != ":9099" {
 		t.Errorf("expected Listen ':9099', got %s", cloned.Listen)
-	}
-	if cloned.Categories != nil {
-		t.Errorf("expected nil Categories, got %v", cloned.Categories)
 	}
 	if cloned.Sources != nil {
 		t.Errorf("expected nil Sources, got %v", cloned.Sources)

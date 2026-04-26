@@ -28,7 +28,6 @@ func (c *Config) Validate() []error {
 	if err := validateSources(*c); err != nil {
 		errs = append(errs, err)
 	}
-	errs = append(errs, validateCategories(c.Categories)...)
 	errs = append(errs, validateResolver(c.Resolver)...)
 	errs = append(errs, validateCache(c.Cache)...)
 	errs = append(errs, validateAggregation(c.Aggregation)...)
@@ -43,9 +42,8 @@ func (c *Config) Validate() []error {
 }
 
 func validateSources(cfg Config) error {
-	if len(cfg.Sources) == 0 && len(cfg.Categories) == 0 {
-		// Allow empty during transition if legacy categories exist
-		return nil
+	if len(cfg.Sources) == 0 {
+		return errors.New("sources: at least one source is required")
 	}
 
 	prefixes := make(map[string]bool)
@@ -84,28 +82,6 @@ func validateSources(cfg Config) error {
 	}
 
 	return nil
-}
-
-func validateCategories(cats []CategoryConfig) []error {
-	// An empty list is allowed at load time (operator may populate via the Web
-	// UI before the first pipeline run); the Orchestrator will no-op cleanly.
-	var errs []error
-	seen := make(map[string]struct{}, len(cats))
-	for i, c := range cats {
-		code := strings.TrimSpace(c.Code)
-		if code == "" {
-			errs = append(errs, fmt.Errorf("categories[%d].code: must not be empty", i))
-			continue
-		}
-		if !strings.Contains(code, ":") {
-			errs = append(errs, fmt.Errorf("categories[%d].code: expected form 'geosite:<name>', got %q", i, code))
-		}
-		if _, dup := seen[code]; dup {
-			errs = append(errs, fmt.Errorf("categories[%d].code: duplicate %q", i, code))
-		}
-		seen[code] = struct{}{}
-	}
-	return errs
 }
 
 func validateResolver(r ResolverConfig) []error {

@@ -31,14 +31,6 @@ export async function getCategories(): Promise<CategoriesResponse> {
   return data
 }
 
-export async function addCategory(code: string): Promise<void> {
-  await client.post('/api/categories', { code })
-}
-
-export async function removeCategory(code: string): Promise<void> {
-  await client.delete(`/api/categories/${code}`)
-}
-
 export async function getCategoryDomains(code: string, params?: { page?: number; per_page?: number }): Promise<CategoryDomainsResponse> {
   const { data } = await client.get<CategoryDomainsResponse>(`/api/categories/${code}/domains`, { params })
   return data

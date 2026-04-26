@@ -131,11 +131,9 @@ func (s *Server) Handler() http.Handler {
 		cr.Get("/api/pipeline/history", s.handlePipelineHistory)
 		cr.Post("/pipeline/cancel", s.handlePipelineCancel)
 
-		// Categories API.
+		// Categories API (browse-only; categories are managed via routing policies).
 		cr.Get("/api/categories", s.handleCategoriesList)
 		cr.Get("/api/categories/{code}/domains", s.handleCategoryDomains)
-		cr.Post("/api/categories", s.handleCategoriesAdd)
-		cr.Delete("/api/categories/{code}", s.handleCategoriesDelete)
 
 		// Cache API.
 		cr.Get("/api/cache/stats", s.handleCacheStats)

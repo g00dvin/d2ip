@@ -17,7 +17,6 @@ type Config struct {
 	Listen string `mapstructure:"listen" json:"listen" yaml:"listen"`
 
 	Source      SourceConfig       `mapstructure:"source" json:"source" yaml:"source"`
-	Categories  []CategoryConfig   `mapstructure:"categories" json:"categories" yaml:"categories"`
 	Sources     []SourceItemConfig `mapstructure:"sources" json:"sources" yaml:"sources"`
 	Resolver    ResolverConfig     `mapstructure:"resolver" json:"resolver" yaml:"resolver"`
 	Cache       CacheConfig       `mapstructure:"cache" json:"cache" yaml:"cache"`
@@ -44,14 +43,6 @@ type SourceItemConfig struct {
 	Prefix   string         `mapstructure:"prefix" json:"prefix" yaml:"prefix"`
 	Enabled  bool           `mapstructure:"enabled" json:"enabled" yaml:"enabled"`
 	Config   map[string]any `mapstructure:"config" json:"config" yaml:"config"`
-}
-
-// CategoryConfig selects a geosite category (and optional @attribute filter).
-type CategoryConfig struct {
-	// Code is the geosite category code, e.g. "geosite:ru" or "geosite:google".
-	Code string `mapstructure:"code" json:"code" yaml:"code"`
-	// Attrs is an optional list of @attribute filters applied with AND semantics.
-	Attrs []string `mapstructure:"attrs" json:"attrs" yaml:"attrs"`
 }
 
 // ResolverConfig controls the DNS resolver worker pool.
@@ -164,7 +155,6 @@ func Defaults() Config {
 			RefreshInterval: 24 * time.Hour,
 			HTTPTimeout:     30 * time.Second,
 		},
-		Categories: []CategoryConfig{},
 		Sources: []SourceItemConfig{
 			{
 				ID:       "default-geosite",
@@ -229,21 +219,10 @@ func Defaults() Config {
 	}
 }
 
-// Clone returns a deep copy of the Config. Slices (Categories, Attrs, Sources) are
+// Clone returns a deep copy of the Config. Slices (Sources, Policies) are
 // copied so the returned value is safe to mutate without affecting the source.
 func (c Config) Clone() Config {
 	out := c
-	if c.Categories != nil {
-		out.Categories = make([]CategoryConfig, len(c.Categories))
-		for i, cat := range c.Categories {
-			ccat := cat
-			if cat.Attrs != nil {
-				ccat.Attrs = make([]string, len(cat.Attrs))
-				copy(ccat.Attrs, cat.Attrs)
-			}
-			out.Categories[i] = ccat
-		}
-	}
 	if c.Sources != nil {
 		out.Sources = make([]SourceItemConfig, len(c.Sources))
 		for i, src := range c.Sources {

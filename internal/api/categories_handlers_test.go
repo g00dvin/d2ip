@@ -229,8 +229,8 @@ func TestHandleCategoryDomains_NilRegistry(t *testing.T) {
 	}
 }
 
-func TestHandleCategoriesAdd_Success(t *testing.T) {
-	server, watcher := setupCategoriesTestServer(t)
+func TestHandleCategoriesAdd_Returns404(t *testing.T) {
+	server, _ := setupCategoriesTestServer(t)
 
 	body := `{"code":"test"}`
 	req := httptest.NewRequest(http.MethodPost, "/api/categories", strings.NewReader(body))
@@ -238,113 +238,12 @@ func TestHandleCategoriesAdd_Success(t *testing.T) {
 
 	server.handleCategoriesAdd(rec, req)
 
-	if rec.Code != http.StatusOK {
-		t.Fatalf("expected 200, got %d: %s", rec.Code, rec.Body.String())
-	}
-
-	var resp map[string]string
-	if err := json.Unmarshal(rec.Body.Bytes(), &resp); err != nil {
-		t.Fatalf("failed to parse JSON: %v", err)
-	}
-	if resp["status"] != "ok" {
-		t.Errorf("expected status ok, got %v", resp["status"])
-	}
-
-	snapshot := watcher.Current()
-	if len(snapshot.Config.Categories) != 1 {
-		t.Fatalf("expected 1 category, got %d", len(snapshot.Config.Categories))
-	}
-	if snapshot.Config.Categories[0].Code != "geosite:test" {
-		t.Errorf("expected geosite:test, got %s", snapshot.Config.Categories[0].Code)
+	if rec.Code != http.StatusNotFound {
+		t.Fatalf("expected 404, got %d: %s", rec.Code, rec.Body.String())
 	}
 }
 
-func TestHandleCategoriesAdd_Duplicate(t *testing.T) {
-	server, _ := setupCategoriesTestServer(t)
-
-	body := `{"code":"test"}`
-	req1 := httptest.NewRequest(http.MethodPost, "/api/categories", strings.NewReader(body))
-	rec1 := httptest.NewRecorder()
-	server.handleCategoriesAdd(rec1, req1)
-	if rec1.Code != http.StatusOK {
-		t.Fatalf("first add expected 200, got %d: %s", rec1.Code, rec1.Body.String())
-	}
-
-	req2 := httptest.NewRequest(http.MethodPost, "/api/categories", strings.NewReader(body))
-	rec2 := httptest.NewRecorder()
-	server.handleCategoriesAdd(rec2, req2)
-
-	if rec2.Code != http.StatusConflict {
-		t.Fatalf("expected 409, got %d: %s", rec2.Code, rec2.Body.String())
-	}
-}
-
-func TestHandleCategoriesAdd_EmptyCode(t *testing.T) {
-	server, _ := setupCategoriesTestServer(t)
-
-	body := `{"code":""}`
-	req := httptest.NewRequest(http.MethodPost, "/api/categories", strings.NewReader(body))
-	rec := httptest.NewRecorder()
-
-	server.handleCategoriesAdd(rec, req)
-
-	if rec.Code != http.StatusBadRequest {
-		t.Fatalf("expected 400, got %d: %s", rec.Code, rec.Body.String())
-	}
-}
-
-func TestHandleCategoriesAdd_InvalidJSON(t *testing.T) {
-	server, _ := setupCategoriesTestServer(t)
-
-	body := `not json`
-	req := httptest.NewRequest(http.MethodPost, "/api/categories", strings.NewReader(body))
-	rec := httptest.NewRecorder()
-
-	server.handleCategoriesAdd(rec, req)
-
-	if rec.Code != http.StatusBadRequest {
-		t.Fatalf("expected 400, got %d: %s", rec.Code, rec.Body.String())
-	}
-}
-
-func TestHandleCategoriesDelete_Success(t *testing.T) {
-	server, _ := setupCategoriesTestServer(t)
-
-	// Add category first
-	body := `{"code":"test"}`
-	reqAdd := httptest.NewRequest(http.MethodPost, "/api/categories", strings.NewReader(body))
-	recAdd := httptest.NewRecorder()
-	server.handleCategoriesAdd(recAdd, reqAdd)
-	if recAdd.Code != http.StatusOK {
-		t.Fatalf("add expected 200, got %d: %s", recAdd.Code, recAdd.Body.String())
-	}
-
-	// Delete category
-	req := httptest.NewRequest(http.MethodDelete, "/api/categories/test", nil)
-	req = withChiParam(t, req, "code", "test")
-	rec := httptest.NewRecorder()
-
-	server.handleCategoriesDelete(rec, req)
-
-	if rec.Code != http.StatusOK {
-		t.Fatalf("expected 200, got %d: %s", rec.Code, rec.Body.String())
-	}
-
-	var resp map[string]string
-	if err := json.Unmarshal(rec.Body.Bytes(), &resp); err != nil {
-		t.Fatalf("failed to parse JSON: %v", err)
-	}
-	if resp["status"] != "ok" {
-		t.Errorf("expected status ok, got %v", resp["status"])
-	}
-
-	snapshot := server.cfgWatcher.Current()
-	if len(snapshot.Config.Categories) != 0 {
-		t.Fatalf("expected 0 categories, got %d", len(snapshot.Config.Categories))
-	}
-}
-
-func TestHandleCategoriesDelete_NotFound(t *testing.T) {
+func TestHandleCategoriesDelete_Returns404(t *testing.T) {
 	server, _ := setupCategoriesTestServer(t)
 
 	req := httptest.NewRequest(http.MethodDelete, "/api/categories/test", nil)
@@ -355,20 +254,6 @@ func TestHandleCategoriesDelete_NotFound(t *testing.T) {
 
 	if rec.Code != http.StatusNotFound {
 		t.Fatalf("expected 404, got %d: %s", rec.Code, rec.Body.String())
-	}
-}
-
-func TestHandleCategoriesDelete_MissingCode(t *testing.T) {
-	server, _ := setupCategoriesTestServer(t)
-
-	req := httptest.NewRequest(http.MethodDelete, "/api/categories/", nil)
-	req = withChiParam(t, req, "code", "")
-	rec := httptest.NewRecorder()
-
-	server.handleCategoriesDelete(rec, req)
-
-	if rec.Code != http.StatusBadRequest {
-		t.Fatalf("expected 400, got %d: %s", rec.Code, rec.Body.String())
 	}
 }
 

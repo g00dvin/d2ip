@@ -26,6 +26,11 @@ export const useSourcesStore = defineStore('sources', () => {
     await fetchSources()
   }
 
+  async function updateSource(id: string, payload: SourceConfig) {
+    await api.updateSource(id, payload)
+    await fetchSources()
+  }
+
   async function removeSource(id: string) {
     await api.deleteSource(id)
     sources.value = sources.value.filter(s => s.id !== id)
@@ -36,5 +41,5 @@ export const useSourcesStore = defineStore('sources', () => {
     await fetchSources()
   }
 
-  return { sources, loading, error, fetchSources, addSource, removeSource, reloadSource }
+  return { sources, loading, error, fetchSources, addSource, updateSource, removeSource, reloadSource }
 })
