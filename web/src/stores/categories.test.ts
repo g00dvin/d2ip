@@ -11,7 +11,7 @@ describe('Categories Store', () => {
     vi.resetAllMocks()
   })
 
-  it('fetches categories and populates state', async () => {
+  it('fetches categories and populates available state', async () => {
     const mockData = {
       configured: [{ code: 'geosite:ru', domain_count: 100 }],
       available: ['geosite:ru', 'geosite:google', 'ipverse:cn'],
@@ -21,11 +21,9 @@ describe('Categories Store', () => {
     const store = useCategoriesStore()
     await store.fetchCategories()
 
-    expect(store.configured).toEqual(mockData.configured)
     expect(store.available).toEqual(mockData.available)
     expect(store.loading).toBe(false)
     expect(store.error).toBeNull()
-    expect(store.hasCategories).toBe(true)
   })
 
   it('handles fetch error', async () => {
@@ -37,44 +35,6 @@ describe('Categories Store', () => {
     expect(store.error).toBeInstanceOf(Error)
     expect(store.error?.message).toBe('Network error')
     expect(store.loading).toBe(false)
-  })
-
-  it('adds category and refreshes list', async () => {
-    vi.mocked(api.addCategory).mockResolvedValue(undefined)
-    const afterAdd = {
-      configured: [{ code: 'ipverse:cn', domain_count: 0 }],
-      available: ['geosite:ru'],
-    }
-    vi.mocked(api.getCategories)
-      .mockResolvedValueOnce({ configured: [], available: ['geosite:ru', 'ipverse:cn'] })
-      .mockResolvedValueOnce(afterAdd)
-
-    const store = useCategoriesStore()
-    await store.fetchCategories()
-    await store.addCategory('ipverse:cn')
-
-    expect(api.addCategory).toHaveBeenCalledWith('ipverse:cn')
-    expect(store.configured).toEqual(afterAdd.configured)
-  })
-
-  it('removes category and refreshes list', async () => {
-    vi.mocked(api.removeCategory).mockResolvedValue(undefined)
-    const afterRemove = {
-      configured: [],
-      available: ['geosite:ru', 'geosite:google'],
-    }
-    vi.mocked(api.getCategories)
-      .mockResolvedValueOnce({ configured: [{ code: 'geosite:ru', domain_count: 100 }], available: [] })
-      .mockResolvedValueOnce(afterRemove)
-
-    const store = useCategoriesStore()
-    await store.fetchCategories()
-    await store.removeCategory('geosite:ru')
-
-    expect(api.removeCategory).toHaveBeenCalledWith('geosite:ru')
-    expect(store.configured).toEqual(afterRemove.configured)
-    expect(store.browserOpen).toBe(false)
-    expect(store.browserData).toBeNull()
   })
 
   it('browses category and opens drawer', async () => {

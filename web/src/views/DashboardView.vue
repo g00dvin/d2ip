@@ -1,6 +1,5 @@
 <script setup lang="ts">
 import { computed, onMounted } from 'vue'
-import { useRouter } from 'vue-router'
 import { usePipelineStore } from '@/stores/pipeline'
 import { useCategoriesStore } from '@/stores/categories'
 import { useRoutingStore } from '@/stores/routing'
@@ -14,7 +13,6 @@ const pipeline = usePipelineStore()
 const categories = useCategoriesStore()
 const routing = useRoutingStore()
 const policies = usePoliciesStore()
-const router = useRouter()
 const message = useMessage()
 
 usePolling(() => pipeline.fetchStatus(), 10_000)
@@ -86,13 +84,6 @@ async function downloadExport(policy: string, type: 'ipv4' | 'ipv6') {
         <n-descriptions-item label="Output">v4: {{ report.ipv4_out }} | v6: {{ report.ipv6_out }}</n-descriptions-item>
       </n-descriptions>
     </n-card>
-
-    <!-- Warning Banner -->
-    <n-alert v-if="!categories.hasCategories" type="warning" title="No categories configured">
-      <n-button text type="primary" @click="router.push({ name: 'categories' })">
-        Go to Categories →
-      </n-button>
-    </n-alert>
 
     <!-- Export Downloads -->
     <n-card v-if="policies.policies.length > 0" title="Export Files">
