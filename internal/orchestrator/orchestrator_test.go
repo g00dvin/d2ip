@@ -805,6 +805,166 @@ func TestOrchestrator_Run_PolicyRouterError(t *testing.T) {
 	}
 }
 
+// errorCapsPolicyRouter returns an error from Caps.
+type errorCapsPolicyRouter struct {
+	mockPolicyRouter
+	err error
+}
+
+func (m *errorCapsPolicyRouter) Caps(ctx context.Context, policy config.PolicyConfig) error {
+	return m.err
+}
+
+// TestOrchestrator_Run_PolicyCapsFailure verifies Caps failure sets RoutingSkipped and RoutingError.
+func TestOrchestrator_Run_PolicyCapsFailure(t *testing.T) {
+	t.Parallel()
+	reg := &mockRegistry{}
+	res := &mockResolver{}
+	cch := &mockCache{}
+	agg := aggregator.New()
+	tmp := t.TempDir()
+	exp, _ := exporter.New(tmp)
+	policyExp := exporter.NewPolicyExporter(tmp)
+	rtr := &mockRouter{}
+	bus := events.NewBus()
+	cfg := config.Defaults()
+	cfg.Routing.Policies = []config.PolicyConfig{
+		{
+			Name:       "test-policy",
+			Enabled:    true,
+			Categories: []string{"geosite:test"},
+			Backend:    config.BackendNFTables,
+			NFTTable:   "inet d2ip",
+			NFTSetV4:   "test_v4",
+			NFTSetV6:   "test_v6",
+		},
+	}
+
+	o := New(reg, res, cch, agg, exp, rtr, func() config.Config { return cfg }, bus, policyExp, &errorCapsPolicyRouter{err: errors.New("caps failed")})
+
+	ctx := context.Background()
+	req := PipelineRequest{}
+
+	report, err := o.Run(ctx, req)
+	if err != nil {
+		t.Fatalf("Run returned unexpected error: %v", err)
+	}
+	if len(report.Policies) != 1 {
+		t.Fatalf("expected 1 policy report, got %d", len(report.Policies))
+	}
+	if !report.Policies[0].RoutingSkipped {
+		t.Fatal("expected RoutingSkipped to be true")
+	}
+	if report.Policies[0].RoutingError == "" {
+		t.Fatal("expected RoutingError to be set")
+	}
+	if report.Policies[0].RoutingError != "caps failed" {
+		t.Fatalf("expected RoutingError 'caps failed', got %s", report.Policies[0].RoutingError)
+	}
+}
+
+// TestOrchestrator_Run_PolicyCapsFailure_Continues verifies pipeline continues with other policies after Caps failure.
+func TestOrchestrator_Run_PolicyCapsFailure_Continues(t *testing.T) {
+	t.Parallel()
+	reg := &mockRegistry{}
+	res := &mockResolver{}
+	cch := &mockCache{}
+	agg := aggregator.New()
+	tmp := t.TempDir()
+	exp, _ := exporter.New(tmp)
+	policyExp := exporter.NewPolicyExporter(tmp)
+	rtr := &mockRouter{}
+	bus := events.NewBus()
+	cfg := config.Defaults()
+	cfg.Routing.Policies = []config.PolicyConfig{
+		{
+			Name:       "failing-policy",
+			Enabled:    true,
+			Categories: []string{"geosite:test"},
+			Backend:    config.BackendNFTables,
+			NFTTable:   "inet d2ip",
+			NFTSetV4:   "test_v4",
+			NFTSetV6:   "test_v6",
+		},
+		{
+			Name:       "ok-policy",
+			Enabled:    true,
+			Categories: []string{"geosite:test"},
+			Backend:    config.BackendNFTables,
+			NFTTable:   "inet d2ip",
+			NFTSetV4:   "test_v4",
+			NFTSetV6:   "test_v6",
+		},
+	}
+
+	o := New(reg, res, cch, agg, exp, rtr, func() config.Config { return cfg }, bus, policyExp, &errorCapsPolicyRouter{err: errors.New("caps failed")})
+
+	ctx := context.Background()
+	req := PipelineRequest{}
+
+	report, err := o.Run(ctx, req)
+	if err != nil {
+		t.Fatalf("Run returned unexpected error: %v", err)
+	}
+	if len(report.Policies) != 2 {
+		t.Fatalf("expected 2 policy reports, got %d", len(report.Policies))
+	}
+	if report.Policies[0].Name != "failing-policy" {
+		t.Fatalf("expected first policy failing-policy, got %s", report.Policies[0].Name)
+	}
+	if !report.Policies[0].RoutingSkipped {
+		t.Fatal("expected first policy RoutingSkipped to be true")
+	}
+	if report.Policies[1].Name != "ok-policy" {
+		t.Fatalf("expected second policy ok-policy, got %s", report.Policies[1].Name)
+	}
+	if !report.Policies[1].RoutingSkipped {
+		t.Fatal("expected second policy RoutingSkipped to be true")
+	}
+}
+
+// TestOrchestrator_Run_DryRun_CapsCalled verifies dry-run still calls Caps.
+func TestOrchestrator_Run_DryRun_CapsCalled(t *testing.T) {
+	t.Parallel()
+	reg := &mockRegistry{}
+	res := &mockResolver{}
+	cch := &mockCache{}
+	agg := aggregator.New()
+	tmp := t.TempDir()
+	exp, _ := exporter.New(tmp)
+	policyExp := exporter.NewPolicyExporter(tmp)
+	rtr := &mockRouter{}
+	bus := events.NewBus()
+	cfg := config.Defaults()
+	cfg.Routing.Policies = []config.PolicyConfig{
+		{
+			Name:       "test-policy",
+			Enabled:    true,
+			Categories: []string{"geosite:test"},
+			Backend:    config.BackendNFTables,
+			NFTTable:   "inet d2ip",
+			NFTSetV4:   "test_v4",
+			NFTSetV6:   "test_v6",
+		},
+	}
+
+	o := New(reg, res, cch, agg, exp, rtr, func() config.Config { return cfg }, bus, policyExp, &errorCapsPolicyRouter{err: errors.New("caps failed")})
+
+	ctx := context.Background()
+	req := PipelineRequest{DryRun: true}
+
+	report, err := o.Run(ctx, req)
+	if err != nil {
+		t.Fatalf("Run returned unexpected error: %v", err)
+	}
+	if len(report.Policies) != 1 {
+		t.Fatalf("expected 1 policy report, got %d", len(report.Policies))
+	}
+	if !report.Policies[0].RoutingSkipped {
+		t.Fatal("expected RoutingSkipped to be true even in dry-run")
+	}
+}
+
 // TestOrchestrator_Run_SkipRouting verifies SkipRouting request bypasses routing.
 func TestOrchestrator_Run_SkipRouting(t *testing.T) {
 	t.Parallel()

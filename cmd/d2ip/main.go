@@ -236,6 +236,13 @@ func serveCmd() {
 	policyExp := exporter.NewPolicyExporter(cfg.Export.Dir)
 	policyRtr := routing.NewCompositeRouter(cfg.Routing)
 
+	// Create and run backend validator (Layer 1 + 2)
+	validator := routing.NewValidator()
+	if err := validator.Validate(ctx, cfg.Routing.Policies); err != nil {
+		log.Warn().Err(err).Msg("routing: backend validation failed, some policies may not be routable")
+	}
+	policyRtr.SetValidator(validator)
+
 	// Create orchestrator with all agents
 	orch := orchestrator.New(
 		registry,

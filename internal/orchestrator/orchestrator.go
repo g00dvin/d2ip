@@ -50,13 +50,15 @@ type PipelineReport struct {
 
 // PolicyReport is the outcome of a single policy run.
 type PolicyReport struct {
-	Name     string `json:"name"`
-	Domains  int    `json:"domains"`
-	Resolved int    `json:"resolved"`
-	Failed   int    `json:"failed"`
-	IPv4Out  int    `json:"ipv4_out"`
-	IPv6Out  int    `json:"ipv6_out"`
-	Duration int64  `json:"duration_ms"`
+	Name           string `json:"name"`
+	Domains        int    `json:"domains"`
+	Resolved       int    `json:"resolved"`
+	Failed         int    `json:"failed"`
+	IPv4Out        int    `json:"ipv4_out"`
+	IPv6Out        int    `json:"ipv6_out"`
+	Duration       int64  `json:"duration_ms"`
+	RoutingSkipped bool   `json:"routing_skipped,omitempty"`
+	RoutingError   string `json:"routing_error,omitempty"`
 }
 
 // RunStatus describes the current or last-completed pipeline run.
@@ -495,6 +497,21 @@ func (o *Orchestrator) runPolicy(ctx context.Context, runID int64, policy config
 	// Merge in direct IP prefixes from prefix sources
 	v4Out = append(v4Out, ipv4Prefixes...)
 	v6Out = append(v6Out, ipv6Prefixes...)
+
+	// Layer 3: Policy-specific capability check before applying routes
+	if err := o.policyRtr.Caps(ctx, policy); err != nil {
+		log.Error().Err(err).Str("policy", policy.Name).Msg("orchestrator: policy capability check failed, skipping routing")
+		return PolicyReport{
+			Name:           policy.Name,
+			Domains:        len(policyDomains),
+			Resolved:       resolvedCount,
+			Failed:         failedCount,
+			IPv4Out:        len(v4Out),
+			IPv6Out:        len(v6Out),
+			RoutingSkipped: true,
+			RoutingError:   err.Error(),
+		}, staleCount, cacheHitCount, nil
+	}
 
 	// Dry run: compute outputs but skip export and routing
 	if req.DryRun || policy.DryRun {

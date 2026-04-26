@@ -67,6 +67,10 @@ docker run --rm -d --name d2ip \
 > so the container can see the host's network interfaces (e.g. `enp2s0`). Without this,
 > routing will fail with "Cannot find device" and the pipeline will return HTTP 500.
 > `--cap-add=NET_ADMIN` is required for modifying routing tables / nftables sets.
+>
+> d2ip validates routing backends (`nft` or `ip` binaries, plus kernel health) at startup
+> and before each pipeline run. Missing backends or capabilities will cause affected
+> policies to be skipped with a warning — the rest of the pipeline continues normally.
 
 ### Build from source
 

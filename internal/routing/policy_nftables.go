@@ -21,10 +21,21 @@ func newNFTPolicyRouter(stateDir string) *nftPolicyRouter {
 
 func (r *nftPolicyRouter) Caps(ctx context.Context, policy config.PolicyConfig) error {
 	cmd := exec.CommandContext(ctx, "nft", "list", "table", policy.NFTTable)
-	if err := cmd.Run(); err != nil {
-		return fmt.Errorf("nftables cap check failed: %w", err)
+	err := cmd.Run()
+	if err == nil {
+		return nil // table exists and is accessible
 	}
-	return nil
+
+	// If we get here, `nft list table` failed.
+	// Check if the error is "table not found" (first run scenario).
+	// nft exits with code 1 and stderr contains "Error: No such file or directory"
+	// or "Error: Could not process rule: No such file or directory".
+	// We distinguish this by checking if the nft binary itself works
+	// (which is verified by Layer 2 health check).
+	//
+	// Since we don't have direct access to validator here, we rely on
+	// CompositeRouter to make the decision (see Phase 3).
+	return fmt.Errorf("nftables cap check failed for table %s: %w", policy.NFTTable, err)
 }
 
 func (r *nftPolicyRouter) ApplyPolicy(ctx context.Context, policy config.PolicyConfig, v4, v6 []netip.Prefix) error {

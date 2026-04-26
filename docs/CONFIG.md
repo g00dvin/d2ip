@@ -184,3 +184,20 @@ metrics:
 * `logging.level` — `debug|info|warn|error|fatal|panic`
 * `logging.format` — `json|console|text`
 * `metrics.path` — must start with `/` when enabled
+
+## Backend Prerequisites
+
+Before enabling routing policies, ensure the required backends are prepared:
+
+- **nftables backend**: The `nft` binary must be installed and available in PATH.
+  The process must have `CAP_NET_ADMIN` capability (or run as root).
+  The configured nftables table (`inet d2ip` by default) will be created automatically
+  on the first pipeline run if it doesn't exist.
+
+- **iproute2 backend**: The `ip` binary must be installed and available in PATH.
+  The process must have `CAP_NET_ADMIN` capability (or run as root).
+  The configured routing table and interface must exist.
+
+d2ip performs validation at startup and before each pipeline run. If a backend
+is unavailable, the pipeline will log a warning and skip routing for affected
+policies while continuing with the rest of the pipeline.

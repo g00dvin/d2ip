@@ -37,6 +37,67 @@ func TestCompositeRouter_Caps_Unsupported(t *testing.T) {
 	}
 }
 
+func TestCompositeRouter_SetValidator(t *testing.T) {
+	cr := NewCompositeRouter(config.RoutingConfig{StateDir: t.TempDir()})
+	v := NewValidator()
+	cr.SetValidator(v)
+	if cr.validator != v {
+		t.Error("expected validator to be set")
+	}
+}
+
+func TestCompositeRouter_Caps_NFTables_FirstRun(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping: requires nft command")
+	}
+	cr := NewCompositeRouter(config.RoutingConfig{StateDir: t.TempDir()})
+	ctx := context.Background()
+
+	// Pretend nftables Layer 2 is healthy
+	v := NewValidator()
+	v.health[config.BackendNFTables] = true
+	cr.SetValidator(v)
+
+	// Use a table that does not exist — Caps should return nil (first run)
+	err := cr.Caps(ctx, config.PolicyConfig{Backend: config.BackendNFTables, NFTTable: "inet nonexistent_d2ip_test_table"})
+	if err != nil {
+		t.Fatalf("expected nil for first run (missing table with healthy backend), got %v", err)
+	}
+}
+
+func TestCompositeRouter_Caps_NFTables_Unhealthy(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping: requires nft command")
+	}
+	cr := NewCompositeRouter(config.RoutingConfig{StateDir: t.TempDir()})
+	ctx := context.Background()
+
+	// Pretend nftables Layer 2 is unhealthy
+	v := NewValidator()
+	v.health[config.BackendNFTables] = false
+	cr.SetValidator(v)
+
+	// Use a table that does not exist — Caps should return error because backend is unhealthy
+	err := cr.Caps(ctx, config.PolicyConfig{Backend: config.BackendNFTables, NFTTable: "inet nonexistent_d2ip_test_table"})
+	if err == nil {
+		t.Fatal("expected error when backend is unhealthy")
+	}
+}
+
+func TestCompositeRouter_Caps_NFTables_NoValidator(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping: requires nft command")
+	}
+	cr := NewCompositeRouter(config.RoutingConfig{StateDir: t.TempDir()})
+	ctx := context.Background()
+
+	// No validator set — Caps should return error for missing table
+	err := cr.Caps(ctx, config.PolicyConfig{Backend: config.BackendNFTables, NFTTable: "inet nonexistent_d2ip_test_table"})
+	if err == nil {
+		t.Fatal("expected error when no validator is set")
+	}
+}
+
 func TestCompositeRouter_DryRunPolicy_IProute2(t *testing.T) {
 	dir := t.TempDir()
 	cr := NewCompositeRouter(config.RoutingConfig{StateDir: dir})
