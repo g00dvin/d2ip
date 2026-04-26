@@ -47,6 +47,12 @@ test: ## Run tests (uses local Go or docker-dev if available)
 		exit 1; \
 	fi
 
+docker-test-routing: docker-dev ## Run routing integration tests in Docker
+	@echo "Running routing integration tests in Docker..."
+	docker run --rm --cap-add=NET_ADMIN --network=host \
+	  -v $(PWD):/work -w /work $(DEV_IMAGE) \
+	  go test -v -tags=routing_integration ./internal/routing
+
 lint: ## Run linters
 	@echo "Running linters..."
 	@if command -v golangci-lint >/dev/null 2>&1; then \
