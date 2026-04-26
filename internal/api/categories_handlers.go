@@ -27,23 +27,26 @@ func (s *Server) handleCategoriesList(w http.ResponseWriter, r *http.Request) {
 		available = append(available, c.Name)
 	}
 
-	snapshot := s.cfgWatcher.Current()
-	cfg := snapshot.Config.Clone()
 	type catInfo struct {
-		Code         string `json:"code"`
-		DomainCount  int    `json:"domain_count"`
+		Code        string `json:"code"`
+		DomainCount int    `json:"domain_count"`
 	}
 	var configured []catInfo
-	for _, c := range cfg.Categories {
-		domains, err := s.registry.GetDomains(c.Code)
-		count := 0
-		if err == nil {
-			count = len(domains)
+
+	if s.cfgWatcher != nil {
+		snapshot := s.cfgWatcher.Current()
+		cfg := snapshot.Config.Clone()
+		for _, c := range cfg.Categories {
+			domains, err := s.registry.GetDomains(c.Code)
+			count := 0
+			if err == nil {
+				count = len(domains)
+			}
+			configured = append(configured, catInfo{
+				Code:        c.Code,
+				DomainCount: count,
+			})
 		}
-		configured = append(configured, catInfo{
-			Code:        c.Code,
-			DomainCount: count,
-		})
 	}
 
 	s.jsonOK(w, map[string]interface{}{
