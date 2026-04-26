@@ -389,7 +389,9 @@ func TestDurationParsing(t *testing.T) {
 		{"30m", 30 * time.Minute, false},
 		{"500ms", 500 * time.Millisecond, false},
 		{"2h30m", 2*time.Hour + 30*time.Minute, false},
-		{"45", 45 * time.Second, false}, // bare integer → seconds
+		{"45", 45 * time.Second, false},                // bare integer < 1s in ns → seconds
+		{"3600000000000", 1 * time.Hour, false},          // nanosecond count from web UI
+		{"1000000000", 1 * time.Second, false},           // 1 second in nanoseconds
 		{"", 0, true},
 		{"banana", 0, true},
 	}

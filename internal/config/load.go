@@ -259,11 +259,17 @@ func parseDuration(s string) (time.Duration, error) {
 	if d, err := time.ParseDuration(s); err == nil {
 		return d, nil
 	}
-	// Fallback: integer seconds.
-	var secs int64
-	_, err := fmt.Sscanf(s, "%d", &secs)
+	// Fallback: parse as integer.
+	// The web UI sends nanosecond counts (e.g. 3600000000000 for 1h).
+	// For backward compatibility with small values entered as seconds,
+	// values >= 1e9 (1 second in nanoseconds) are treated as nanoseconds.
+	var n int64
+	_, err := fmt.Sscanf(s, "%d", &n)
 	if err != nil {
 		return 0, fmt.Errorf("invalid duration %q: %w", s, err)
 	}
-	return time.Duration(secs) * time.Second, nil
+	if n >= 1e9 {
+		return time.Duration(n), nil
+	}
+	return time.Duration(n) * time.Second, nil
 }
