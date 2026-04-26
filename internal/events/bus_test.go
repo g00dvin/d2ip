@@ -36,3 +36,19 @@ func TestBus_NoOtherTopic(t *testing.T) {
 
 	b.Unsubscribe(ch)
 }
+
+func TestBus_Close(t *testing.T) {
+	b := NewBus()
+	ch := b.Subscribe("pipeline")
+	b.Close()
+
+	select {
+	case <-ch:
+		// channel closed
+	case <-time.After(time.Second):
+		t.Fatal("timeout waiting for channel close")
+	}
+
+	// After close, publishing should not panic
+	b.Publish("pipeline", Event{Topic: "pipeline", Type: "test"})
+}
