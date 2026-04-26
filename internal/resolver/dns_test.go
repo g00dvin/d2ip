@@ -89,7 +89,7 @@ func TestQueryType_SuccessAAAA(t *testing.T) {
 			Hdr:  dns.RR_Header{Name: r.Question[0].Name, Rrtype: dns.TypeAAAA, Class: dns.ClassINET, Ttl: 300},
 			AAAA: net.ParseIP("2001:db8::1"),
 		})
-		_ = _ = w.WriteMsg(m)
+		_ = w.WriteMsg(m)
 	}
 	addr, shutdown, err := startMockDNSServer(handler)
 	if err != nil {
@@ -129,7 +129,7 @@ func TestQueryType_NXDOMAIN(t *testing.T) {
 		m := new(dns.Msg)
 		m.SetReply(r)
 		m.Rcode = dns.RcodeNameError
-		_ = _ = w.WriteMsg(m)
+		_ = w.WriteMsg(m)
 	}
 	addr, shutdown, err := startMockDNSServer(handler)
 	if err != nil {
@@ -203,7 +203,7 @@ func TestQueryType_GenericRcode(t *testing.T) {
 		m := new(dns.Msg)
 		m.SetReply(r)
 		m.Rcode = dns.RcodeRefused
-		_ = _ = w.WriteMsg(m)
+		_ = w.WriteMsg(m)
 	}
 	addr, shutdown, err := startMockDNSServer(handler)
 	if err != nil {
@@ -277,7 +277,7 @@ func TestQueryType_ContextCancelled(t *testing.T) {
 		time.Sleep(5 * time.Second)
 		m := new(dns.Msg)
 		m.SetReply(r)
-		_ = _ = w.WriteMsg(m)
+		_ = w.WriteMsg(m)
 	}
 	addr, shutdown, err := startMockDNSServer(handler)
 	if err != nil {
