@@ -279,7 +279,7 @@ func TestQueryDomain_ValidResult(t *testing.T) {
 			Hdr: dns.RR_Header{Name: r.Question[0].Name, Rrtype: dns.TypeA, Class: dns.ClassINET, Ttl: 300},
 			A:   net.ParseIP("192.0.2.1"),
 		})
-		w.WriteMsg(m)
+		_ = w.WriteMsg(m)
 	}
 	addr, shutdown, err := startMockDNSServer(handler)
 	if err != nil {
@@ -322,7 +322,7 @@ func TestQueryDomain_NoFollowCNAME(t *testing.T) {
 			Hdr: dns.RR_Header{Name: r.Question[0].Name, Rrtype: dns.TypeA, Class: dns.ClassINET, Ttl: 300},
 			A:   net.ParseIP("192.0.2.1"),
 		})
-		w.WriteMsg(m)
+		_ = w.WriteMsg(m)
 	}
 	addr, shutdown, err := startMockDNSServer(handler)
 	if err != nil {
@@ -359,7 +359,7 @@ func TestQueryDomain_NXDOMAIN(t *testing.T) {
 		m := new(dns.Msg)
 		m.SetReply(r)
 		m.Rcode = dns.RcodeNameError
-		w.WriteMsg(m)
+		_ = w.WriteMsg(m)
 	}
 	addr, shutdown, err := startMockDNSServer(handler)
 	if err != nil {
@@ -396,7 +396,7 @@ func TestQueryDomain_BothRetryable(t *testing.T) {
 		m := new(dns.Msg)
 		m.SetReply(r)
 		m.Rcode = dns.RcodeServerFailure
-		w.WriteMsg(m)
+		_ = w.WriteMsg(m)
 	}
 	addr, shutdown, err := startMockDNSServer(handler)
 	if err != nil {
@@ -441,7 +441,7 @@ func TestQueryDomain_OneSucceedsOneFails(t *testing.T) {
 				AAAA: net.ParseIP("2001:db8::1"),
 			})
 		}
-		w.WriteMsg(m)
+		_ = w.WriteMsg(m)
 	}
 	addr, shutdown, err := startMockDNSServer(handler)
 	if err != nil {
@@ -480,7 +480,7 @@ func TestQueryDomain_BothEmptyNoError(t *testing.T) {
 	handler := func(w dns.ResponseWriter, r *dns.Msg) {
 		m := new(dns.Msg)
 		m.SetReply(r)
-		w.WriteMsg(m)
+		_ = w.WriteMsg(m)
 	}
 	addr, shutdown, err := startMockDNSServer(handler)
 	if err != nil {
@@ -522,7 +522,7 @@ func TestQueryDomain_NonRetryableError(t *testing.T) {
 		case dns.TypeAAAA:
 			m.Rcode = dns.RcodeSuccess
 		}
-		w.WriteMsg(m)
+		_ = w.WriteMsg(m)
 	}
 	addr, shutdown, err := startMockDNSServer(handler)
 	if err != nil {
@@ -570,7 +570,7 @@ func TestQueryDomain_CNAMEError(t *testing.T) {
 				Target: "a.example.com.",
 			})
 		}
-		w.WriteMsg(m)
+		_ = w.WriteMsg(m)
 	}
 	addr, shutdown, err := startMockDNSServer(handler)
 	if err != nil {
@@ -639,7 +639,7 @@ func TestResolveDomain_ContextCancelledDuringBackoff(t *testing.T) {
 		m := new(dns.Msg)
 		m.SetReply(r)
 		m.Rcode = dns.RcodeServerFailure
-		w.WriteMsg(m)
+		_ = w.WriteMsg(m)
 	}
 	addr, shutdown, err := startMockDNSServer(handler)
 	if err != nil {
@@ -682,7 +682,7 @@ func TestResolveDomain_ResolverClosedDuringBackoff(t *testing.T) {
 		m := new(dns.Msg)
 		m.SetReply(r)
 		m.Rcode = dns.RcodeServerFailure
-		w.WriteMsg(m)
+		_ = w.WriteMsg(m)
 	}
 	addr, shutdown, err := startMockDNSServer(handler)
 	if err != nil {
@@ -724,7 +724,7 @@ func TestResolveBatch_ClosedResolver(t *testing.T) {
 		time.Sleep(200 * time.Millisecond)
 		m := new(dns.Msg)
 		m.SetReply(r)
-		w.WriteMsg(m)
+		_ = w.WriteMsg(m)
 	}
 	addr, shutdown, err := startMockDNSServer(handler)
 	if err != nil {

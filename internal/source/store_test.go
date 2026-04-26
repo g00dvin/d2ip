@@ -771,7 +771,7 @@ func TestHTTPStore_Get_ContextCancellation(t *testing.T) {
 	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		// Slow server to allow cancellation.
 		time.Sleep(500 * time.Millisecond)
-		w.Write([]byte("data"))
+		_, _ = w.Write([]byte("data"))
 	}))
 	defer ts.Close()
 
@@ -828,7 +828,7 @@ func TestHTTPStore_fetchLocked_AtomicRenameFailure(t *testing.T) {
 
 	content := []byte("fresh data")
 	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		w.Write(content)
+		_, _ = w.Write(content)
 	}))
 	defer ts.Close()
 
