@@ -71,7 +71,12 @@ docker run --rm -d --name d2ip \
 ### Build from source
 
 ```bash
+# Docker (multi-stage; builds web UI automatically)
 docker build -t d2ip -f deploy/Dockerfile .
+
+# Local (requires Node.js for web UI rebuild)
+make web-build
+make build
 ```
 
 ### Usage
@@ -172,6 +177,6 @@ hot-reload config, and nftables/iproute2 routing backends.
 
 **Note on Race Detector:** This project builds with `CGO_ENABLED=0` for static
 binaries (using `modernc.org/sqlite`). The Go race detector requires CGO, so
-`go test -race` is incompatible. We use
-[goleak](https://github.com/uber-go/goleak) tests instead to detect goroutine
-leaks in concurrent code.
+`go test -race` is incompatible. The `Makefile` `test` target does not use `-race`;
+we use [goleak](https://github.com/uber-go/goleak) tests instead to detect
+goroutine leaks in concurrent code.
