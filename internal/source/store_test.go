@@ -504,7 +504,7 @@ func TestHTTPStore_fetchLocked_ConditionalHeaders(t *testing.T) {
 	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		receivedETag = r.Header.Get("If-None-Match")
 		receivedLM = r.Header.Get("If-Modified-Since")
-		w.Write([]byte("data"))
+		_, _ = w.Write([]byte("data"))
 	}))
 	defer ts.Close()
 
@@ -544,7 +544,7 @@ func TestHTTPStore_fetchLocked_DownloadError(t *testing.T) {
 		w.WriteHeader(http.StatusOK)
 		// Force flush and close by hijacking (not possible in httptest).
 		// Instead, return data normally but we'll test errorReader separately in downloadToFile.
-		w.Write([]byte("ok"))
+		_, _ = w.Write([]byte("ok"))
 	}))
 	defer ts.Close()
 
@@ -739,7 +739,7 @@ func TestHTTPStore_saveMetadata(t *testing.T) {
 func TestHTTPStore_Get_NoMetadataButFileExists(t *testing.T) {
 	content := []byte("new data")
 	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		w.Write(content)
+		_, _ = w.Write(content)
 	}))
 	defer ts.Close()
 

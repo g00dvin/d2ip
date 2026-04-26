@@ -495,7 +495,7 @@ func TestHandleSourceUpload_Success(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	fw.Write([]byte("example.com\n"))
+	_, _ = fw.Write([]byte("example.com\n"))
 	w.Close()
 
 	req := httptest.NewRequest(http.MethodPost, "/api/sources/upload", strings.NewReader(b.String()))
@@ -528,7 +528,7 @@ func TestHandleSourceUpload_NotTxt(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	fw.Write([]byte("data"))
+	_, _ = fw.Write([]byte("data"))
 	w.Close()
 
 	req := httptest.NewRequest(http.MethodPost, "/api/sources/upload", strings.NewReader(b.String()))
@@ -546,7 +546,7 @@ func TestHandleSourceUpload_NoFile(t *testing.T) {
 
 	var b strings.Builder
 	w := multipart.NewWriter(&b)
-	w.WriteField("other", "value")
+	_ = w.WriteField("other", "value")
 	w.Close()
 
 	req := httptest.NewRequest(http.MethodPost, "/api/sources/upload", strings.NewReader(b.String()))

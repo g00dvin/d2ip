@@ -555,8 +555,8 @@ func TestHandleExportDownload_Success(t *testing.T) {
 
 	// Create the export file
 	policyDir := filepath.Join(cfg.Export.Dir, "test")
-	os.MkdirAll(policyDir, 0755)
-	os.WriteFile(filepath.Join(policyDir, "ipv4.txt"), []byte("10.0.0.0/8\n"), 0644)
+	_ = os.MkdirAll(policyDir, 0755)
+	_ = os.WriteFile(filepath.Join(policyDir, "ipv4.txt"), []byte("10.0.0.0/8\n"), 0644)
 
 	r := chi.NewRouter()
 	r.Get("/api/export/download", s.handleExportDownload)

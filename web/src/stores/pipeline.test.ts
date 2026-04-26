@@ -15,6 +15,7 @@ describe('pipeline store', () => {
     vi.mocked(api.getPipelineStatus).mockResolvedValue({
       running: true,
       run_id: 1,
+      started: '',
       report: { run_id: 1, domains: 10, resolved: 8, failed: 2, duration: 1e9, cache_hits: 0, ipv4_out: 5, ipv6_out: 3 },
     })
     const store = usePipelineStore()

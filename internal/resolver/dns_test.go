@@ -203,7 +203,7 @@ func TestQueryType_GenericRcode(t *testing.T) {
 		m := new(dns.Msg)
 		m.SetReply(r)
 		m.Rcode = dns.RcodeRefused
-		w.WriteMsg(m)
+		_ = w.WriteMsg(m)
 	}
 	addr, shutdown, err := startMockDNSServer(handler)
 	if err != nil {
