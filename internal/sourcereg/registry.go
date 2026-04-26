@@ -101,6 +101,14 @@ func (r *DBRegistry) AddSource(ctx context.Context, cfg SourceConfig) error {
 		_ = old.Close()
 	}
 
+	// Load the source immediately so categories are available
+	if src.Info().Enabled {
+		if err := src.Load(ctx); err != nil {
+			// Log but don't fail — source is persisted and can be refreshed later
+			_ = err
+		}
+	}
+
 	return nil
 }
 

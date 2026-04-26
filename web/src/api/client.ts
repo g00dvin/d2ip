@@ -10,6 +10,8 @@ client.interceptors.response.use(
   (r) => r,
   (err) => {
     const message = err.response?.data?.error || err.message
-    return Promise.reject(new Error(message))
+    const error = new Error(message) as Error & { status?: number }
+    error.status = err.response?.status
+    return Promise.reject(error)
   },
 )
