@@ -401,3 +401,37 @@ func TestPartialUnchanged(t *testing.T) {
 		t.Error("IPv6 digest should match when only IPv4 changed")
 	}
 }
+
+func TestNewError(t *testing.T) {
+	// Create a file and try to use it as a directory parent — MkdirAll should fail
+	tmpDir := t.TempDir()
+	blockingFile := filepath.Join(tmpDir, "block")
+	if err := os.WriteFile(blockingFile, []byte("x"), 0644); err != nil {
+		t.Fatal(err)
+	}
+	_, err := New(filepath.Join(blockingFile, "subdir"))
+	if err == nil {
+		t.Error("New() with invalid path should fail")
+	}
+}
+
+func TestWriteFamilyCreateTempError(t *testing.T) {
+	// Use a file as baseDir so os.CreateTemp fails
+	tmpDir := t.TempDir()
+	blockingFile := filepath.Join(tmpDir, "block")
+	if err := os.WriteFile(blockingFile, []byte("x"), 0644); err != nil {
+		t.Fatal(err)
+	}
+	e := &FileExporter{baseDir: blockingFile}
+	_, _, err := e.writeFamily(context.Background(), "ipv4", filepath.Join(tmpDir, "out.txt"), nil)
+	if err == nil {
+		t.Error("writeFamily with invalid baseDir should fail")
+	}
+}
+
+func TestFsyncDirError(t *testing.T) {
+	err := fsyncDir("/nonexistent/path/that/does/not/exist")
+	if err == nil {
+		t.Error("fsyncDir with non-existent path should fail")
+	}
+}
