@@ -104,14 +104,14 @@ describe('REST API', () => {
 
   it('createSource', async () => {
     vi.mocked(client.post).mockResolvedValue({})
-    await api.createSource({ id: 'test', provider: 'plaintext', prefix: 't', enabled: true })
-    expect(client.post).toHaveBeenCalledWith('/api/sources', { id: 'test', provider: 'plaintext', prefix: 't', enabled: true })
+    await api.createSource({ id: 'test', provider: 'plaintext', prefix: 't', enabled: true, config: {} })
+    expect(client.post).toHaveBeenCalledWith('/api/sources', { id: 'test', provider: 'plaintext', prefix: 't', enabled: true, config: {} })
   })
 
   it('updateSource', async () => {
     vi.mocked(client.put).mockResolvedValue({})
-    await api.updateSource('test', { id: 'test', provider: 'plaintext', prefix: 't', enabled: true })
-    expect(client.put).toHaveBeenCalledWith('/api/sources/test', { id: 'test', provider: 'plaintext', prefix: 't', enabled: true })
+    await api.updateSource('test', { id: 'test', provider: 'plaintext', prefix: 't', enabled: true, config: {} })
+    expect(client.put).toHaveBeenCalledWith('/api/sources/test', { id: 'test', provider: 'plaintext', prefix: 't', enabled: true, config: {} })
   })
 
   it('deleteSource', async () => {

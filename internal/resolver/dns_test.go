@@ -23,12 +23,12 @@ func startMockDNSServer(handler dns.HandlerFunc) (string, func(), error) {
 	addr := pc.LocalAddr().String()
 	server := &dns.Server{PacketConn: pc, Handler: handler}
 	go func() {
-		server.ActivateAndServe()
+		_ = server.ActivateAndServe()
 	}()
 	// Give server time to start
 	time.Sleep(20 * time.Millisecond)
 	shutdown := func() {
-		server.Shutdown()
+		_ = server.Shutdown()
 		pc.Close()
 		// Allow goroutine to exit before goleak checks
 		time.Sleep(30 * time.Millisecond)
@@ -89,7 +89,7 @@ func TestQueryType_SuccessAAAA(t *testing.T) {
 			Hdr:  dns.RR_Header{Name: r.Question[0].Name, Rrtype: dns.TypeAAAA, Class: dns.ClassINET, Ttl: 300},
 			AAAA: net.ParseIP("2001:db8::1"),
 		})
-		w.WriteMsg(m)
+		_ = w.WriteMsg(m)
 	}
 	addr, shutdown, err := startMockDNSServer(handler)
 	if err != nil {
@@ -129,7 +129,7 @@ func TestQueryType_NXDOMAIN(t *testing.T) {
 		m := new(dns.Msg)
 		m.SetReply(r)
 		m.Rcode = dns.RcodeNameError
-		w.WriteMsg(m)
+		_ = w.WriteMsg(m)
 	}
 	addr, shutdown, err := startMockDNSServer(handler)
 	if err != nil {
@@ -277,7 +277,7 @@ func TestQueryType_ContextCancelled(t *testing.T) {
 		time.Sleep(5 * time.Second)
 		m := new(dns.Msg)
 		m.SetReply(r)
-		w.WriteMsg(m)
+		_ = w.WriteMsg(m)
 	}
 	addr, shutdown, err := startMockDNSServer(handler)
 	if err != nil {
@@ -288,7 +288,7 @@ func TestQueryType_ContextCancelled(t *testing.T) {
 	res, err := New(Config{
 		Upstream:    addr,
 		Network:     "udp",
-		Timeout:     10 * time.Second,
+		Timeout:     time.Second,
 		Concurrency: 1,
 		QPS:         1000,
 		FollowCNAME: false,

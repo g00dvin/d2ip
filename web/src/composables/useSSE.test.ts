@@ -41,7 +41,7 @@ describe('useSSE', () => {
   })
 
   it('clears error on OPEN after error', async () => {
-    const { connected, error } = useSSE({})
+    const { error } = useSSE({})
     mockError.value = new Error('fail')
     await nextTick()
     expect(error.value).toBeInstanceOf(Error)

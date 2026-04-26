@@ -213,7 +213,7 @@ func TestHTTPStore_Get_FreshCache(t *testing.T) {
 func TestHTTPStore_Get_StaleCache_Fetches(t *testing.T) {
 	content := []byte("fresh data")
 	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		w.Write(content)
+		_, _ = w.Write(content)
 	}))
 	defer ts.Close()
 
@@ -324,7 +324,7 @@ func TestHTTPStore_ForceRefresh_Success(t *testing.T) {
 	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("ETag", `"etag123"`)
 		w.Header().Set("Last-Modified", "Wed, 21 Oct 2025 07:28:00 GMT")
-		w.Write(content)
+		_, _ = w.Write(content)
 	}))
 	defer ts.Close()
 
@@ -413,7 +413,7 @@ func TestHTTPStore_ForceRefresh_304WithCache(t *testing.T) {
 			w.WriteHeader(http.StatusNotModified)
 			return
 		}
-		w.Write([]byte("data"))
+		_, _ = w.Write([]byte("data"))
 	}))
 	defer ts.Close()
 
@@ -851,7 +851,7 @@ func TestHTTPStore_fetchLocked_AtomicRenameFailure(t *testing.T) {
 	if err := os.Chmod(cacheDir, 0555); err != nil {
 		t.Fatalf("failed to chmod: %v", err)
 	}
-	defer os.Chmod(cacheDir, 0755) // restore for cleanup
+	defer os.Chmod(cacheDir, 0755) //nolint:errcheck // restore for cleanup
 
 	ctx := context.Background()
 	path, _, err := store.ForceRefresh(ctx)

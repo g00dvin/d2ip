@@ -358,7 +358,7 @@ func TestHandleVersion(t *testing.T) {
 }
 
 func TestHandleMetrics(t *testing.T) {
-	metrics.Setup()
+	_ = metrics.Setup()
 	cfg := config.Defaults()
 	watcher := config.NewWatcher(cfg, 1, nil)
 	s := &Server{cfgWatcher: watcher}

@@ -15,7 +15,7 @@ describe('pipeline store', () => {
     vi.mocked(api.getPipelineStatus).mockResolvedValue({
       running: true,
       run_id: 1,
-      report: { domains: 10, resolved: 8, failed: 2, duration: 1e9, cache_hits: 0, ipv4_out: 5, ipv6_out: 3 },
+      report: { run_id: 1, domains: 10, resolved: 8, failed: 2, duration: 1e9, cache_hits: 0, ipv4_out: 5, ipv6_out: 3 },
     })
     const store = usePipelineStore()
     await store.fetchStatus()
@@ -33,7 +33,7 @@ describe('pipeline store', () => {
 
   it('fetches history', async () => {
     vi.mocked(api.getPipelineHistory).mockResolvedValue({
-      history: [{ run_id: 1, domains: 10, resolved: 8, failed: 2, duration: 1e9, ipv4_out: 5, ipv6_out: 3 }],
+      history: [{ run_id: 1, domains: 10, resolved: 8, failed: 2, duration: 1e9, cache_hits: 0, ipv4_out: 5, ipv6_out: 3 }],
     })
     const store = usePipelineStore()
     await store.fetchHistory()
@@ -101,7 +101,7 @@ describe('pipeline store', () => {
   })
 
   it('handles SSE complete event', async () => {
-    vi.mocked(api.getPipelineStatus).mockResolvedValue({ running: false, report: null as any })
+    vi.mocked(api.getPipelineStatus).mockResolvedValue({ running: false, run_id: 0, started: '', report: null })
     vi.mocked(api.getPipelineHistory).mockResolvedValue({ history: [] })
     const store = usePipelineStore()
     store.liveProgress = { resolved: 50 }
@@ -110,7 +110,7 @@ describe('pipeline store', () => {
   })
 
   it('handles SSE failed event', async () => {
-    vi.mocked(api.getPipelineStatus).mockResolvedValue({ running: false, report: null as any })
+    vi.mocked(api.getPipelineStatus).mockResolvedValue({ running: false, run_id: 0, started: '', report: null })
     vi.mocked(api.getPipelineHistory).mockResolvedValue({ history: [] })
     const store = usePipelineStore()
     store.liveProgress = { resolved: 50 }
