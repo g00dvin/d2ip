@@ -129,3 +129,49 @@ func TestNew_AlwaysNoop(t *testing.T) {
 		t.Fatal("expected non-nil router")
 	}
 }
+
+func TestFamily_String(t *testing.T) {
+	if FamilyV4.String() != "v4" {
+		t.Errorf("FamilyV4 = %q", FamilyV4.String())
+	}
+	if FamilyV6.String() != "v6" {
+		t.Errorf("FamilyV6 = %q", FamilyV6.String())
+	}
+	if Family(99).String() != "v4" {
+		t.Errorf("unknown family should default to v4, got %q", Family(99).String())
+	}
+}
+
+func TestDedup(t *testing.T) {
+	in := []netip.Prefix{
+		mustPrefix(t, "1.2.3.0/24"),
+		mustPrefix(t, "1.2.3.0/24"),
+		mustPrefix(t, "4.5.6.0/24"),
+	}
+	out := dedup(in)
+	if len(out) != 2 {
+		t.Errorf("dedup = %v, want 2 elements", out)
+	}
+}
+
+func TestDedup_Empty(t *testing.T) {
+	out := dedup(nil)
+	if out != nil {
+		t.Errorf("expected nil, got %v", out)
+	}
+}
+
+func TestSortPrefixes_SameAddrDifferentBits(t *testing.T) {
+	in := []netip.Prefix{
+		mustPrefix(t, "1.2.3.0/24"),
+		mustPrefix(t, "1.2.3.0/32"),
+		mustPrefix(t, "1.2.3.0/16"),
+	}
+	sortPrefixes(in)
+	want := []string{"1.2.3.0/16", "1.2.3.0/24", "1.2.3.0/32"}
+	for i, p := range in {
+		if p.String() != want[i] {
+			t.Errorf("prefix[%d] = %v, want %v", i, p, want[i])
+		}
+	}
+}
