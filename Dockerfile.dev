@@ -6,7 +6,7 @@
 FROM golang:1.22-alpine
 
 # Install common build dependencies
-RUN apk add --no-cache git ca-certificates protobuf-dev make
+RUN apk add --no-cache git ca-certificates protobuf-dev make nftables iproute2 ipset
 
 WORKDIR /work
 

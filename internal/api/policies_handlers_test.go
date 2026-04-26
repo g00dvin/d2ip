@@ -9,7 +9,6 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/go-chi/chi/v5"
 	"github.com/goodvin/d2ip/internal/config"
 	"github.com/goodvin/d2ip/internal/events"
 )
@@ -49,13 +48,6 @@ func setupPolicyServer(t *testing.T) (*Server, *policyTestKVStore) {
 	watcher := config.NewWatcher(cfg, 1, bus)
 	server := New(nil, nil, watcher, kv, nil, nil, nil, bus, nil)
 	return server, kv
-}
-
-func withChiParam(t *testing.T, r *http.Request, key, value string) *http.Request {
-	t.Helper()
-	rctx := chi.NewRouteContext()
-	rctx.URLParams.Add(key, value)
-	return r.WithContext(context.WithValue(r.Context(), chi.RouteCtxKey, rctx))
 }
 
 func mustMarshal(t *testing.T, v interface{}) []byte {
@@ -279,5 +271,151 @@ func TestPolicyDelete_NotFound(t *testing.T) {
 
 	if rr.Code != http.StatusNotFound {
 		t.Fatalf("expected status 404, got %d: %s", rr.Code, rr.Body.String())
+	}
+}
+
+func TestHandlePoliciesList(t *testing.T) {
+	server, _ := setupPolicyServer(t)
+
+	// Create a policy first
+	policy := config.PolicyConfig{
+		Name:       "p1",
+		Enabled:    true,
+		Categories: []string{"geosite:ru"},
+		Backend:    config.BackendNFTables,
+		NFTTable:   "inet d2ip",
+		NFTSetV4:   "set_v4",
+		NFTSetV6:   "set_v6",
+	}
+	body := mustMarshal(t, policy)
+	req := httptest.NewRequest("POST", "/api/policies", bytes.NewReader(body))
+	rr := httptest.NewRecorder()
+	server.handlePolicyCreate(rr, req)
+	if rr.Code != http.StatusOK {
+		t.Fatalf("create expected 200, got %d", rr.Code)
+	}
+
+	req = httptest.NewRequest("GET", "/api/policies", nil)
+	rr = httptest.NewRecorder()
+	server.handlePoliciesList(rr, req)
+
+	if rr.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d: %s", rr.Code, rr.Body.String())
+	}
+
+	var resp map[string]interface{}
+	if err := json.Unmarshal(rr.Body.Bytes(), &resp); err != nil {
+		t.Fatalf("failed to parse JSON: %v", err)
+	}
+
+	policies, ok := resp["policies"].([]interface{})
+	if !ok {
+		t.Fatalf("expected policies array, got %T", resp["policies"])
+	}
+	if len(policies) != 1 {
+		t.Errorf("expected 1 policy, got %d", len(policies))
+	}
+}
+
+func TestHandlePolicyGet_Success(t *testing.T) {
+	server, _ := setupPolicyServer(t)
+
+	policy := config.PolicyConfig{
+		Name:       "p1",
+		Enabled:    true,
+		Categories: []string{"geosite:ru"},
+		Backend:    config.BackendNFTables,
+		NFTTable:   "inet d2ip",
+		NFTSetV4:   "set_v4",
+		NFTSetV6:   "set_v6",
+	}
+	body := mustMarshal(t, policy)
+	req := httptest.NewRequest("POST", "/api/policies", bytes.NewReader(body))
+	rr := httptest.NewRecorder()
+	server.handlePolicyCreate(rr, req)
+	if rr.Code != http.StatusOK {
+		t.Fatalf("create expected 200, got %d", rr.Code)
+	}
+
+	req = httptest.NewRequest("GET", "/api/policies/p1", nil)
+	req = withChiParam(t, req, "name", "p1")
+	rr = httptest.NewRecorder()
+	server.handlePolicyGet(rr, req)
+
+	if rr.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d: %s", rr.Code, rr.Body.String())
+	}
+
+	var resp map[string]interface{}
+	if err := json.Unmarshal(rr.Body.Bytes(), &resp); err != nil {
+		t.Fatalf("failed to parse JSON: %v", err)
+	}
+	if resp["name"] != "p1" {
+		t.Errorf("expected name 'p1', got %v", resp["name"])
+	}
+}
+
+func TestHandlePolicyGet_NotFound(t *testing.T) {
+	server, _ := setupPolicyServer(t)
+
+	req := httptest.NewRequest("GET", "/api/policies/nonexistent", nil)
+	req = withChiParam(t, req, "name", "nonexistent")
+	rr := httptest.NewRecorder()
+	server.handlePolicyGet(rr, req)
+
+	if rr.Code != http.StatusNotFound {
+		t.Fatalf("expected 404, got %d: %s", rr.Code, rr.Body.String())
+	}
+}
+
+func TestHandlePolicyCreate_InvalidJSON(t *testing.T) {
+	server, _ := setupPolicyServer(t)
+
+	req := httptest.NewRequest("POST", "/api/policies", strings.NewReader("bad json"))
+	rr := httptest.NewRecorder()
+	server.handlePolicyCreate(rr, req)
+
+	if rr.Code != http.StatusBadRequest {
+		t.Fatalf("expected 400, got %d: %s", rr.Code, rr.Body.String())
+	}
+}
+
+func TestHandlePolicyUpdate_NameMismatch(t *testing.T) {
+	server, _ := setupPolicyServer(t)
+
+	policy := config.PolicyConfig{Name: "p1", Enabled: true, Backend: config.BackendNFTables}
+	body := mustMarshal(t, policy)
+	req := httptest.NewRequest("PUT", "/api/policies/p1", bytes.NewReader(body))
+	req = withChiParam(t, req, "name", "p1")
+	rr := httptest.NewRecorder()
+	server.handlePolicyUpdate(rr, req)
+
+	if rr.Code != http.StatusNotFound {
+		t.Fatalf("expected 404 for not-found policy, got %d: %s", rr.Code, rr.Body.String())
+	}
+
+	// Now test name mismatch
+	policy2 := config.PolicyConfig{Name: "p2", Enabled: true, Backend: config.BackendNFTables}
+	body = mustMarshal(t, policy2)
+	req = httptest.NewRequest("PUT", "/api/policies/p1", bytes.NewReader(body))
+	req = withChiParam(t, req, "name", "p1")
+	rr = httptest.NewRecorder()
+	server.handlePolicyUpdate(rr, req)
+
+	if rr.Code != http.StatusBadRequest {
+		t.Fatalf("expected 400 for name mismatch, got %d: %s", rr.Code, rr.Body.String())
+	}
+}
+
+func TestHandlePolicyDelete_MissingName(t *testing.T) {
+	server, _ := setupPolicyServer(t)
+
+	req := httptest.NewRequest("DELETE", "/api/policies/", nil)
+	req = withChiParam(t, req, "name", "")
+	rr := httptest.NewRecorder()
+	server.handlePolicyDelete(rr, req)
+
+	if rr.Code != http.StatusNotFound {
+		t.Fatalf("expected 404, got %d: %s", rr.Code, rr.Body.String())
 	}
 }

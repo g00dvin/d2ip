@@ -1,9 +1,13 @@
 package v2flygeoip
 
 import (
+	"context"
 	"net/netip"
+	"os"
+	"path/filepath"
 	"sync"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -132,4 +136,152 @@ func TestLoad_Concurrent(t *testing.T) {
 	prefixes, err := p.GetPrefixes("geoip:ru")
 	require.NoError(t, err)
 	assert.Len(t, prefixes, 1)
+}
+
+func TestInfo_BeforeLoad(t *testing.T) {
+	p, err := New("geoip-info", "geoip", map[string]any{})
+	require.NoError(t, err)
+
+	info := p.Info()
+	assert.Equal(t, "geoip-info", info.ID)
+	assert.Equal(t, string(sourcereg.TypeV2flyGeoIP), info.Provider)
+	assert.Equal(t, "geoip", info.Prefix)
+	assert.True(t, info.Enabled)
+	assert.Nil(t, info.LastFetched)
+	assert.Empty(t, info.Categories)
+	assert.Empty(t, info.LastError)
+}
+
+func TestInfo_AfterLoad(t *testing.T) {
+	p, err := New("geoip-info", "geoip", map[string]any{})
+	require.NoError(t, err)
+
+	list := &dlcpb.GeoIPList{
+		Entry: []*dlcpb.GeoIP{
+			{CountryCode: "ru", Cidr: []*dlcpb.CIDR{{Ip: []byte{10, 0, 0, 0}, Prefix: 8}}},
+		},
+	}
+	data, err := marshalGeoIPList(list)
+	require.NoError(t, err)
+	require.NoError(t, p.loadFromData(data))
+
+	info := p.Info()
+	assert.Equal(t, "geoip-info", info.ID)
+	assert.NotNil(t, info.LastFetched)
+	assert.Len(t, info.Categories, 1)
+	assert.Equal(t, "geoip:ru", info.Categories[0])
+	assert.Empty(t, info.LastError)
+}
+
+func TestLoad_Success(t *testing.T) {
+	tmpDir := t.TempDir()
+	cachePath := filepath.Join(tmpDir, "geoip.dat")
+
+	list := &dlcpb.GeoIPList{
+		Entry: []*dlcpb.GeoIP{
+			{CountryCode: "ru", Cidr: []*dlcpb.CIDR{{Ip: []byte{10, 0, 0, 0}, Prefix: 8}}},
+		},
+	}
+	data, err := marshalGeoIPList(list)
+	require.NoError(t, err)
+	require.NoError(t, os.WriteFile(cachePath, data, 0644))
+
+	p, err := New("geoip-load", "geoip", map[string]any{
+		"cache_path":       cachePath,
+		"refresh_interval": "0s",
+	})
+	require.NoError(t, err)
+
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+
+	require.NoError(t, p.Load(ctx))
+
+	cats := p.Categories()
+	require.Len(t, cats, 1)
+	assert.Equal(t, "geoip:ru", cats[0])
+
+	prefixes, err := p.GetPrefixes("geoip:ru")
+	require.NoError(t, err)
+	require.Len(t, prefixes, 1)
+}
+
+func TestLoad_StoreError(t *testing.T) {
+	tmpDir := t.TempDir()
+	cachePath := filepath.Join(tmpDir, "nonexistent.dat")
+
+	p, err := New("geoip-load", "geoip", map[string]any{
+		"cache_path":       cachePath,
+		"refresh_interval": "0s",
+	})
+	require.NoError(t, err)
+
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+
+	err = p.Load(ctx)
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "fetch failed")
+}
+
+func TestLoad_ReadFileError(t *testing.T) {
+	tmpDir := t.TempDir()
+	cachePath := filepath.Join(tmpDir, "geoipdir")
+	require.NoError(t, os.Mkdir(cachePath, 0755))
+
+	p, err := New("geoip-load", "geoip", map[string]any{
+		"cache_path":       cachePath,
+		"refresh_interval": "0s",
+	})
+	require.NoError(t, err)
+
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+
+	err = p.Load(ctx)
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "read file")
+}
+
+func TestLoad_UnmarshalError(t *testing.T) {
+	tmpDir := t.TempDir()
+	cachePath := filepath.Join(tmpDir, "geoip.dat")
+	require.NoError(t, os.WriteFile(cachePath, []byte("not protobuf"), 0644))
+
+	p, err := New("geoip-load", "geoip", map[string]any{
+		"cache_path":       cachePath,
+		"refresh_interval": "0s",
+	})
+	require.NoError(t, err)
+
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+
+	err = p.Load(ctx)
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "unmarshal")
+}
+
+func TestClose(t *testing.T) {
+	p, err := New("geoip-close", "geoip", map[string]any{})
+	require.NoError(t, err)
+	assert.NoError(t, p.Close())
+}
+
+func TestCidrToPrefix_Nil(t *testing.T) {
+	prefix, ok := cidrToPrefix(nil)
+	assert.False(t, ok)
+	assert.Equal(t, netip.Prefix{}, prefix)
+}
+
+func TestCidrToPrefix_EmptyIP(t *testing.T) {
+	prefix, ok := cidrToPrefix(&dlcpb.CIDR{Ip: []byte{}, Prefix: 24})
+	assert.False(t, ok)
+	assert.Equal(t, netip.Prefix{}, prefix)
+}
+
+func TestCidrToPrefix_InvalidIP(t *testing.T) {
+	prefix, ok := cidrToPrefix(&dlcpb.CIDR{Ip: []byte{1, 2, 3}, Prefix: 24})
+	assert.False(t, ok)
+	assert.Equal(t, netip.Prefix{}, prefix)
 }

@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"net/netip"
+	"path/filepath"
 	"testing"
 	"time"
 
@@ -551,4 +552,57 @@ func TestSnapshotForDomains_EmptyInput_ReturnsNil(t *testing.T) {
 	require.NoError(t, err)
 	assert.Nil(t, ipv4)
 	assert.Nil(t, ipv6)
+}
+
+func TestStatus_StringDefault(t *testing.T) {
+	s := Status(99)
+	assert.Equal(t, "failed", s.String())
+}
+
+func TestOpen_EmptyPath(t *testing.T) {
+	_, err := Open(context.Background(), "")
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "empty db path")
+}
+
+func TestOpen_FilePath(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "test.db")
+	c, err := Open(context.Background(), path)
+	require.NoError(t, err)
+	assert.NotNil(t, c.DB())
+	require.NoError(t, c.Close())
+
+	// Double close should be safe
+	require.NoError(t, c.Close())
+}
+
+func TestParseMigrationVersion(t *testing.T) {
+	tests := []struct {
+		name string
+		in   string
+		want int
+		ok   bool
+	}{
+		{"valid", "0001_init.sql", 1, true},
+		{"no underscore", "0002.sql", 2, true},
+		{"no number", "_init.sql", 0, false},
+		{"empty", "", 0, false},
+		{"letters only", "abc.sql", 0, false},
+		{"mixed", "01a_init.sql", 0, false},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got, ok := parseMigrationVersion(tt.in)
+			assert.Equal(t, tt.ok, ok)
+			assert.Equal(t, tt.want, got)
+		})
+	}
+}
+
+func TestEnsureAllDomainsWithStatus_Empty(t *testing.T) {
+	c := openTestDB(t)
+	ctx := context.Background()
+	idMap, err := c.ensureAllDomainsWithStatus(ctx, []string{}, nil)
+	require.NoError(t, err)
+	assert.Empty(t, idMap)
 }

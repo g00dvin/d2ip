@@ -20,6 +20,11 @@ type settingsResponse struct {
 
 // handleSettingsGet returns the current config, defaults, and KV overrides.
 func (s *Server) handleSettingsGet(w http.ResponseWriter, r *http.Request) {
+	if s.kvStore == nil {
+		s.jsonError(w, http.StatusInternalServerError, "kvStore not initialized")
+		return
+	}
+
 	snapshot := s.cfgWatcher.Current()
 	defaults := config.Defaults()
 
