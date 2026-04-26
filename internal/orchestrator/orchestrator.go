@@ -269,7 +269,7 @@ func (o *Orchestrator) Run(ctx context.Context, req PipelineRequest) (PipelineRe
 				continue
 			}
 			policyStart := time.Now()
-			policyReport, staleCount, cacheHits, err := o.runPolicy(ctx, policy, req, aggLevel, cfg)
+			policyReport, staleCount, cacheHits, err := o.runPolicy(ctx, runID, policy, req, aggLevel, cfg)
 			if err != nil {
 				// Log error but continue with other policies
 				log.Error().Err(err).Str("policy", policy.Name).Msg("orchestrator: policy run failed")
@@ -327,7 +327,7 @@ func (o *Orchestrator) Run(ctx context.Context, req PipelineRequest) (PipelineRe
 	return report, nil
 }
 
-func (o *Orchestrator) runPolicy(ctx context.Context, policy config.PolicyConfig, req PipelineRequest, aggLevel aggregator.Aggressiveness, cfg config.Config) (PolicyReport, int, int, error) {
+func (o *Orchestrator) runPolicy(ctx context.Context, runID int64, policy config.PolicyConfig, req PipelineRequest, aggLevel aggregator.Aggressiveness, cfg config.Config) (PolicyReport, int, int, error) {
 	start := time.Now()
 
 	// Separate policy categories into domain and prefix categories
@@ -391,6 +391,8 @@ func (o *Orchestrator) runPolicy(ctx context.Context, policy config.PolicyConfig
 
 			resultsCh := o.resolver.ResolveBatch(ctx, toResolve)
 			var results []cache.ResolveResult
+			processed := 0
+			total := len(toResolve)
 			for res := range resultsCh {
 				cacheStatus := cache.StatusValid
 				if res.Status == resolver.StatusFailed {
@@ -411,6 +413,18 @@ func (o *Orchestrator) runPolicy(ctx context.Context, policy config.PolicyConfig
 					resolvedCount++
 				} else {
 					failedCount++
+				}
+				processed++
+				if processed%10 == 0 || processed == total {
+					o.emit("pipeline.progress", map[string]any{
+						"run_id":   runID,
+						"policy":   policy.Name,
+						"step":     "resolve",
+						"resolved": resolvedCount,
+						"failed":   failedCount,
+						"total":    total,
+						"processed": processed,
+					})
 				}
 			}
 		if err := o.cache.UpsertBatch(ctx, results); err != nil {

@@ -322,6 +322,7 @@ func (s *Server) handleMetrics(w http.ResponseWriter, r *http.Request) {
 // jsonOK writes a 200 JSON response.
 func (s *Server) jsonOK(w http.ResponseWriter, v interface{}) {
 	w.Header().Set("Content-Type", "application/json")
+	w.Header().Set("Cache-Control", "no-store, no-cache, must-revalidate")
 	w.WriteHeader(http.StatusOK)
 	_ = json.NewEncoder(w).Encode(v)
 }

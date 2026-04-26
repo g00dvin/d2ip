@@ -19,6 +19,7 @@ async function handleVacuum() {
   <div class="space-y-4">
     <n-card title="Cache Statistics">
       <n-spin v-if="cache.loading" />
+      <n-alert v-else-if="cache.error" type="error" :title="cache.error.message" />
       <n-empty v-else-if="!cache.stats" description="No data" />
       <div v-else class="space-y-6">
         <div>
