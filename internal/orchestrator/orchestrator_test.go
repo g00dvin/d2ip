@@ -4,6 +4,8 @@ import (
 	"context"
 	"errors"
 	"net/netip"
+	"os"
+	"path/filepath"
 	"testing"
 	"time"
 
@@ -369,5 +371,720 @@ func TestOrchestrator_Run_NoPolicies(t *testing.T) {
 	}
 	if len(report.Policies) != 0 {
 		t.Fatalf("expected no policies, got %d", len(report.Policies))
+	}
+}
+
+// errorRegistry returns an error from LoadAll.
+type errorRegistry struct {
+	mockRegistry
+	err error
+}
+
+func (m *errorRegistry) LoadAll(ctx context.Context) error {
+	return m.err
+}
+
+// TestOrchestrator_Run_SourceLoadError verifies error propagation from registry.LoadAll.
+func TestOrchestrator_Run_SourceLoadError(t *testing.T) {
+	t.Parallel()
+	reg := &errorRegistry{err: errors.New("load failed")}
+	res := &mockResolver{}
+	cch := &mockCache{}
+	agg := aggregator.New()
+	tmp := t.TempDir()
+	exp, _ := exporter.New(tmp)
+	policyExp := exporter.NewPolicyExporter(tmp)
+	rtr := &mockRouter{}
+	bus := events.NewBus()
+	cfg := config.Defaults()
+	cfg.Routing.Policies = []config.PolicyConfig{
+		{
+			Name:       "test-policy",
+			Enabled:    true,
+			Categories: []string{"geosite:test"},
+			Backend:    config.BackendNFTables,
+			NFTTable:   "inet d2ip",
+			NFTSetV4:   "test_v4",
+			NFTSetV6:   "test_v6",
+		},
+	}
+
+	o := New(reg, res, cch, agg, exp, rtr, func() config.Config { return cfg }, bus, policyExp, &mockPolicyRouter{})
+
+	ctx := context.Background()
+	req := PipelineRequest{}
+
+	report, err := o.Run(ctx, req)
+	if err == nil {
+		t.Fatal("expected error from source load")
+	}
+	if report.RunID == 0 {
+		t.Fatal("expected RunID > 0")
+	}
+}
+
+// TestOrchestrator_Run_NilEventBus verifies emit handles nil eventBus gracefully.
+func TestOrchestrator_Run_NilEventBus(t *testing.T) {
+	t.Parallel()
+	o := setupOrchestrator(t)
+	o.eventBus = nil
+
+	ctx := context.Background()
+	req := PipelineRequest{DryRun: true}
+
+	report, err := o.Run(ctx, req)
+	if err != nil {
+		t.Fatalf("Run returned error: %v", err)
+	}
+	if report.RunID == 0 {
+		t.Fatal("expected RunID > 0")
+	}
+}
+
+// statusResolver returns a configurable status for all domains.
+type statusResolver struct {
+	mockResolver
+	status resolver.Status
+}
+
+func (m *statusResolver) ResolveBatch(ctx context.Context, domains []string) <-chan resolver.ResolveResult {
+	ch := make(chan resolver.ResolveResult, len(domains))
+	go func() {
+		defer close(ch)
+		for _, d := range domains {
+			var ipv4 []netip.Addr
+			if m.status == resolver.StatusValid {
+				ipv4 = []netip.Addr{netip.MustParseAddr("1.2.3.4")}
+			}
+			ch <- resolver.ResolveResult{
+				Domain: d,
+				IPv4:   ipv4,
+				Status: m.status,
+			}
+		}
+	}()
+	return ch
+}
+
+// TestOrchestrator_Run_ResolverFailed verifies failed resolver status is tracked.
+func TestOrchestrator_Run_ResolverFailed(t *testing.T) {
+	t.Parallel()
+	reg := &mockRegistry{}
+	res := &statusResolver{status: resolver.StatusFailed}
+	cch := &mockCache{}
+	agg := aggregator.New()
+	tmp := t.TempDir()
+	exp, _ := exporter.New(tmp)
+	policyExp := exporter.NewPolicyExporter(tmp)
+	rtr := &mockRouter{}
+	bus := events.NewBus()
+	cfg := config.Defaults()
+	cfg.Routing.Policies = []config.PolicyConfig{
+		{
+			Name:       "test-policy",
+			Enabled:    true,
+			Categories: []string{"geosite:test"},
+			Backend:    config.BackendNFTables,
+			NFTTable:   "inet d2ip",
+			NFTSetV4:   "test_v4",
+			NFTSetV6:   "test_v6",
+		},
+	}
+
+	o := New(reg, res, cch, agg, exp, rtr, func() config.Config { return cfg }, bus, policyExp, &mockPolicyRouter{})
+
+	ctx := context.Background()
+	req := PipelineRequest{DryRun: true}
+
+	report, err := o.Run(ctx, req)
+	if err != nil {
+		t.Fatalf("Run returned error: %v", err)
+	}
+	if report.Failed == 0 {
+		t.Fatal("expected failed > 0")
+	}
+}
+
+// TestOrchestrator_Run_ResolverNXDomain verifies NXDomain resolver status is tracked.
+func TestOrchestrator_Run_ResolverNXDomain(t *testing.T) {
+	t.Parallel()
+	reg := &mockRegistry{}
+	res := &statusResolver{status: resolver.StatusNXDomain}
+	cch := &mockCache{}
+	agg := aggregator.New()
+	tmp := t.TempDir()
+	exp, _ := exporter.New(tmp)
+	policyExp := exporter.NewPolicyExporter(tmp)
+	rtr := &mockRouter{}
+	bus := events.NewBus()
+	cfg := config.Defaults()
+	cfg.Routing.Policies = []config.PolicyConfig{
+		{
+			Name:       "test-policy",
+			Enabled:    true,
+			Categories: []string{"geosite:test"},
+			Backend:    config.BackendNFTables,
+			NFTTable:   "inet d2ip",
+			NFTSetV4:   "test_v4",
+			NFTSetV6:   "test_v6",
+		},
+	}
+
+	o := New(reg, res, cch, agg, exp, rtr, func() config.Config { return cfg }, bus, policyExp, &mockPolicyRouter{})
+
+	ctx := context.Background()
+	req := PipelineRequest{DryRun: true}
+
+	report, err := o.Run(ctx, req)
+	if err != nil {
+		t.Fatalf("Run returned error: %v", err)
+	}
+	if report.Failed == 0 {
+		t.Fatal("expected failed > 0 for NXDomain")
+	}
+}
+
+// TestOrchestrator_Run_ForceResolve verifies ForceResolve bypasses cache.
+func TestOrchestrator_Run_ForceResolve(t *testing.T) {
+	t.Parallel()
+	o := setupOrchestrator(t)
+	ctx := context.Background()
+	req := PipelineRequest{DryRun: true, ForceResolve: true}
+
+	report, err := o.Run(ctx, req)
+	if err != nil {
+		t.Fatalf("Run returned error: %v", err)
+	}
+	if report.RunID == 0 {
+		t.Fatal("expected RunID > 0")
+	}
+	if report.Stale == 0 {
+		t.Fatal("expected stale > 0 when force resolving")
+	}
+}
+
+// errorCache returns errors from configurable methods.
+type errorCache struct {
+	mockCache
+	needsRefreshErr error
+	upsertErr       error
+	snapshotErr     error
+}
+
+func (m *errorCache) NeedsRefresh(ctx context.Context, domains []string, ttl, failedTTL time.Duration) ([]string, error) {
+	if m.needsRefreshErr != nil {
+		return nil, m.needsRefreshErr
+	}
+	return domains, nil
+}
+
+func (m *errorCache) UpsertBatch(ctx context.Context, results []cache.ResolveResult) error {
+	if m.upsertErr != nil {
+		return m.upsertErr
+	}
+	return nil
+}
+
+func (m *errorCache) SnapshotForDomains(ctx context.Context, domains []string) ([]netip.Addr, []netip.Addr, error) {
+	if m.snapshotErr != nil {
+		return nil, nil, m.snapshotErr
+	}
+	return []netip.Addr{netip.MustParseAddr("1.2.3.4")}, nil, nil
+}
+
+// TestOrchestrator_Run_CacheNeedsRefreshError verifies policy run handles cache check error.
+func TestOrchestrator_Run_CacheNeedsRefreshError(t *testing.T) {
+	t.Parallel()
+	reg := &mockRegistry{}
+	res := &mockResolver{}
+	cch := &errorCache{needsRefreshErr: errors.New("refresh check failed")}
+	agg := aggregator.New()
+	tmp := t.TempDir()
+	exp, _ := exporter.New(tmp)
+	policyExp := exporter.NewPolicyExporter(tmp)
+	rtr := &mockRouter{}
+	bus := events.NewBus()
+	cfg := config.Defaults()
+	cfg.Routing.Policies = []config.PolicyConfig{
+		{
+			Name:       "test-policy",
+			Enabled:    true,
+			Categories: []string{"geosite:test"},
+			Backend:    config.BackendNFTables,
+			NFTTable:   "inet d2ip",
+			NFTSetV4:   "test_v4",
+			NFTSetV6:   "test_v6",
+		},
+	}
+
+	o := New(reg, res, cch, agg, exp, rtr, func() config.Config { return cfg }, bus, policyExp, &mockPolicyRouter{})
+
+	ctx := context.Background()
+	req := PipelineRequest{DryRun: true}
+
+	report, err := o.Run(ctx, req)
+	if err != nil {
+		t.Fatalf("Run returned unexpected error: %v", err)
+	}
+	if len(report.Policies) != 1 {
+		t.Fatalf("expected 1 policy report, got %d", len(report.Policies))
+	}
+	if report.Policies[0].Name != "test-policy" {
+		t.Fatalf("expected policy name test-policy, got %s", report.Policies[0].Name)
+	}
+}
+
+// TestOrchestrator_Run_CacheUpsertError verifies policy run handles cache upsert error.
+func TestOrchestrator_Run_CacheUpsertError(t *testing.T) {
+	t.Parallel()
+	reg := &mockRegistry{}
+	res := &mockResolver{}
+	cch := &errorCache{upsertErr: errors.New("upsert failed")}
+	agg := aggregator.New()
+	tmp := t.TempDir()
+	exp, _ := exporter.New(tmp)
+	policyExp := exporter.NewPolicyExporter(tmp)
+	rtr := &mockRouter{}
+	bus := events.NewBus()
+	cfg := config.Defaults()
+	cfg.Routing.Policies = []config.PolicyConfig{
+		{
+			Name:       "test-policy",
+			Enabled:    true,
+			Categories: []string{"geosite:test"},
+			Backend:    config.BackendNFTables,
+			NFTTable:   "inet d2ip",
+			NFTSetV4:   "test_v4",
+			NFTSetV6:   "test_v6",
+		},
+	}
+
+	o := New(reg, res, cch, agg, exp, rtr, func() config.Config { return cfg }, bus, policyExp, &mockPolicyRouter{})
+
+	ctx := context.Background()
+	req := PipelineRequest{DryRun: true}
+
+	report, err := o.Run(ctx, req)
+	if err != nil {
+		t.Fatalf("Run returned unexpected error: %v", err)
+	}
+	if len(report.Policies) != 1 {
+		t.Fatalf("expected 1 policy report, got %d", len(report.Policies))
+	}
+}
+
+// TestOrchestrator_Run_CacheSnapshotError verifies policy run handles cache snapshot error.
+func TestOrchestrator_Run_CacheSnapshotError(t *testing.T) {
+	t.Parallel()
+	reg := &mockRegistry{}
+	res := &mockResolver{}
+	cch := &errorCache{snapshotErr: errors.New("snapshot failed")}
+	agg := aggregator.New()
+	tmp := t.TempDir()
+	exp, _ := exporter.New(tmp)
+	policyExp := exporter.NewPolicyExporter(tmp)
+	rtr := &mockRouter{}
+	bus := events.NewBus()
+	cfg := config.Defaults()
+	cfg.Routing.Policies = []config.PolicyConfig{
+		{
+			Name:       "test-policy",
+			Enabled:    true,
+			Categories: []string{"geosite:test"},
+			Backend:    config.BackendNFTables,
+			NFTTable:   "inet d2ip",
+			NFTSetV4:   "test_v4",
+			NFTSetV6:   "test_v6",
+		},
+	}
+
+	o := New(reg, res, cch, agg, exp, rtr, func() config.Config { return cfg }, bus, policyExp, &mockPolicyRouter{})
+
+	ctx := context.Background()
+	req := PipelineRequest{DryRun: true}
+
+	report, err := o.Run(ctx, req)
+	if err != nil {
+		t.Fatalf("Run returned unexpected error: %v", err)
+	}
+	if len(report.Policies) != 1 {
+		t.Fatalf("expected 1 policy report, got %d", len(report.Policies))
+	}
+}
+
+// TestOrchestrator_Run_PolicyExportError verifies policy run handles export error.
+func TestOrchestrator_Run_PolicyExportError(t *testing.T) {
+	t.Parallel()
+	reg := &mockRegistry{}
+	res := &mockResolver{}
+	cch := &mockCache{}
+	agg := aggregator.New()
+	tmp := t.TempDir()
+	exp, _ := exporter.New(tmp)
+	// Create a file to block MkdirAll inside policy exporter.
+	blockFile := filepath.Join(tmp, "block")
+	if err := os.WriteFile(blockFile, []byte("x"), 0644); err != nil {
+		t.Fatal(err)
+	}
+	policyExp := exporter.NewPolicyExporter(blockFile)
+	rtr := &mockRouter{}
+	bus := events.NewBus()
+	cfg := config.Defaults()
+	cfg.Routing.Policies = []config.PolicyConfig{
+		{
+			Name:       "test-policy",
+			Enabled:    true,
+			Categories: []string{"geosite:test"},
+			Backend:    config.BackendNFTables,
+			NFTTable:   "inet d2ip",
+			NFTSetV4:   "test_v4",
+			NFTSetV6:   "test_v6",
+		},
+	}
+
+	o := New(reg, res, cch, agg, exp, rtr, func() config.Config { return cfg }, bus, policyExp, &mockPolicyRouter{})
+
+	ctx := context.Background()
+	req := PipelineRequest{}
+
+	report, err := o.Run(ctx, req)
+	if err != nil {
+		t.Fatalf("Run returned unexpected error: %v", err)
+	}
+	if len(report.Policies) != 1 {
+		t.Fatalf("expected 1 policy report, got %d", len(report.Policies))
+	}
+}
+
+// errorPolicyRouter returns an error from ApplyPolicy.
+type errorPolicyRouter struct {
+	mockPolicyRouter
+	err error
+}
+
+func (m *errorPolicyRouter) ApplyPolicy(ctx context.Context, policy config.PolicyConfig, v4, v6 []netip.Prefix) error {
+	return m.err
+}
+
+// TestOrchestrator_Run_PolicyRouterError verifies policy run handles routing error.
+func TestOrchestrator_Run_PolicyRouterError(t *testing.T) {
+	t.Parallel()
+	reg := &mockRegistry{}
+	res := &mockResolver{}
+	cch := &mockCache{}
+	agg := aggregator.New()
+	tmp := t.TempDir()
+	exp, _ := exporter.New(tmp)
+	policyExp := exporter.NewPolicyExporter(tmp)
+	rtr := &mockRouter{}
+	bus := events.NewBus()
+	cfg := config.Defaults()
+	cfg.Routing.Policies = []config.PolicyConfig{
+		{
+			Name:       "test-policy",
+			Enabled:    true,
+			Categories: []string{"geosite:test"},
+			Backend:    config.BackendNFTables,
+			NFTTable:   "inet d2ip",
+			NFTSetV4:   "test_v4",
+			NFTSetV6:   "test_v6",
+		},
+	}
+
+	o := New(reg, res, cch, agg, exp, rtr, func() config.Config { return cfg }, bus, policyExp, &errorPolicyRouter{err: errors.New("apply failed")})
+
+	ctx := context.Background()
+	req := PipelineRequest{}
+
+	report, err := o.Run(ctx, req)
+	if err != nil {
+		t.Fatalf("Run returned unexpected error: %v", err)
+	}
+	if len(report.Policies) != 1 {
+		t.Fatalf("expected 1 policy report, got %d", len(report.Policies))
+	}
+}
+
+// TestOrchestrator_Run_SkipRouting verifies SkipRouting request bypasses routing.
+func TestOrchestrator_Run_SkipRouting(t *testing.T) {
+	t.Parallel()
+	o := setupOrchestrator(t)
+	ctx := context.Background()
+	req := PipelineRequest{SkipRouting: true}
+
+	report, err := o.Run(ctx, req)
+	if err != nil {
+		t.Fatalf("Run returned error: %v", err)
+	}
+	if report.RunID == 0 {
+		t.Fatal("expected RunID > 0")
+	}
+}
+
+// TestOrchestrator_Run_GlobalAggregation verifies global aggregation is used when policy aggregation is nil.
+func TestOrchestrator_Run_GlobalAggregation(t *testing.T) {
+	t.Parallel()
+	reg := &mockRegistry{}
+	res := &mockResolver{}
+	cch := &mockCache{}
+	agg := aggregator.New()
+	tmp := t.TempDir()
+	exp, _ := exporter.New(tmp)
+	policyExp := exporter.NewPolicyExporter(tmp)
+	rtr := &mockRouter{}
+	bus := events.NewBus()
+	cfg := config.Defaults()
+	cfg.Aggregation.Enabled = true
+	cfg.Aggregation.Level = config.AggBalanced
+	cfg.Routing.Policies = []config.PolicyConfig{
+		{
+			Name:       "test-policy",
+			Enabled:    true,
+			Categories: []string{"geosite:test"},
+			Backend:    config.BackendNFTables,
+			NFTTable:   "inet d2ip",
+			NFTSetV4:   "test_v4",
+			NFTSetV6:   "test_v6",
+			// policy.Aggregation is nil → falls back to global
+		},
+	}
+
+	o := New(reg, res, cch, agg, exp, rtr, func() config.Config { return cfg }, bus, policyExp, &mockPolicyRouter{})
+
+	ctx := context.Background()
+	req := PipelineRequest{DryRun: true}
+
+	report, err := o.Run(ctx, req)
+	if err != nil {
+		t.Fatalf("Run returned error: %v", err)
+	}
+	if report.RunID == 0 {
+		t.Fatal("expected RunID > 0")
+	}
+}
+
+// TestOrchestrator_Run_NoAggregation verifies no-aggregation path converts addresses to /32 and /128.
+func TestOrchestrator_Run_NoAggregation(t *testing.T) {
+	t.Parallel()
+	reg := &mockRegistry{}
+	res := &mockResolver{}
+	cch := &mockCache{}
+	agg := aggregator.New()
+	tmp := t.TempDir()
+	exp, _ := exporter.New(tmp)
+	policyExp := exporter.NewPolicyExporter(tmp)
+	rtr := &mockRouter{}
+	bus := events.NewBus()
+	cfg := config.Defaults()
+	cfg.Aggregation.Enabled = false
+	cfg.Routing.Policies = []config.PolicyConfig{
+		{
+			Name:       "test-policy",
+			Enabled:    true,
+			Categories: []string{"geosite:test"},
+			Backend:    config.BackendNFTables,
+			NFTTable:   "inet d2ip",
+			NFTSetV4:   "test_v4",
+			NFTSetV6:   "test_v6",
+		},
+	}
+
+	o := New(reg, res, cch, agg, exp, rtr, func() config.Config { return cfg }, bus, policyExp, &mockPolicyRouter{})
+
+	ctx := context.Background()
+	req := PipelineRequest{DryRun: true}
+
+	report, err := o.Run(ctx, req)
+	if err != nil {
+		t.Fatalf("Run returned error: %v", err)
+	}
+	if report.RunID == 0 {
+		t.Fatal("expected RunID > 0")
+	}
+}
+
+// prefixRegistry resolves some categories as prefix type and returns prefixes.
+type prefixRegistry struct {
+	mockRegistry
+}
+
+func (m *prefixRegistry) ResolveCategory(category string) (string, string, bool) {
+	if category == "ip:cn" {
+		return "test", "prefix", true
+	}
+	return m.mockRegistry.ResolveCategory(category)
+}
+
+func (m *prefixRegistry) GetPrefixes(category string) ([]netip.Prefix, error) {
+	if category == "ip:cn" {
+		return []netip.Prefix{netip.MustParsePrefix("192.168.0.0/16")}, nil
+	}
+	return nil, nil
+}
+
+// TestOrchestrator_Run_PrefixCategories verifies prefix categories are collected and merged.
+func TestOrchestrator_Run_PrefixCategories(t *testing.T) {
+	t.Parallel()
+	reg := &prefixRegistry{}
+	res := &mockResolver{}
+	cch := &mockCache{}
+	agg := aggregator.New()
+	tmp := t.TempDir()
+	exp, _ := exporter.New(tmp)
+	policyExp := exporter.NewPolicyExporter(tmp)
+	rtr := &mockRouter{}
+	bus := events.NewBus()
+	cfg := config.Defaults()
+	cfg.Routing.Policies = []config.PolicyConfig{
+		{
+			Name:       "test-policy",
+			Enabled:    true,
+			Categories: []string{"geosite:test", "ip:cn"},
+			Backend:    config.BackendNFTables,
+			NFTTable:   "inet d2ip",
+			NFTSetV4:   "test_v4",
+			NFTSetV6:   "test_v6",
+		},
+	}
+
+	o := New(reg, res, cch, agg, exp, rtr, func() config.Config { return cfg }, bus, policyExp, &mockPolicyRouter{})
+
+	ctx := context.Background()
+	req := PipelineRequest{DryRun: true}
+
+	report, err := o.Run(ctx, req)
+	if err != nil {
+		t.Fatalf("Run returned error: %v", err)
+	}
+	if len(report.Policies) != 1 {
+		t.Fatalf("expected 1 policy report, got %d", len(report.Policies))
+	}
+	if report.Policies[0].IPv4Out == 0 {
+		t.Fatal("expected IPv4Out > 0 from prefix merge")
+	}
+}
+
+// unknownCatRegistry returns found=false for unknown categories.
+type unknownCatRegistry struct {
+	mockRegistry
+}
+
+func (m *unknownCatRegistry) ResolveCategory(category string) (string, string, bool) {
+	if category == "unknown:cat" {
+		return "", "", false
+	}
+	return m.mockRegistry.ResolveCategory(category)
+}
+
+// TestOrchestrator_Run_UnknownCategory verifies unknown categories are skipped.
+func TestOrchestrator_Run_UnknownCategory(t *testing.T) {
+	t.Parallel()
+	reg := &unknownCatRegistry{}
+	res := &mockResolver{}
+	cch := &mockCache{}
+	agg := aggregator.New()
+	tmp := t.TempDir()
+	exp, _ := exporter.New(tmp)
+	policyExp := exporter.NewPolicyExporter(tmp)
+	rtr := &mockRouter{}
+	bus := events.NewBus()
+	cfg := config.Defaults()
+	cfg.Routing.Policies = []config.PolicyConfig{
+		{
+			Name:       "test-policy",
+			Enabled:    true,
+			Categories: []string{"geosite:test", "unknown:cat"},
+			Backend:    config.BackendNFTables,
+			NFTTable:   "inet d2ip",
+			NFTSetV4:   "test_v4",
+			NFTSetV6:   "test_v6",
+		},
+	}
+
+	o := New(reg, res, cch, agg, exp, rtr, func() config.Config { return cfg }, bus, policyExp, &mockPolicyRouter{})
+
+	ctx := context.Background()
+	req := PipelineRequest{DryRun: true}
+
+	report, err := o.Run(ctx, req)
+	if err != nil {
+		t.Fatalf("Run returned error: %v", err)
+	}
+	if len(report.Policies) != 1 {
+		t.Fatalf("expected 1 policy report, got %d", len(report.Policies))
+	}
+}
+
+// TestOrchestrator_Run_DisabledPolicy verifies disabled policies are skipped.
+func TestOrchestrator_Run_DisabledPolicy(t *testing.T) {
+	t.Parallel()
+	reg := &mockRegistry{}
+	res := &mockResolver{}
+	cch := &mockCache{}
+	agg := aggregator.New()
+	tmp := t.TempDir()
+	exp, _ := exporter.New(tmp)
+	policyExp := exporter.NewPolicyExporter(tmp)
+	rtr := &mockRouter{}
+	bus := events.NewBus()
+	cfg := config.Defaults()
+	cfg.Routing.Policies = []config.PolicyConfig{
+		{
+			Name:       "enabled-policy",
+			Enabled:    true,
+			Categories: []string{"geosite:test"},
+			Backend:    config.BackendNFTables,
+			NFTTable:   "inet d2ip",
+			NFTSetV4:   "test_v4",
+			NFTSetV6:   "test_v6",
+		},
+		{
+			Name:       "disabled-policy",
+			Enabled:    false,
+			Categories: []string{"geosite:test"},
+			Backend:    config.BackendNFTables,
+			NFTTable:   "inet d2ip",
+			NFTSetV4:   "test_v4",
+			NFTSetV6:   "test_v6",
+		},
+	}
+
+	o := New(reg, res, cch, agg, exp, rtr, func() config.Config { return cfg }, bus, policyExp, &mockPolicyRouter{})
+
+	ctx := context.Background()
+	req := PipelineRequest{DryRun: true}
+
+	report, err := o.Run(ctx, req)
+	if err != nil {
+		t.Fatalf("Run returned error: %v", err)
+	}
+	if len(report.Policies) != 1 {
+		t.Fatalf("expected 1 policy report, got %d", len(report.Policies))
+	}
+	if report.Policies[0].Name != "enabled-policy" {
+		t.Fatalf("expected enabled-policy, got %s", report.Policies[0].Name)
+	}
+}
+
+// TestOrchestrator_Cancel_NotRunning verifies Cancel returns ErrNotRunning when idle.
+func TestOrchestrator_Cancel_NotRunning(t *testing.T) {
+	t.Parallel()
+	o := setupOrchestrator(t)
+
+	err := o.Cancel()
+	if !errors.Is(err, ErrNotRunning) {
+		t.Fatalf("expected ErrNotRunning, got: %v", err)
+	}
+}
+
+// TestOrchestrator_Cancel_NilCancelFn verifies Cancel returns ErrNotRunning when running flag is true but cancelFn is nil.
+func TestOrchestrator_Cancel_NilCancelFn(t *testing.T) {
+	t.Parallel()
+	o := setupOrchestrator(t)
+	o.running.Store(true)
+
+	err := o.Cancel()
+	if !errors.Is(err, ErrNotRunning) {
+		t.Fatalf("expected ErrNotRunning, got: %v", err)
 	}
 }
