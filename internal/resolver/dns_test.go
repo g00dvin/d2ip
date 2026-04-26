@@ -46,7 +46,7 @@ func TestQueryType_SuccessA(t *testing.T) {
 			Hdr: dns.RR_Header{Name: r.Question[0].Name, Rrtype: dns.TypeA, Class: dns.ClassINET, Ttl: 300},
 			A:   net.ParseIP("192.0.2.1"),
 		})
-		w.WriteMsg(m)
+		_ = w.WriteMsg(m)
 	}
 	addr, shutdown, err := startMockDNSServer(handler)
 	if err != nil {
@@ -89,7 +89,7 @@ func TestQueryType_SuccessAAAA(t *testing.T) {
 			Hdr:  dns.RR_Header{Name: r.Question[0].Name, Rrtype: dns.TypeAAAA, Class: dns.ClassINET, Ttl: 300},
 			AAAA: net.ParseIP("2001:db8::1"),
 		})
-		_ = w.WriteMsg(m)
+		_ = _ = w.WriteMsg(m)
 	}
 	addr, shutdown, err := startMockDNSServer(handler)
 	if err != nil {
@@ -129,7 +129,7 @@ func TestQueryType_NXDOMAIN(t *testing.T) {
 		m := new(dns.Msg)
 		m.SetReply(r)
 		m.Rcode = dns.RcodeNameError
-		_ = w.WriteMsg(m)
+		_ = _ = w.WriteMsg(m)
 	}
 	addr, shutdown, err := startMockDNSServer(handler)
 	if err != nil {
@@ -166,7 +166,7 @@ func TestQueryType_SERVFAIL(t *testing.T) {
 		m := new(dns.Msg)
 		m.SetReply(r)
 		m.Rcode = dns.RcodeServerFailure
-		w.WriteMsg(m)
+		_ = w.WriteMsg(m)
 	}
 	addr, shutdown, err := startMockDNSServer(handler)
 	if err != nil {
@@ -203,7 +203,7 @@ func TestQueryType_GenericRcode(t *testing.T) {
 		m := new(dns.Msg)
 		m.SetReply(r)
 		m.Rcode = dns.RcodeRefused
-		_ = w.WriteMsg(m)
+		_ = _ = w.WriteMsg(m)
 	}
 	addr, shutdown, err := startMockDNSServer(handler)
 	if err != nil {
@@ -240,7 +240,7 @@ func TestQueryType_EmptyAnswer(t *testing.T) {
 	handler := func(w dns.ResponseWriter, r *dns.Msg) {
 		m := new(dns.Msg)
 		m.SetReply(r)
-		w.WriteMsg(m)
+		_ = w.WriteMsg(m)
 	}
 	addr, shutdown, err := startMockDNSServer(handler)
 	if err != nil {
@@ -277,7 +277,7 @@ func TestQueryType_ContextCancelled(t *testing.T) {
 		time.Sleep(5 * time.Second)
 		m := new(dns.Msg)
 		m.SetReply(r)
-		_ = w.WriteMsg(m)
+		_ = _ = w.WriteMsg(m)
 	}
 	addr, shutdown, err := startMockDNSServer(handler)
 	if err != nil {
@@ -320,7 +320,7 @@ func TestQueryCNAME_Success(t *testing.T) {
 			Hdr:    dns.RR_Header{Name: r.Question[0].Name, Rrtype: dns.TypeCNAME, Class: dns.ClassINET, Ttl: 300},
 			Target: "target.example.com.",
 		})
-		w.WriteMsg(m)
+		_ = w.WriteMsg(m)
 	}
 	addr, shutdown, err := startMockDNSServer(handler)
 	if err != nil {
@@ -356,7 +356,7 @@ func TestQueryCNAME_NoRecord(t *testing.T) {
 	handler := func(w dns.ResponseWriter, r *dns.Msg) {
 		m := new(dns.Msg)
 		m.SetReply(r)
-		w.WriteMsg(m)
+		_ = w.WriteMsg(m)
 	}
 	addr, shutdown, err := startMockDNSServer(handler)
 	if err != nil {
@@ -393,7 +393,7 @@ func TestQueryCNAME_ErrorRcode(t *testing.T) {
 		m := new(dns.Msg)
 		m.SetReply(r)
 		m.Rcode = dns.RcodeServerFailure
-		w.WriteMsg(m)
+		_ = w.WriteMsg(m)
 	}
 	addr, shutdown, err := startMockDNSServer(handler)
 	if err != nil {
@@ -461,7 +461,7 @@ func TestFollowCNAME_NormalChain(t *testing.T) {
 				Target: "target.example.com.",
 			})
 		}
-		w.WriteMsg(m)
+		_ = w.WriteMsg(m)
 	}
 	addr, shutdown, err := startMockDNSServer(handler)
 	if err != nil {
@@ -510,7 +510,7 @@ func TestFollowCNAME_Loop(t *testing.T) {
 				Target: "a.example.com.",
 			})
 		}
-		w.WriteMsg(m)
+		_ = w.WriteMsg(m)
 	}
 	addr, shutdown, err := startMockDNSServer(handler)
 	if err != nil {
@@ -552,7 +552,7 @@ func TestFollowCNAME_TooLong(t *testing.T) {
 			Hdr:    dns.RR_Header{Name: r.Question[0].Name, Rrtype: dns.TypeCNAME, Class: dns.ClassINET, Ttl: 300},
 			Target: fmt.Sprintf("hop-%d.example.com.", time.Now().UnixNano()),
 		})
-		w.WriteMsg(m)
+		_ = w.WriteMsg(m)
 	}
 	addr, shutdown, err := startMockDNSServer(handler)
 	if err != nil {

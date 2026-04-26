@@ -308,7 +308,7 @@ func TestClose_NoReader(t *testing.T) {
 func TestDownloadToTemp_Success(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusOK)
-		w.Write([]byte("mmdb data"))
+		_, _ = w.Write([]byte("mmdb data"))
 	}))
 	defer srv.Close()
 
@@ -335,7 +335,7 @@ func TestDownloadToTemp_NotFound(t *testing.T) {
 func TestLoad_BadURLDownload(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusOK)
-		w.Write([]byte("not a valid mmdb file"))
+		_, _ = w.Write([]byte("not a valid mmdb file"))
 	}))
 	defer srv.Close()
 
@@ -416,7 +416,7 @@ func TestLoad_ValidURL(t *testing.T) {
 
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusOK)
-		w.Write(data)
+		_, _ = w.Write(data)
 	}))
 	defer srv.Close()
 
